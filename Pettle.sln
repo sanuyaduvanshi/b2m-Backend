@@ -1,0 +1,64 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{010014AF-A8EE-43D7-9BEF-B683E98FE92F}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Pettle.Domain", "src\Pettle.Domain\Pettle.Domain.csproj", "{6C18A167-096D-43B4-BD22-BC631E5FC8CE}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Pettle.Application", "src\Pettle.Application\Pettle.Application.csproj", "{A703BFB2-5FAA-4ADB-8EB4-8E8D0E9B0D74}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Pettle.Infrastructure", "src\Pettle.Infrastructure\Pettle.Infrastructure.csproj", "{9B591399-703B-4B66-BDE9-A9A5BE3A384E}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Pettle.Api", "src\Pettle.Api\Pettle.Api.csproj", "{09B29308-482F-44C7-8D7E-99CC527261F5}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Pettle.MigrationTool", "src\Pettle.MigrationTool\Pettle.MigrationTool.csproj", "{C2F1D5A3-4A1B-4E37-9B82-7C2E1F8A5B49}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{8E8DB320-BDA1-4115-8CDD-FDDE4015CB7E}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Pettle.Tests", "tests\Pettle.Tests\Pettle.Tests.csproj", "{B039023F-F2FC-4CE7-8067-054CE2EC5EC5}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{6C18A167-096D-43B4-BD22-BC631E5FC8CE}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{6C18A167-096D-43B4-BD22-BC631E5FC8CE}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6C18A167-096D-43B4-BD22-BC631E5FC8CE}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{6C18A167-096D-43B4-BD22-BC631E5FC8CE}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A703BFB2-5FAA-4ADB-8EB4-8E8D0E9B0D74}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A703BFB2-5FAA-4ADB-8EB4-8E8D0E9B0D74}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A703BFB2-5FAA-4ADB-8EB4-8E8D0E9B0D74}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A703BFB2-5FAA-4ADB-8EB4-8E8D0E9B0D74}.Release|Any CPU.Build.0 = Release|Any CPU
+		{9B591399-703B-4B66-BDE9-A9A5BE3A384E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{9B591399-703B-4B66-BDE9-A9A5BE3A384E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{9B591399-703B-4B66-BDE9-A9A5BE3A384E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{9B591399-703B-4B66-BDE9-A9A5BE3A384E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{09B29308-482F-44C7-8D7E-99CC527261F5}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{09B29308-482F-44C7-8D7E-99CC527261F5}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{09B29308-482F-44C7-8D7E-99CC527261F5}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{09B29308-482F-44C7-8D7E-99CC527261F5}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C2F1D5A3-4A1B-4E37-9B82-7C2E1F8A5B49}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C2F1D5A3-4A1B-4E37-9B82-7C2E1F8A5B49}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C2F1D5A3-4A1B-4E37-9B82-7C2E1F8A5B49}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C2F1D5A3-4A1B-4E37-9B82-7C2E1F8A5B49}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B039023F-F2FC-4CE7-8067-054CE2EC5EC5}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B039023F-F2FC-4CE7-8067-054CE2EC5EC5}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B039023F-F2FC-4CE7-8067-054CE2EC5EC5}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B039023F-F2FC-4CE7-8067-054CE2EC5EC5}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{6C18A167-096D-43B4-BD22-BC631E5FC8CE} = {010014AF-A8EE-43D7-9BEF-B683E98FE92F}
+		{A703BFB2-5FAA-4ADB-8EB4-8E8D0E9B0D74} = {010014AF-A8EE-43D7-9BEF-B683E98FE92F}
+		{9B591399-703B-4B66-BDE9-A9A5BE3A384E} = {010014AF-A8EE-43D7-9BEF-B683E98FE92F}
+		{09B29308-482F-44C7-8D7E-99CC527261F5} = {010014AF-A8EE-43D7-9BEF-B683E98FE92F}
+		{C2F1D5A3-4A1B-4E37-9B82-7C2E1F8A5B49} = {010014AF-A8EE-43D7-9BEF-B683E98FE92F}
+		{B039023F-F2FC-4CE7-8067-054CE2EC5EC5} = {8E8DB320-BDA1-4115-8CDD-FDDE4015CB7E}
+	EndGlobalSection
+EndGlobal

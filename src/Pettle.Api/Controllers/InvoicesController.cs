@@ -1,0 +1,40 @@
+using Microsoft.AspNetCore.Mvc;
+using Pettle.Api.Authorization;
+using Pettle.Application.Invoices;
+using Pettle.Domain.Identity;
+
+namespace Pettle.Api.Controllers;
+
+[ApiController]
+[Route("api/invoices")]
+public class InvoicesController : ControllerBase
+{
+    private readonly IInvoiceService _svc;
+    public InvoicesController(IInvoiceService svc) => _svc = svc;
+
+    [HttpGet]
+    [HasPermission(Modules.Invoices, Actions.View)]
+    public async Task<IActionResult> List([FromQuery] InvoiceListQuery query, CancellationToken ct)
+        => Ok(await _svc.ListAsync(query, ct));
+
+    [HttpGet("{id:guid}")]
+    [HasPermission(Modules.Invoices, Actions.View)]
+    public async Task<IActionResult> Get(Guid id, CancellationToken ct)
+    {
+        var r = await _svc.GetAsync(id, ct);
+        return r is null ? NotFound() : Ok(r);
+    }
+
+    [HttpPost("{id:guid}/payments")]
+    [HasPermission(Modules.Invoices, Actions.Edit)]
+    public async Task<IActionResult> RecordPayment(Guid id, [FromBody] RecordPaymentRequest req, CancellationToken ct)
+    {
+        var p = await _svc.RecordPaymentAsync(id, req, ct);
+        return p is null ? NotFound() : Ok(p);
+    }
+
+    [HttpPost("{id:guid}/refund")]
+    [HasPermission(Modules.Invoices, Actions.Approve)]
+    public async Task<IActionResult> Refund(Guid id, [FromBody] RefundRequest req, CancellationToken ct)
+        => await _svc.RefundAsync(id, req, ct) ? NoContent() : NotFound();
+}

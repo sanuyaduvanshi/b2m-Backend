@@ -1,0 +1,85 @@
+using FluentValidation;
+using Pettle.Application.Validation;
+
+namespace Pettle.Application.Inventory;
+
+public class CreateOrUpdateSkuValidator : AbstractValidator<CreateOrUpdateSkuRequest>
+{
+    public CreateOrUpdateSkuValidator()
+    {
+        RuleFor(x => x.Code).NotEmpty().WithMessage("SKU code is required.").MaximumLength(40)
+            .Matches(@"^[A-Za-z0-9_\-\.]+$").WithMessage("Code may only contain letters, digits, '_', '-', '.'.");
+        RuleFor(x => x.Name).NotEmpty().WithMessage("SKU name is required.").MaximumLength(160);
+        RuleFor(x => x.Description).MaximumLength(2000);
+        RuleFor(x => x.Unit).NotEmpty().WithMessage("Unit is required.").MaximumLength(16);
+        RuleFor(x => x.MrpPrice).NonNegativeAmount();
+        RuleFor(x => x.SellingPrice).NonNegativeAmount();
+        RuleFor(x => x.CostPrice).NonNegativeAmount();
+        RuleFor(x => x.SellingPrice)
+            .LessThanOrEqualTo(x => x.MrpPrice).When(x => x.MrpPrice > 0)
+            .WithMessage("Selling price cannot exceed MRP.");
+        RuleFor(x => x.TaxPercent).ValidTaxPercent();
+        RuleFor(x => x.HsnSacCode).MaximumLength(20);
+        RuleFor(x => x.ReorderLevel).GreaterThanOrEqualTo(0).WithMessage("Reorder level cannot be negative.");
+    }
+}
+
+public class CreateOrUpdateVendorValidator : AbstractValidator<CreateOrUpdateVendorRequest>
+{
+    public CreateOrUpdateVendorValidator()
+    {
+        RuleFor(x => x.Name).NotEmpty().WithMessage("Vendor name is required.").MaximumLength(160);
+        RuleFor(x => x.ContactPerson).MaximumLength(120);
+        RuleFor(x => x.Phone).ValidPhoneFormat().When(x => !string.IsNullOrWhiteSpace(x.Phone));
+        RuleFor(x => x.Email).ValidEmailFormat().When(x => !string.IsNullOrWhiteSpace(x.Email));
+        RuleFor(x => x.Address).MaximumLength(400);
+        RuleFor(x => x.Gstin).ValidGstinFormat().When(x => !string.IsNullOrWhiteSpace(x.Gstin));
+        RuleFor(x => x.CreditDays).InclusiveBetween(0, 365).WithMessage("Credit days must be between 0 and 365.");
+        RuleFor(x => x.CreditLimit).NonNegativeAmount();
+    }
+}
+
+public class CreatePoValidator : AbstractValidator<CreatePoRequest>
+{
+    public CreatePoValidator()
+    {
+        RuleFor(x => x.VendorId).NotEqual(Guid.Empty).WithMessage("Vendor is required.");
+        RuleFor(x => x.PurchaseDate)
+            .NotEqual(default(DateOnly)).WithMessage("Purchase date is required.")
+            .LessThanOrEqualTo(_ => DateOnly.FromDateTime(DateTime.UtcNow).AddDays(1))
+            .WithMessage("Purchase date cannot be in the future.");
+        RuleFor(x => x.VendorInvoiceNumber).MaximumLength(60);
+        RuleFor(x => x.Notes).MaximumLength(1000);
+        RuleFor(x => x.Lines).NotEmpty().WithMessage("Add at least one line item.")
+            .Must(l => l.Count <= 200).WithMessage("Maximum 200 line items per PO.");
+        RuleForEach(x => x.Lines).SetValidator(new CreatePoLineValidator());
+    }
+}
+
+public class CreatePoLineValidator : AbstractValidator<CreatePoLine>
+{
+    public CreatePoLineValidator()
+    {
+        RuleFor(x => x.ItemName).NotEmpty().WithMessage("Item name is required.").MaximumLength(160);
+        RuleFor(x => x.Quantity).PositiveAmount();
+        RuleFor(x => x.UnitCost).NonNegativeAmount();
+        RuleFor(x => x.TaxPercent).ValidTaxPercent();
+        RuleFor(x => x.BatchNumber).MaximumLength(60);
+        RuleFor(x => x.ExpiryDate)
+            .Must(d => !d.HasValue || d.Value >= DateOnly.FromDateTime(DateTime.UtcNow))
+            .WithMessage("Expiry date is in the past — double-check before saving.");
+    }
+}
+
+public class ReceivePoValidator : AbstractValidator<ReceivePoRequest>
+{
+    public ReceivePoValidator()
+    {
+        RuleFor(x => x.Lines).NotEmpty().WithMessage("No receipt quantities provided.");
+        RuleForEach(x => x.Lines).ChildRules(line =>
+        {
+            line.RuleFor(l => l.LineId).NotEqual(Guid.Empty);
+            line.RuleFor(l => l.ReceivedQuantity).GreaterThanOrEqualTo(0).WithMessage("Received quantity cannot be negative.");
+        });
+    }
+}
