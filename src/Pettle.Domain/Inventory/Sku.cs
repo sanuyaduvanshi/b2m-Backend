@@ -55,6 +55,7 @@ public class PurchaseOrder : SoftDeletableTenantEntity
     public Vendor? Vendor { get; set; }
     public PoStatus Status { get; set; } = PoStatus.Draft;
     public DateOnly PurchaseDate { get; set; }
+    /// <summary>Supplier's own bill/invoice number.</summary>
     public string? VendorInvoiceNumber { get; set; }
     public PoPaymentStatus PaymentStatus { get; set; } = PoPaymentStatus.Unpaid;
     public int NumberOfItems { get; set; }
@@ -65,6 +66,26 @@ public class PurchaseOrder : SoftDeletableTenantEntity
     public decimal Paid { get; set; }
     public decimal Due { get; set; }
     public string? Notes { get; set; }
+
+    // --- Supplier bill (GST purchase) fields ---
+    public string? ReferenceBillNumber { get; set; }
+    public string? MaterialInwardNo { get; set; }
+    public string? PaymentTerm { get; set; }
+    public DateOnly? DueDate { get; set; }
+    public DateOnly? ShippingDate { get; set; }
+    public bool ReverseCharge { get; set; }
+    public bool ExportSez { get; set; }
+    /// <summary>Default | Inclusive | Exclusive — how line unit costs treat tax.</summary>
+    public string? TaxType { get; set; }
+    public string? AccountLedger { get; set; }
+    public decimal FlatDiscountPercent { get; set; }
+    public decimal FlatDiscountAmount { get; set; }
+    public decimal AdditionalCharges { get; set; }
+    public decimal GrossAmount { get; set; }
+    public decimal DiscountAmount { get; set; }
+    public decimal TaxableAmount { get; set; }
+    public decimal RoundOff { get; set; }
+
     public ICollection<PurchaseOrderLine> Lines { get; set; } = new List<PurchaseOrderLine>();
 }
 
@@ -77,11 +98,22 @@ public class PurchaseOrderLine : TenantEntity
     public PurchaseOrder? PurchaseOrder { get; set; }
     public Guid? SkuId { get; set; }
     public Sku? Sku { get; set; }
+    public string? ItemCode { get; set; }
     public string ItemName { get; set; } = string.Empty;
+    public string? Unit { get; set; }
     public decimal Quantity { get; set; }
+    public decimal FreeQuantity { get; set; }
     public decimal ReceivedQuantity { get; set; }
     public decimal UnitCost { get; set; }
+    public decimal Mrp { get; set; }
+    public decimal SellingPrice { get; set; }
+    public decimal PurDisc1Percent { get; set; }
+    public decimal PurDisc2Percent { get; set; }
     public decimal TaxPercent { get; set; }
+    public decimal TaxableAmount { get; set; }
+    public decimal TaxAmount { get; set; }
+    /// <summary>Effective per-unit landed cost (after discounts + tax), used to update SKU cost price.</summary>
+    public decimal LandingCost { get; set; }
     public decimal LineTotal { get; set; }
     public DateOnly? ExpiryDate { get; set; }
     public string? BatchNumber { get; set; }

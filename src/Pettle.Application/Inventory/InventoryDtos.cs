@@ -27,21 +27,39 @@ public record PoListItem(
     PoPaymentStatus PaymentStatus, int NumberOfItems, decimal Total, decimal Paid, decimal Due
 );
 
-public record PoLineDto(Guid Id, Guid? SkuId, string ItemName, decimal Quantity, decimal ReceivedQuantity, decimal UnitCost, decimal TaxPercent, decimal LineTotal, DateOnly? ExpiryDate, string? BatchNumber);
+public record PoLineDto(
+    Guid Id, Guid? SkuId, string? ItemCode, string ItemName, string? Unit,
+    decimal Quantity, decimal FreeQuantity, decimal ReceivedQuantity, decimal UnitCost,
+    decimal Mrp, decimal SellingPrice, decimal PurDisc1Percent, decimal PurDisc2Percent,
+    decimal TaxPercent, decimal TaxableAmount, decimal TaxAmount, decimal LandingCost, decimal LineTotal,
+    DateOnly? ExpiryDate, string? BatchNumber
+);
 
 public record PoDetail(
     Guid Id, string PoNumber, Guid VendorId, string VendorName, PoStatus Status,
-    DateOnly PurchaseDate, string? VendorInvoiceNumber, PoPaymentStatus PaymentStatus,
-    decimal SubTotal, decimal TaxAmount, decimal Adjustment, decimal Total, decimal Paid, decimal Due,
+    DateOnly PurchaseDate, string? VendorInvoiceNumber, string? ReferenceBillNumber, string? MaterialInwardNo,
+    string? PaymentTerm, DateOnly? DueDate, DateOnly? ShippingDate, bool ReverseCharge, bool ExportSez,
+    string? TaxType, string? AccountLedger, PoPaymentStatus PaymentStatus,
+    decimal SubTotal, decimal GrossAmount, decimal FlatDiscountPercent, decimal FlatDiscountAmount,
+    decimal DiscountAmount, decimal TaxableAmount, decimal TaxAmount, decimal AdditionalCharges,
+    decimal Adjustment, decimal RoundOff, decimal Total, decimal Paid, decimal Due,
     string? Notes, IReadOnlyList<PoLineDto> Lines
 );
 
 public record CreatePoRequest(
-    Guid VendorId, DateOnly PurchaseDate, string? VendorInvoiceNumber, decimal Adjustment, string? Notes,
+    Guid VendorId, DateOnly PurchaseDate, string? VendorInvoiceNumber, string? ReferenceBillNumber,
+    string? MaterialInwardNo, string? PaymentTerm, DateOnly? DueDate, DateOnly? ShippingDate,
+    bool ReverseCharge, bool ExportSez, string? TaxType, string? AccountLedger,
+    decimal FlatDiscountPercent, decimal AdditionalCharges, decimal Adjustment, string? Notes,
     List<CreatePoLine> Lines
 );
 
-public record CreatePoLine(Guid? SkuId, string ItemName, decimal Quantity, decimal UnitCost, decimal TaxPercent, DateOnly? ExpiryDate, string? BatchNumber);
+public record CreatePoLine(
+    Guid? SkuId, string? ItemCode, string ItemName, string? Unit,
+    decimal Quantity, decimal FreeQuantity, decimal UnitCost, decimal Mrp, decimal SellingPrice,
+    decimal PurDisc1Percent, decimal PurDisc2Percent, decimal TaxPercent,
+    DateOnly? ExpiryDate, string? BatchNumber
+);
 
 public record ReceivePoRequest(List<ReceivePoLine> Lines);
 public record ReceivePoLine(Guid LineId, decimal ReceivedQuantity);

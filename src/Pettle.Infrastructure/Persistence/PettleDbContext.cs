@@ -256,14 +256,20 @@ public class PettleDbContext : IdentityDbContext<ApplicationUser, ApplicationRol
             b.HasMany(x => x.Lines).WithOne(x => x.PurchaseOrder!).HasForeignKey(x => x.PurchaseOrderId).OnDelete(DeleteBehavior.Cascade);
             b.HasQueryFilter(x => !x.IsDeleted);
             foreach (var prop in new[] { nameof(PurchaseOrder.SubTotal), nameof(PurchaseOrder.TaxAmount), nameof(PurchaseOrder.Adjustment),
-                nameof(PurchaseOrder.Total), nameof(PurchaseOrder.Paid), nameof(PurchaseOrder.Due) })
+                nameof(PurchaseOrder.Total), nameof(PurchaseOrder.Paid), nameof(PurchaseOrder.Due),
+                nameof(PurchaseOrder.FlatDiscountPercent), nameof(PurchaseOrder.FlatDiscountAmount), nameof(PurchaseOrder.AdditionalCharges),
+                nameof(PurchaseOrder.GrossAmount), nameof(PurchaseOrder.DiscountAmount), nameof(PurchaseOrder.TaxableAmount),
+                nameof(PurchaseOrder.RoundOff) })
                 b.Property(prop).HasPrecision(12, 2);
         });
 
         builder.Entity<PurchaseOrderLine>(b =>
         {
             foreach (var prop in new[] { nameof(PurchaseOrderLine.Quantity), nameof(PurchaseOrderLine.ReceivedQuantity),
-                nameof(PurchaseOrderLine.UnitCost), nameof(PurchaseOrderLine.TaxPercent), nameof(PurchaseOrderLine.LineTotal) })
+                nameof(PurchaseOrderLine.UnitCost), nameof(PurchaseOrderLine.TaxPercent), nameof(PurchaseOrderLine.LineTotal),
+                nameof(PurchaseOrderLine.FreeQuantity), nameof(PurchaseOrderLine.Mrp), nameof(PurchaseOrderLine.SellingPrice),
+                nameof(PurchaseOrderLine.PurDisc1Percent), nameof(PurchaseOrderLine.PurDisc2Percent),
+                nameof(PurchaseOrderLine.TaxableAmount), nameof(PurchaseOrderLine.TaxAmount), nameof(PurchaseOrderLine.LandingCost) })
                 b.Property(prop).HasPrecision(12, 2);
         });
 

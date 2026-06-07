@@ -49,6 +49,15 @@ public class CreatePoValidator : AbstractValidator<CreatePoRequest>
             .LessThanOrEqualTo(_ => DateOnly.FromDateTime(DateTime.UtcNow).AddDays(1))
             .WithMessage("Purchase date cannot be in the future.");
         RuleFor(x => x.VendorInvoiceNumber).MaximumLength(60);
+        RuleFor(x => x.ReferenceBillNumber).MaximumLength(60);
+        RuleFor(x => x.MaterialInwardNo).MaximumLength(60);
+        RuleFor(x => x.PaymentTerm).MaximumLength(60);
+        RuleFor(x => x.TaxType).MaximumLength(20);
+        RuleFor(x => x.AccountLedger).MaximumLength(60);
+        RuleFor(x => x.FlatDiscountPercent).InclusiveBetween(0, 100).WithMessage("Flat discount must be between 0 and 100%.");
+        RuleFor(x => x.AdditionalCharges).NonNegativeAmount();
+        RuleFor(x => x.DueDate).GreaterThanOrEqualTo(x => x.PurchaseDate)
+            .When(x => x.DueDate.HasValue).WithMessage("Due date cannot be before the bill date.");
         RuleFor(x => x.Notes).MaximumLength(1000);
         RuleFor(x => x.Lines).NotEmpty().WithMessage("Add at least one line item.")
             .Must(l => l.Count <= 200).WithMessage("Maximum 200 line items per PO.");
@@ -61,8 +70,15 @@ public class CreatePoLineValidator : AbstractValidator<CreatePoLine>
     public CreatePoLineValidator()
     {
         RuleFor(x => x.ItemName).NotEmpty().WithMessage("Item name is required.").MaximumLength(160);
+        RuleFor(x => x.ItemCode).MaximumLength(60);
+        RuleFor(x => x.Unit).MaximumLength(16);
         RuleFor(x => x.Quantity).PositiveAmount();
+        RuleFor(x => x.FreeQuantity).NonNegativeAmount();
         RuleFor(x => x.UnitCost).NonNegativeAmount();
+        RuleFor(x => x.Mrp).NonNegativeAmount();
+        RuleFor(x => x.SellingPrice).NonNegativeAmount();
+        RuleFor(x => x.PurDisc1Percent).InclusiveBetween(0, 100).WithMessage("Discount 1 must be between 0 and 100%.");
+        RuleFor(x => x.PurDisc2Percent).InclusiveBetween(0, 100).WithMessage("Discount 2 must be between 0 and 100%.");
         RuleFor(x => x.TaxPercent).ValidTaxPercent();
         RuleFor(x => x.BatchNumber).MaximumLength(60);
         RuleFor(x => x.ExpiryDate)

@@ -153,10 +153,21 @@ public class InventoryService : IInventoryService
             .Include(p => p.Vendor).Include(p => p.Lines)
             .FirstOrDefaultAsync(p => p.Id == id && p.TenantId == _user.TenantId, ct);
         if (po is null) return null;
-        return new PoDetail(po.Id, po.PoNumber, po.VendorId, po.Vendor!.Name, po.Status, po.PurchaseDate,
-            po.VendorInvoiceNumber, po.PaymentStatus, po.SubTotal, po.TaxAmount, po.Adjustment, po.Total, po.Paid, po.Due,
+        return new PoDetail(
+            po.Id, po.PoNumber, po.VendorId, po.Vendor!.Name, po.Status, po.PurchaseDate,
+            po.VendorInvoiceNumber, po.ReferenceBillNumber, po.MaterialInwardNo,
+            po.PaymentTerm, po.DueDate, po.ShippingDate, po.ReverseCharge, po.ExportSez,
+            po.TaxType, po.AccountLedger, po.PaymentStatus,
+            po.SubTotal, po.GrossAmount, po.FlatDiscountPercent, po.FlatDiscountAmount,
+            po.DiscountAmount, po.TaxableAmount, po.TaxAmount, po.AdditionalCharges,
+            po.Adjustment, po.RoundOff, po.Total, po.Paid, po.Due,
             po.Notes,
-            po.Lines.Select(l => new PoLineDto(l.Id, l.SkuId, l.ItemName, l.Quantity, l.ReceivedQuantity, l.UnitCost, l.TaxPercent, l.LineTotal, l.ExpiryDate, l.BatchNumber)).ToList());
+            po.Lines.Select(l => new PoLineDto(
+                l.Id, l.SkuId, l.ItemCode, l.ItemName, l.Unit,
+                l.Quantity, l.FreeQuantity, l.ReceivedQuantity, l.UnitCost,
+                l.Mrp, l.SellingPrice, l.PurDisc1Percent, l.PurDisc2Percent,
+                l.TaxPercent, l.TaxableAmount, l.TaxAmount, l.LandingCost, l.LineTotal,
+                l.ExpiryDate, l.BatchNumber)).ToList());
     }
 
     public async Task<PoDetail> CreatePoAsync(CreatePoRequest req, CancellationToken ct = default)
@@ -167,32 +178,91 @@ public class InventoryService : IInventoryService
             VendorId = req.VendorId,
             PurchaseDate = req.PurchaseDate,
             VendorInvoiceNumber = req.VendorInvoiceNumber,
+            ReferenceBillNumber = req.ReferenceBillNumber,
+            MaterialInwardNo = req.MaterialInwardNo,
+            PaymentTerm = req.PaymentTerm,
+            DueDate = req.DueDate,
+            ShippingDate = req.ShippingDate,
+            ReverseCharge = req.ReverseCharge,
+            ExportSez = req.ExportSez,
+            TaxType = req.TaxType,
+            AccountLedger = req.AccountLedger,
             Adjustment = req.Adjustment,
+            AdditionalCharges = req.AdditionalCharges,
             Notes = req.Notes,
             Status = PoStatus.Draft
         };
-        decimal subtotal = 0, tax = 0;
+
+        // "Inclusive" => the supplier's unit cost already contains tax; otherwise tax is added on top.
+        var inclusiveTax = string.Equals(req.TaxType, "Inclusive", StringComparison.OrdinalIgnoreCase);
+
+        decimal grossAmount = 0, lineDiscountTotal = 0, sumTaxable = 0, sumTax = 0;
         foreach (var line in req.Lines)
         {
-            var lineTotal = line.Quantity * line.UnitCost;
-            var taxAmt = lineTotal * (line.TaxPercent / 100m);
+            var gross = line.Quantity * line.UnitCost;
+            var disc1 = gross * (line.PurDisc1Percent / 100m);
+            var disc2 = (gross - disc1) * (line.PurDisc2Percent / 100m);
+            var net = gross - disc1 - disc2;
+
+            decimal taxable, taxAmt;
+            if (inclusiveTax)
+            {
+                taxable = net / (1 + line.TaxPercent / 100m);
+                taxAmt = net - taxable;
+            }
+            else
+            {
+                taxable = net;
+                taxAmt = net * (line.TaxPercent / 100m);
+            }
+            var lineTotal = taxable + taxAmt;
+
+            // Landed cost is spread across all units actually received, including free quantity.
+            var units = line.Quantity + line.FreeQuantity;
+            var landingCost = units > 0 ? lineTotal / units : 0m;
+
             po.Lines.Add(new PurchaseOrderLine
             {
-                SkuId = line.SkuId, ItemName = line.ItemName, Quantity = line.Quantity, UnitCost = line.UnitCost,
-                TaxPercent = line.TaxPercent, LineTotal = lineTotal + taxAmt, ExpiryDate = line.ExpiryDate, BatchNumber = line.BatchNumber
+                SkuId = line.SkuId, ItemCode = line.ItemCode, ItemName = line.ItemName, Unit = line.Unit,
+                Quantity = line.Quantity, FreeQuantity = line.FreeQuantity, UnitCost = line.UnitCost,
+                Mrp = line.Mrp, SellingPrice = line.SellingPrice,
+                PurDisc1Percent = line.PurDisc1Percent, PurDisc2Percent = line.PurDisc2Percent,
+                TaxPercent = line.TaxPercent, TaxableAmount = R(taxable), TaxAmount = R(taxAmt),
+                LandingCost = R(landingCost), LineTotal = R(lineTotal),
+                ExpiryDate = line.ExpiryDate, BatchNumber = line.BatchNumber
             });
-            subtotal += lineTotal;
-            tax += taxAmt;
+
+            grossAmount += gross;
+            lineDiscountTotal += disc1 + disc2;
+            sumTaxable += taxable;
+            sumTax += taxAmt;
         }
-        po.SubTotal = subtotal;
-        po.TaxAmount = tax;
-        po.Total = subtotal + tax + req.Adjustment;
+
+        // Flat (bill-level) discount applies on the post-line-discount taxable value; tax scales proportionally.
+        var flatDiscountAmount = sumTaxable * (req.FlatDiscountPercent / 100m);
+        var finalTaxable = sumTaxable - flatDiscountAmount;
+        var finalTax = sumTaxable > 0 ? sumTax * (finalTaxable / sumTaxable) : 0m;
+
+        var rawTotal = finalTaxable + finalTax + req.AdditionalCharges + req.Adjustment;
+        var rounded = Math.Round(rawTotal, MidpointRounding.AwayFromZero);
+
+        po.GrossAmount = R(grossAmount);
+        po.FlatDiscountPercent = req.FlatDiscountPercent;
+        po.FlatDiscountAmount = R(flatDiscountAmount);
+        po.DiscountAmount = R(lineDiscountTotal + flatDiscountAmount);
+        po.SubTotal = R(sumTaxable);
+        po.TaxableAmount = R(finalTaxable);
+        po.TaxAmount = R(finalTax);
+        po.RoundOff = R(rounded - rawTotal);
+        po.Total = R(rounded);
         po.Due = po.Total;
         po.NumberOfItems = po.Lines.Count;
         _db.PurchaseOrders.Add(po);
         await _db.SaveChangesAsync(ct);
         return (await GetPoAsync(po.Id, ct))!;
     }
+
+    private static decimal R(decimal value) => Math.Round(value, 2, MidpointRounding.AwayFromZero);
 
     public async Task<bool> ReceivePoAsync(Guid id, ReceivePoRequest req, CancellationToken ct = default)
     {
@@ -217,6 +287,9 @@ public class InventoryService : IInventoryService
                 if (sku is not null)
                 {
                     sku.StockOnHand += (int)delta;
+                    // On inward receipt, refresh the SKU's cost price to the latest landed cost from this bill.
+                    if (delta > 0 && line.LandingCost > 0)
+                        sku.CostPrice = line.LandingCost;
                     _db.StockMovements.Add(new StockMovement
                     {
                         SkuId = sku.Id, Reason = StockMovementReason.PoReceipt,
