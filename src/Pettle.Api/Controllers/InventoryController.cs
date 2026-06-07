@@ -38,6 +38,11 @@ public class InventoryController : ControllerBase
         return r is null ? NotFound() : Ok(r);
     }
 
+    [HttpDelete("skus/{id:guid}")]
+    [HasPermission(Modules.Inventory, Actions.Delete)]
+    public async Task<IActionResult> DeleteSku(Guid id, CancellationToken ct)
+        => await _svc.DeleteSkuAsync(id, ct) ? NoContent() : NotFound();
+
     [HttpGet("vendors")]
     [HasPermission(Modules.Inventory, Actions.View)]
     public async Task<IActionResult> Vendors([FromQuery] string? search, [FromQuery] int page = 1, [FromQuery] int pageSize = 50, CancellationToken ct = default)
@@ -55,6 +60,11 @@ public class InventoryController : ControllerBase
         var r = await _svc.UpdateVendorAsync(id, req, ct);
         return r is null ? NotFound() : Ok(r);
     }
+
+    [HttpDelete("vendors/{id:guid}")]
+    [HasPermission(Modules.Inventory, Actions.Delete)]
+    public async Task<IActionResult> DeleteVendor(Guid id, CancellationToken ct)
+        => await _svc.DeleteVendorAsync(id, ct) ? NoContent() : NotFound();
 
     [HttpGet("purchase-orders")]
     [HasPermission(Modules.Inventory, Actions.View)]
@@ -78,4 +88,9 @@ public class InventoryController : ControllerBase
     [HasPermission(Modules.Inventory, Actions.Approve)]
     public async Task<IActionResult> ReceivePo(Guid id, [FromBody] ReceivePoRequest req, CancellationToken ct)
         => await _svc.ReceivePoAsync(id, req, ct) ? NoContent() : NotFound();
+
+    [HttpDelete("purchase-orders/{id:guid}")]
+    [HasPermission(Modules.Inventory, Actions.Delete)]
+    public async Task<IActionResult> DeletePo(Guid id, CancellationToken ct)
+        => await _svc.DeletePoAsync(id, ct) ? NoContent() : NotFound();
 }

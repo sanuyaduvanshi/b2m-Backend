@@ -9,13 +9,16 @@ public interface IInventoryService
     Task<SkuListItem> CreateSkuAsync(CreateOrUpdateSkuRequest req, CancellationToken ct = default);
     Task<SkuListItem?> UpdateSkuAsync(Guid id, CreateOrUpdateSkuRequest req, CancellationToken ct = default);
     Task<SkuListItem?> UpdateSkuListingAsync(Guid id, UpdateSkuListingRequest req, CancellationToken ct = default);
+    Task<bool> DeleteSkuAsync(Guid id, CancellationToken ct = default);
 
     Task<PagedResult<VendorListItem>> ListVendorsAsync(string? search, int page, int pageSize, CancellationToken ct = default);
     Task<VendorListItem> CreateVendorAsync(CreateOrUpdateVendorRequest req, CancellationToken ct = default);
     Task<VendorListItem?> UpdateVendorAsync(Guid id, CreateOrUpdateVendorRequest req, CancellationToken ct = default);
+    Task<bool> DeleteVendorAsync(Guid id, CancellationToken ct = default);
 
     Task<PagedResult<PoListItem>> ListPosAsync(string? search, int page, int pageSize, CancellationToken ct = default);
     Task<PoDetail?> GetPoAsync(Guid id, CancellationToken ct = default);
     Task<PoDetail> CreatePoAsync(CreatePoRequest req, CancellationToken ct = default);
     Task<bool> ReceivePoAsync(Guid id, ReceivePoRequest req, CancellationToken ct = default);
+    Task<bool> DeletePoAsync(Guid id, CancellationToken ct = default);
 }

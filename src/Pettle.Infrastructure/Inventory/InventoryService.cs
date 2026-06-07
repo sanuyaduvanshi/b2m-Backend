@@ -306,6 +306,44 @@ public class InventoryService : IInventoryService
         return true;
     }
 
+    public async Task<bool> DeleteSkuAsync(Guid id, CancellationToken ct = default)
+    {
+        if (_user.TenantId is null) return false;
+        var sku = await _db.Skus.FirstOrDefaultAsync(x => x.Id == id && x.TenantId == _user.TenantId, ct);
+        if (sku is null) return false;
+        if (sku.StockOnHand > 0)
+            throw AppException.Conflict($"Cannot delete '{sku.Name}' — it still has {sku.StockOnHand} in stock. Adjust stock to zero first.");
+        _db.Skus.Remove(sku);
+        await _db.SaveChangesAsync(ct);
+        return true;
+    }
+
+    public async Task<bool> DeleteVendorAsync(Guid id, CancellationToken ct = default)
+    {
+        if (_user.TenantId is null) return false;
+        var vendor = await _db.Vendors.FirstOrDefaultAsync(x => x.Id == id && x.TenantId == _user.TenantId, ct);
+        if (vendor is null) return false;
+        // A soft-deleted vendor would be filtered out and break PO listings (Vendor!.Name), so block while referenced.
+        var hasPos = await _db.PurchaseOrders.AnyAsync(p => p.VendorId == id && p.TenantId == _user.TenantId, ct);
+        if (hasPos)
+            throw AppException.Conflict($"Cannot delete '{vendor.Name}' — it is linked to one or more purchase orders.");
+        _db.Vendors.Remove(vendor);
+        await _db.SaveChangesAsync(ct);
+        return true;
+    }
+
+    public async Task<bool> DeletePoAsync(Guid id, CancellationToken ct = default)
+    {
+        if (_user.TenantId is null) return false;
+        var po = await _db.PurchaseOrders.FirstOrDefaultAsync(p => p.Id == id && p.TenantId == _user.TenantId, ct);
+        if (po is null) return false;
+        if (po.Status is PoStatus.Received or PoStatus.PartiallyReceived)
+            throw AppException.Conflict($"Cannot delete {po.PoNumber} — stock has already been received against it.");
+        _db.PurchaseOrders.Remove(po);
+        await _db.SaveChangesAsync(ct);
+        return true;
+    }
+
     private async Task<string> NextPoNumberAsync(CancellationToken ct)
     {
         var year = DateTime.UtcNow.Year;
