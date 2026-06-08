@@ -3,6 +3,7 @@ using Pettle.Application.Clients;
 using Pettle.Application.Common;
 using Pettle.Application.Common.Errors;
 using Pettle.Application.Invoices;
+using Pettle.Domain.Inventory;
 using Pettle.Domain.Invoices;
 using Pettle.Infrastructure.Persistence;
 
@@ -64,6 +65,147 @@ public class InvoiceService : IInvoiceService
             i.Lines.Select(l => new InvoiceLineDto(l.Id, l.BillItemName, l.Category, l.Quantity, l.UnitAmount, l.Discount, l.Subtotal, l.Total)).ToList(),
             i.Payments.OrderByDescending(p => p.PaymentTime).Select(p => new PaymentDto(p.Id, p.PaymentTime, p.Amount, p.Mode, p.Source, p.TransactionId)).ToList()
         );
+    }
+
+    public async Task<InvoiceDetail> CreateSaleAsync(CreateSaleRequest req, CancellationToken ct = default)
+    {
+        if (_user.TenantId is null)
+            throw AppException.BusinessRule("No active tenant context.");
+
+        if (req.Lines is null || req.Lines.Count == 0)
+            throw AppException.Validation("Empty sale",
+                new Dictionary<string, string[]> { ["lines"] = new[] { "Add at least one item to the sale." } });
+
+        var invoice = new Invoice
+        {
+            InvoiceNumber = await NextSaleInvoiceNumberAsync(ct),
+            InvoiceType = InvoiceType.Sale,
+            InvoiceDate = req.InvoiceDate,
+            PetParentId = req.PetParentId,
+            ParentNameSnapshot = string.IsNullOrWhiteSpace(req.ParentName) ? "Walk-in Customer" : req.ParentName.Trim(),
+            PhoneSnapshot = req.Phone?.Trim() ?? string.Empty,
+            PetNameSnapshot = string.IsNullOrWhiteSpace(req.PetName) ? null : req.PetName.Trim(),
+            Notes = req.IsDelivery ? Prefix("Delivery", req.Notes) : req.Notes,
+            PaymentStatus = InvoicePaymentStatus.Pending,
+        };
+
+        // Retail rates are GST-inclusive: extract tax out of the net (mirrors the on-screen totals).
+        decimal sumGross = 0, sumLineDiscount = 0, sumTaxable = 0, sumTax = 0;
+        foreach (var line in req.Lines)
+        {
+            if (line.Quantity <= 0)
+                throw AppException.Validation("Invalid quantity",
+                    new Dictionary<string, string[]> { ["lines"] = new[] { $"Quantity must be greater than zero for '{line.ItemName}'." } });
+
+            var gross = line.Quantity * line.UnitAmount;
+            var disc1 = gross * (line.DiscountPercent / 100m);
+            var disc2 = (gross - disc1) * (line.AddDiscountPercent / 100m);
+            var net = gross - disc1 - disc2;                      // GST-inclusive line total
+            var taxable = net / (1 + line.TaxPercent / 100m);
+            var taxAmt = net - taxable;
+
+            invoice.Lines.Add(new InvoiceLineItem
+            {
+                BillItemName = line.ItemName,
+                SkuName = line.SkuId.HasValue ? line.ItemName : null,
+                Quantity = line.Quantity,
+                UnitAmount = line.UnitAmount,
+                Discount = R(disc1 + disc2),
+                Subtotal = R(taxable),
+                CgstAmount = R(taxAmt / 2m),
+                SgstAmount = R(taxAmt / 2m),
+                Total = R(net),
+            });
+
+            sumGross += gross;
+            sumLineDiscount += disc1 + disc2;
+            sumTaxable += taxable;
+            sumTax += taxAmt;
+        }
+
+        // Bill-level flat discount applies on the post-line-discount taxable value; tax scales proportionally.
+        var flatDiscountAmount = sumTaxable * (req.FlatDiscountPercent / 100m);
+        var finalTaxable = sumTaxable - flatDiscountAmount;
+        var finalTax = sumTaxable > 0 ? sumTax * (finalTaxable / sumTaxable) : 0m;
+
+        var rawTotal = finalTaxable + finalTax + req.AdditionalCharges;
+        var rounded = Math.Round(rawTotal, MidpointRounding.AwayFromZero);
+
+        invoice.BaseAmount = R(sumTaxable);
+        invoice.DiscountAmount = R(sumLineDiscount + flatDiscountAmount);
+        invoice.AdditionalAmount = R(req.AdditionalCharges);
+        invoice.CgstAmount = R(finalTax / 2m);
+        invoice.SgstAmount = R(finalTax / 2m);
+        invoice.IgstAmount = 0;
+        invoice.Revenue = R(rounded);
+
+        // Payments
+        decimal paid = 0;
+        foreach (var p in req.Payments ?? Array.Empty<CreateSalePayment>())
+        {
+            if (p.Amount <= 0) continue;
+            invoice.Payments.Add(new Payment
+            {
+                PaymentTime = DateTimeOffset.UtcNow,
+                Amount = p.Amount,
+                Mode = p.Mode,
+                Source = PaymentSource.WalkIn,
+                TransactionId = p.TransactionId,
+            });
+            paid += p.Amount;
+        }
+        if (paid > invoice.Revenue + 0.01m)
+            throw AppException.Validation("Payment exceeds total",
+                new Dictionary<string, string[]> { ["payments"] = new[] { $"Payments ₹{paid:F2} exceed the bill total ₹{invoice.Revenue:F2}." } });
+
+        invoice.Paid = R(paid);
+        invoice.Due = Math.Max(0, R(invoice.Revenue - paid));
+        invoice.PaymentStatus = invoice.Due == 0 && paid > 0
+            ? InvoicePaymentStatus.Paid
+            : paid > 0 ? InvoicePaymentStatus.PartiallyPaid : InvoicePaymentStatus.Pending;
+
+        _db.Invoices.Add(invoice);
+
+        // Deduct stock for product (SKU-linked) lines.
+        foreach (var line in req.Lines.Where(l => l.SkuId.HasValue))
+        {
+            var sku = await _db.Skus.FirstOrDefaultAsync(s => s.Id == line.SkuId && s.TenantId == _user.TenantId, ct);
+            if (sku is null)
+                throw AppException.Validation("Unknown product",
+                    new Dictionary<string, string[]> { ["lines"] = new[] { $"Product '{line.ItemName}' no longer exists." } });
+
+            var qty = (int)Math.Ceiling(line.Quantity);
+            if (sku.StockOnHand < qty)
+                throw AppException.Conflict($"Not enough stock for '{sku.Name}' — {sku.StockOnHand} on hand, {qty} requested.");
+
+            sku.StockOnHand -= qty;
+            _db.StockMovements.Add(new StockMovement
+            {
+                SkuId = sku.Id,
+                Reason = StockMovementReason.Sale,
+                QuantityChange = -qty,
+                StockAfter = sku.StockOnHand,
+                RelatedInvoiceId = invoice.Id,
+                Note = $"Sale {invoice.InvoiceNumber}",
+            });
+        }
+
+        await _db.SaveChangesAsync(ct);
+        return (await GetAsync(invoice.Id, ct))!;
+    }
+
+    private static string Prefix(string tag, string? notes) =>
+        string.IsNullOrWhiteSpace(notes) ? tag : $"{tag} | {notes}";
+
+    private static decimal R(decimal value) => Math.Round(value, 2, MidpointRounding.AwayFromZero);
+
+    private async Task<string> NextSaleInvoiceNumberAsync(CancellationToken ct)
+    {
+        var year = DateTime.UtcNow.Year;
+        var count = await _db.Invoices.IgnoreQueryFilters()
+            .Where(i => i.TenantId == _user.TenantId && i.InvoiceType == InvoiceType.Sale && i.CreatedAt.Year == year)
+            .CountAsync(ct);
+        return $"SALE-{year}-{(count + 1).ToString().PadLeft(5, '0')}";
     }
 
     public async Task<PaymentDto?> RecordPaymentAsync(Guid invoiceId, RecordPaymentRequest req, CancellationToken ct = default)

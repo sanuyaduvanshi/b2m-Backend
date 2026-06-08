@@ -29,11 +29,15 @@ public class BookingsImporter
             .ToListAsync(ct))
             .ToDictionary(x => x.LegacyBookingId!, x => x.Id, StringComparer.Ordinal);
 
+        // Key parents by a country-code-agnostic phone key (last 10 digits): the clients file and the
+        // bookings sheet in the same export can carry phones with/without the 91 country code.
         var parentsByPhone = (await _db.PetParents.IgnoreQueryFilters()
             .Where(p => p.TenantId == tenantId && p.Phone != null)
             .Select(p => new { p.Id, p.Phone })
             .ToListAsync(ct))
-            .GroupBy(p => p.Phone!, StringComparer.Ordinal)
+            .Select(p => new { p.Id, Key = PhoneKey(p.Phone) })
+            .Where(p => p.Key.Length > 0)
+            .GroupBy(p => p.Key, StringComparer.Ordinal)
             .ToDictionary(g => g.Key, g => g.First().Id, StringComparer.Ordinal);
 
         var petsList = await _db.Pets.IgnoreQueryFilters()
@@ -63,7 +67,8 @@ public class BookingsImporter
             try
             {
                 var phone = NormalisePhone(row.Get("Phone"));
-                if (string.IsNullOrEmpty(phone) || !parentsByPhone.TryGetValue(phone, out var parentId))
+                var phoneKey = PhoneKey(row.Get("Phone"));
+                if (phoneKey.Length == 0 || !parentsByPhone.TryGetValue(phoneKey, out var parentId))
                 {
                     result.Inc("skipped_unknown_parent");
                     continue;

@@ -39,7 +39,7 @@ public class UpdateTenantProfileValidator : AbstractValidator<UpdateTenantProfil
 
 public class CreateOrUpdateServiceValidator : AbstractValidator<CreateOrUpdateServiceRequest>
 {
-    private static readonly string[] AllowedVerticals = { "Boarding", "Grooming", "Vet", "DayCare", "Training", "Retail" };
+    private static readonly string[] AllowedVerticals = { "Boarding", "Grooming", "Vet", "DayCare", "Training", "Retail", "AddOn" };
 
     public CreateOrUpdateServiceValidator()
     {
@@ -54,6 +54,23 @@ public class CreateOrUpdateServiceValidator : AbstractValidator<CreateOrUpdateSe
         RuleFor(x => x.DurationMinutes)
             .InclusiveBetween(1, 24 * 60).When(x => x.DurationMinutes.HasValue)
             .WithMessage("Duration must be between 1 and 1440 minutes.");
+
+        RuleForEach(x => x.Variants).ChildRules(v =>
+        {
+            v.RuleFor(z => z.Name).NotEmpty().WithMessage("Variant name is required.").MaximumLength(120);
+            v.RuleFor(z => z.Price).NonNegativeAmount();
+            v.RuleFor(z => z.SizeClass).MaximumLength(60);
+            v.RuleFor(z => z.Notes).MaximumLength(500);
+        }).When(x => x.Variants is not null);
+    }
+}
+
+public class CreateServiceCategoryValidator : AbstractValidator<CreateServiceCategoryRequest>
+{
+    public CreateServiceCategoryValidator()
+    {
+        RuleFor(x => x.Name).NotEmpty().WithMessage("Category name is required.").MaximumLength(120);
+        RuleFor(x => x.Description).MaximumLength(500);
     }
 }
 

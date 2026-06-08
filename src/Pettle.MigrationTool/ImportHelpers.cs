@@ -77,6 +77,16 @@ public static class ImportHelpers
         return leadingPlus ? "+" + digits : digits;
     }
 
+    /// <summary>
+    /// Country-code-agnostic phone match key: the last 10 digits (Indian mobile length),
+    /// so "919010550752" and "9010550752" reconcile to the same key when matching across export files.
+    /// </summary>
+    public static string PhoneKey(string? raw)
+    {
+        var digits = new string((Clean(raw) ?? "").Where(char.IsDigit).ToArray());
+        return digits.Length > 10 ? digits[^10..] : digits;
+    }
+
     public static bool ParseYesNo(string? raw)
     {
         var s = Clean(raw)?.ToLowerInvariant();

@@ -8,8 +8,16 @@ public record TenantProfileDto(Guid Id, string Name, string Slug, string? LogoUr
 public record UpdateTenantProfileRequest(string Name, string? LogoUrl, string? PrimaryColor, string? SecondaryColor, string? AccentColor,
     string? Currency, string? Locale, string? TimeZone, int IdleSessionMinutes);
 
-public record ServiceItemListItem(Guid Id, string Name, string Vertical, string? CategoryName, decimal BasePrice, decimal? TaxPercent, bool IsActive);
-public record CreateOrUpdateServiceRequest(string Name, string? Description, string Vertical, Guid? CategoryId, decimal BasePrice, decimal? TaxPercent, Guid? TaxId, int? DurationMinutes, bool IsActive);
+public record ServiceItemListItem(Guid Id, string Name, string Vertical, string? CategoryName, decimal BasePrice, decimal? TaxPercent, bool IsActive, int VariantCount);
+public record ServiceVariantDto(Guid Id, string Name, decimal Price, string? SizeClass, string? Notes);
+public record ServiceVariantInput(string Name, decimal Price, string? SizeClass, string? Notes);
+public record ServiceItemDetail(Guid Id, string Name, string? Description, string Vertical, Guid? CategoryId, string? CategoryName,
+    decimal BasePrice, decimal? TaxPercent, Guid? TaxId, int? DurationMinutes, bool IsActive, IReadOnlyList<ServiceVariantDto> Variants);
+public record CreateOrUpdateServiceRequest(string Name, string? Description, string Vertical, Guid? CategoryId, decimal BasePrice,
+    decimal? TaxPercent, Guid? TaxId, int? DurationMinutes, bool IsActive, IReadOnlyList<ServiceVariantInput>? Variants = null);
+
+public record ServiceCategoryDto(Guid Id, string Name, string? Description, bool IsActive, int ItemCount);
+public record CreateServiceCategoryRequest(string Name, string? Description);
 
 public record StaffListItem(Guid Id, string Name, string? RoleLabel, string? Vertical, string? Phone, string? Email, bool IsActive);
 public record CreateOrUpdateStaffRequest(string Name, string? Phone, string? Email, string? RoleLabel, string? Vertical, Guid? UserId, bool IsActive);
@@ -50,8 +58,13 @@ public interface IMyBusinessService
     Task<TenantProfileDto?> UpdateProfileAsync(UpdateTenantProfileRequest req, CancellationToken ct = default);
 
     Task<IReadOnlyList<ServiceItemListItem>> ListServicesAsync(CancellationToken ct = default);
+    Task<ServiceItemDetail?> GetServiceAsync(Guid id, CancellationToken ct = default);
     Task<ServiceItemListItem> CreateServiceAsync(CreateOrUpdateServiceRequest req, CancellationToken ct = default);
     Task<ServiceItemListItem?> UpdateServiceAsync(Guid id, CreateOrUpdateServiceRequest req, CancellationToken ct = default);
+    Task<bool> DeleteServiceAsync(Guid id, CancellationToken ct = default);
+
+    Task<IReadOnlyList<ServiceCategoryDto>> ListServiceCategoriesAsync(CancellationToken ct = default);
+    Task<ServiceCategoryDto> CreateServiceCategoryAsync(CreateServiceCategoryRequest req, CancellationToken ct = default);
 
     Task<IReadOnlyList<StaffListItem>> ListStaffAsync(CancellationToken ct = default);
     Task<StaffListItem> CreateStaffAsync(CreateOrUpdateStaffRequest req, CancellationToken ct = default);

@@ -81,3 +81,35 @@ public record RecordPaymentRequest(
 );
 
 public record RefundRequest(decimal Amount, string Reason);
+
+// --- POS / counter sale ---
+
+public record CreateSaleLine(
+    Guid? SkuId,
+    string ItemName,
+    decimal Quantity,
+    decimal UnitAmount,           // per-unit MRP (GST-inclusive retail rate)
+    decimal DiscountPercent,      // line discount %
+    decimal AddDiscountPercent,   // additional line discount % (applied after the first)
+    decimal TaxPercent
+);
+
+public record CreateSalePayment(
+    PaymentMode Mode,
+    decimal Amount,
+    string? TransactionId = null
+);
+
+public record CreateSaleRequest(
+    DateOnly InvoiceDate,
+    Guid? PetParentId,
+    string ParentName,
+    string Phone,
+    string? PetName,
+    bool IsDelivery,
+    decimal FlatDiscountPercent,  // bill-level discount %
+    decimal AdditionalCharges,    // freight/packing etc. (₹)
+    string? Notes,
+    IReadOnlyList<CreateSaleLine> Lines,
+    IReadOnlyList<CreateSalePayment> Payments
+);

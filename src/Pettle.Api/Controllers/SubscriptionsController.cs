@@ -45,4 +45,9 @@ public class SubscriptionsController : ControllerBase
     [HasPermission(Modules.Subscriptions, Actions.Edit)]
     public async Task<IActionResult> Freeze(Guid id, CancellationToken ct)
         => await _svc.FreezeAsync(id, ct) ? NoContent() : NotFound();
+
+    [HttpPost("issued/{id:guid}/cancel")]
+    [HasPermission(Modules.Subscriptions, Actions.Edit)]
+    public async Task<IActionResult> Cancel(Guid id, CancellationToken ct)
+        => await _svc.CancelAsync(id, ct) ? NoContent() : NotFound();
 }

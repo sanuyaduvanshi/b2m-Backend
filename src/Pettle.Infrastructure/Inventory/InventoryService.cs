@@ -101,7 +101,7 @@ public class InventoryService : IInventoryService
         var total = await q.CountAsync(ct);
         var p = Math.Max(page, 1); var sz = Math.Clamp(pageSize, 1, 200);
         var items = await q.OrderBy(x => x.Name).Skip((p - 1) * sz).Take(sz)
-            .Select(x => new VendorListItem(x.Id, x.Name, x.Phone, x.Email, x.Gstin, x.CreditDays, x.CreditLimit, x.IsActive))
+            .Select(x => new VendorListItem(x.Id, x.Name, x.Phone, x.Email, x.Gstin, x.CreditDays, x.CreditLimit, x.IsActive, x.Address, x.ContactPerson))
             .ToListAsync(ct);
         return new PagedResult<VendorListItem>(items, total, p, sz);
     }
@@ -115,7 +115,7 @@ public class InventoryService : IInventoryService
         };
         _db.Vendors.Add(v);
         await _db.SaveChangesAsync(ct);
-        return new VendorListItem(v.Id, v.Name, v.Phone, v.Email, v.Gstin, v.CreditDays, v.CreditLimit, v.IsActive);
+        return new VendorListItem(v.Id, v.Name, v.Phone, v.Email, v.Gstin, v.CreditDays, v.CreditLimit, v.IsActive, v.Address, v.ContactPerson);
     }
 
     public async Task<VendorListItem?> UpdateVendorAsync(Guid id, CreateOrUpdateVendorRequest req, CancellationToken ct = default)
@@ -126,7 +126,7 @@ public class InventoryService : IInventoryService
         v.Name = req.Name; v.ContactPerson = req.ContactPerson; v.Phone = req.Phone; v.Email = req.Email;
         v.Address = req.Address; v.Gstin = req.Gstin; v.CreditDays = req.CreditDays; v.CreditLimit = req.CreditLimit; v.IsActive = req.IsActive;
         await _db.SaveChangesAsync(ct);
-        return new VendorListItem(v.Id, v.Name, v.Phone, v.Email, v.Gstin, v.CreditDays, v.CreditLimit, v.IsActive);
+        return new VendorListItem(v.Id, v.Name, v.Phone, v.Email, v.Gstin, v.CreditDays, v.CreditLimit, v.IsActive, v.Address, v.ContactPerson);
     }
 
     public async Task<PagedResult<PoListItem>> ListPosAsync(string? search, int page, int pageSize, CancellationToken ct = default)

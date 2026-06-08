@@ -53,33 +53,98 @@ public class MyBusinessService : IMyBusinessService
         return await _db.ServiceItems.AsNoTracking().Include(s => s.Category)
             .Where(s => s.TenantId == _user.TenantId)
             .OrderBy(s => s.Vertical).ThenBy(s => s.Name)
-            .Select(s => new ServiceItemListItem(s.Id, s.Name, s.Vertical, s.Category!.Name, s.BasePrice, s.TaxPercent, s.IsActive))
+            .Select(s => new ServiceItemListItem(s.Id, s.Name, s.Vertical, s.Category!.Name, s.BasePrice, s.TaxPercent, s.IsActive, s.Variants.Count))
             .ToListAsync(ct);
+    }
+
+    public async Task<ServiceItemDetail?> GetServiceAsync(Guid id, CancellationToken ct = default)
+    {
+        if (_user.TenantId is null) return null;
+        return await _db.ServiceItems.AsNoTracking().Include(s => s.Category).Include(s => s.Variants)
+            .Where(s => s.Id == id && s.TenantId == _user.TenantId)
+            .Select(s => new ServiceItemDetail(s.Id, s.Name, s.Description, s.Vertical, s.CategoryId, s.Category!.Name,
+                s.BasePrice, s.TaxPercent, s.TaxId, s.DurationMinutes, s.IsActive,
+                s.Variants.OrderBy(v => v.Name).Select(v => new ServiceVariantDto(v.Id, v.Name, v.Price, v.SizeClass, v.Notes)).ToList()))
+            .FirstOrDefaultAsync(ct);
+    }
+
+    private async Task ValidateCategoryAsync(Guid? categoryId, CancellationToken ct)
+    {
+        if (categoryId is null) return;
+        var ok = await _db.ServiceCategories.AnyAsync(c => c.Id == categoryId && c.TenantId == _user.TenantId, ct);
+        if (!ok) throw AppException.Validation("Invalid category",
+            new Dictionary<string, string[]> { ["categoryId"] = new[] { "That category doesn't belong to this business." } });
     }
 
     public async Task<ServiceItemListItem> CreateServiceAsync(CreateOrUpdateServiceRequest req, CancellationToken ct = default)
     {
+        await ValidateCategoryAsync(req.CategoryId, ct);
         var s = new ServiceItem
         {
             Name = req.Name, Description = req.Description, Vertical = req.Vertical,
             CategoryId = req.CategoryId, BasePrice = req.BasePrice, TaxPercent = req.TaxPercent,
             TaxId = req.TaxId, DurationMinutes = req.DurationMinutes, IsActive = req.IsActive
         };
+        foreach (var v in req.Variants ?? Array.Empty<ServiceVariantInput>())
+            s.Variants.Add(new ServiceVariant { TenantId = s.TenantId, Name = v.Name, Price = v.Price, SizeClass = v.SizeClass, Notes = v.Notes });
         _db.ServiceItems.Add(s);
         await _db.SaveChangesAsync(ct);
-        return new ServiceItemListItem(s.Id, s.Name, s.Vertical, null, s.BasePrice, s.TaxPercent, s.IsActive);
+        return new ServiceItemListItem(s.Id, s.Name, s.Vertical, null, s.BasePrice, s.TaxPercent, s.IsActive, s.Variants.Count);
     }
 
     public async Task<ServiceItemListItem?> UpdateServiceAsync(Guid id, CreateOrUpdateServiceRequest req, CancellationToken ct = default)
     {
         if (_user.TenantId is null) return null;
-        var s = await _db.ServiceItems.FirstOrDefaultAsync(x => x.Id == id && x.TenantId == _user.TenantId, ct);
+        var s = await _db.ServiceItems.Include(x => x.Variants).FirstOrDefaultAsync(x => x.Id == id && x.TenantId == _user.TenantId, ct);
         if (s is null) return null;
+        await ValidateCategoryAsync(req.CategoryId, ct);
         s.Name = req.Name; s.Description = req.Description; s.Vertical = req.Vertical;
         s.CategoryId = req.CategoryId; s.BasePrice = req.BasePrice; s.TaxPercent = req.TaxPercent;
         s.TaxId = req.TaxId; s.DurationMinutes = req.DurationMinutes; s.IsActive = req.IsActive;
+
+        // Replace-all variants when the caller sends a variant list; leave untouched when null.
+        if (req.Variants is not null)
+        {
+            _db.ServiceVariants.RemoveRange(s.Variants);
+            s.Variants.Clear();
+            foreach (var v in req.Variants)
+                s.Variants.Add(new ServiceVariant { TenantId = s.TenantId, Name = v.Name, Price = v.Price, SizeClass = v.SizeClass, Notes = v.Notes });
+        }
         await _db.SaveChangesAsync(ct);
-        return new ServiceItemListItem(s.Id, s.Name, s.Vertical, null, s.BasePrice, s.TaxPercent, s.IsActive);
+        return new ServiceItemListItem(s.Id, s.Name, s.Vertical, null, s.BasePrice, s.TaxPercent, s.IsActive, s.Variants.Count);
+    }
+
+    public async Task<bool> DeleteServiceAsync(Guid id, CancellationToken ct = default)
+    {
+        if (_user.TenantId is null) return false;
+        var s = await _db.ServiceItems.Include(x => x.Variants).FirstOrDefaultAsync(x => x.Id == id && x.TenantId == _user.TenantId, ct);
+        if (s is null) return false;
+        _db.ServiceVariants.RemoveRange(s.Variants);
+        _db.ServiceItems.Remove(s);
+        await _db.SaveChangesAsync(ct);
+        return true;
+    }
+
+    public async Task<IReadOnlyList<ServiceCategoryDto>> ListServiceCategoriesAsync(CancellationToken ct = default)
+    {
+        if (_user.TenantId is null) return Array.Empty<ServiceCategoryDto>();
+        return await _db.ServiceCategories.AsNoTracking()
+            .Where(c => c.TenantId == _user.TenantId)
+            .OrderBy(c => c.Name)
+            .Select(c => new ServiceCategoryDto(c.Id, c.Name, c.Description, c.IsActive,
+                _db.ServiceItems.Count(s => s.CategoryId == c.Id && s.TenantId == _user.TenantId)))
+            .ToListAsync(ct);
+    }
+
+    public async Task<ServiceCategoryDto> CreateServiceCategoryAsync(CreateServiceCategoryRequest req, CancellationToken ct = default)
+    {
+        var name = req.Name.Trim();
+        var dupe = await _db.ServiceCategories.AnyAsync(c => c.TenantId == _user.TenantId && c.Name.ToLower() == name.ToLower(), ct);
+        if (dupe) throw AppException.Conflict($"A category named “{name}” already exists.");
+        var cat = new ServiceCategory { Name = name, Description = req.Description, IsActive = true };
+        _db.ServiceCategories.Add(cat);
+        await _db.SaveChangesAsync(ct);
+        return new ServiceCategoryDto(cat.Id, cat.Name, cat.Description, cat.IsActive, 0);
     }
 
     public async Task<IReadOnlyList<StaffListItem>> ListStaffAsync(CancellationToken ct = default)

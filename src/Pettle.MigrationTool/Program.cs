@@ -31,6 +31,7 @@ builder.Services.AddSingleton<ICurrentUser>(importUser);
 builder.Services.AddDbContext<PettleDbContext>(opt =>
     opt.UseNpgsql(conn, npg => npg.MigrationsHistoryTable("__EFMigrationsHistory", "pettle")));
 builder.Services.AddScoped<ClientsImporter>();
+builder.Services.AddScoped<CatalogueImporter>();
 builder.Services.AddScoped<PurchaseOrdersImporter>();
 builder.Services.AddScoped<ExpensesImporter>();
 builder.Services.AddScoped<SubscriptionsImporter>();
@@ -67,10 +68,10 @@ var wall = System.Diagnostics.Stopwatch.StartNew();
 
 foreach (var (name, filePath) in jobs)
 {
-    if (!File.Exists(filePath))
+    if (!File.Exists(filePath) && !Directory.Exists(filePath))
     {
-        log.LogError("[{Name}] file not found: {Path}", name, filePath);
-        overall[name] = $"file not found: {filePath}";
+        log.LogError("[{Name}] path not found: {Path}", name, filePath);
+        overall[name] = $"path not found: {filePath}";
         exitCode = 3;
         continue;
     }
@@ -82,6 +83,7 @@ foreach (var (name, filePath) in jobs)
         string summary = name switch
         {
             "clients"       => (await sp.GetRequiredService<ClientsImporter>().ImportAsync(tenant.Id, filePath, cli.DryRun, CancellationToken.None)).ToString(),
+            "catalogue"     => (await sp.GetRequiredService<CatalogueImporter>().ImportAsync(tenant.Id, filePath, cli.DryRun, CancellationToken.None)).ToString(),
             "pos"           => (await sp.GetRequiredService<PurchaseOrdersImporter>().ImportAsync(tenant.Id, filePath, cli.DryRun, CancellationToken.None)).ToString(),
             "expenses"      => (await sp.GetRequiredService<ExpensesImporter>().ImportAsync(tenant.Id, filePath, cli.DryRun, CancellationToken.None)).ToString(),
             "subscriptions" => (await sp.GetRequiredService<SubscriptionsImporter>().ImportAsync(tenant.Id, filePath, cli.DryRun, CancellationToken.None)).ToString(),
@@ -116,7 +118,7 @@ return exitCode;
 static List<(string name, string file)> ResolveJobs(CliArgs cli)
 {
     // Default sequence (FK order). 'tasks' skipped — source export is empty.
-    var allInOrder = new[] { "clients", "pos", "expenses", "subscriptions", "bookings", "invoices", "payments" };
+    var allInOrder = new[] { "clients", "catalogue", "pos", "expenses", "subscriptions", "bookings", "invoices", "payments" };
 
     var jobs = new List<(string, string)>();
     var requested = (cli.Import ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
@@ -148,6 +150,7 @@ static string ResolveDefaultPath(string name, string? root)
     return name switch
     {
         "clients"       => Path.Combine(root, "clients.csv"),
+        "catalogue"     => Path.Combine(root, "catalogue", "B2M VET CARE"),
         "pos"           => Path.Combine(root, "purchase_orders", "B2M VET CARE.csv"),
         "expenses"      => Path.Combine(root, "expenses",      "B2M VET CARE.xlsx"),
         "subscriptions" => Path.Combine(root, "subscriptions", "B2M VET CARE.xlsx"),

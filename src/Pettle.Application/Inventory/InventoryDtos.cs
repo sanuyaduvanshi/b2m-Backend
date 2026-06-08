@@ -18,7 +18,7 @@ public record CreateOrUpdateSkuRequest(
 
 public record UpdateSkuListingRequest(bool IsListedInApp, string? AppImageUrl);
 
-public record VendorListItem(Guid Id, string Name, string? Phone, string? Email, string? Gstin, int CreditDays, decimal CreditLimit, bool IsActive);
+public record VendorListItem(Guid Id, string Name, string? Phone, string? Email, string? Gstin, int CreditDays, decimal CreditLimit, bool IsActive, string? Address = null, string? ContactPerson = null);
 public record CreateOrUpdateVendorRequest(string Name, string? ContactPerson, string? Phone, string? Email, string? Address, string? Gstin, int CreditDays, decimal CreditLimit, bool IsActive);
 
 public record PoListItem(

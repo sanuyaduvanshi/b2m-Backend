@@ -25,6 +25,14 @@ public class InvoicesController : ControllerBase
         return r is null ? NotFound() : Ok(r);
     }
 
+    [HttpPost("sale")]
+    [HasPermission(Modules.Invoices, Actions.Create)]
+    public async Task<IActionResult> CreateSale([FromBody] CreateSaleRequest req, CancellationToken ct)
+    {
+        var r = await _svc.CreateSaleAsync(req, ct);
+        return CreatedAtAction(nameof(Get), new { id = r.Id }, r);
+    }
+
     [HttpPost("{id:guid}/payments")]
     [HasPermission(Modules.Invoices, Actions.Edit)]
     public async Task<IActionResult> RecordPayment(Guid id, [FromBody] RecordPaymentRequest req, CancellationToken ct)

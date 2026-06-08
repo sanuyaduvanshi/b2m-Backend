@@ -23,4 +23,5 @@ public interface ISubscriptionService
     Task<PagedResult<IssuedListItem>> ListIssuedAsync(string? search, IssuedSubscriptionStatus? status, int page, int pageSize, CancellationToken ct = default);
     Task<IssuedListItem> IssueAsync(IssueSubscriptionRequest req, CancellationToken ct = default);
     Task<bool> FreezeAsync(Guid id, CancellationToken ct = default);
+    Task<bool> CancelAsync(Guid id, CancellationToken ct = default);
 }

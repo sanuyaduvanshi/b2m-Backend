@@ -31,6 +31,13 @@ public class MyBusinessController : ControllerBase
     [HttpGet("services")] [HasPermission(Modules.MyBusiness, Actions.View)]
     public async Task<IActionResult> Services(CancellationToken ct) => Ok(await _svc.ListServicesAsync(ct));
 
+    [HttpGet("services/{id:guid}")] [HasPermission(Modules.MyBusiness, Actions.View)]
+    public async Task<IActionResult> GetService(Guid id, CancellationToken ct)
+    {
+        var r = await _svc.GetServiceAsync(id, ct);
+        return r is null ? NotFound() : Ok(r);
+    }
+
     [HttpPost("services")] [HasPermission(Modules.MyBusiness, Actions.Create)]
     public async Task<IActionResult> CreateService([FromBody] CreateOrUpdateServiceRequest req, CancellationToken ct)
         => Ok(await _svc.CreateServiceAsync(req, ct));
@@ -41,6 +48,17 @@ public class MyBusinessController : ControllerBase
         var r = await _svc.UpdateServiceAsync(id, req, ct);
         return r is null ? NotFound() : Ok(r);
     }
+
+    [HttpDelete("services/{id:guid}")] [HasPermission(Modules.MyBusiness, Actions.Delete)]
+    public async Task<IActionResult> DeleteService(Guid id, CancellationToken ct)
+        => await _svc.DeleteServiceAsync(id, ct) ? NoContent() : NotFound();
+
+    [HttpGet("service-categories")] [HasPermission(Modules.MyBusiness, Actions.View)]
+    public async Task<IActionResult> ServiceCategories(CancellationToken ct) => Ok(await _svc.ListServiceCategoriesAsync(ct));
+
+    [HttpPost("service-categories")] [HasPermission(Modules.MyBusiness, Actions.Create)]
+    public async Task<IActionResult> CreateServiceCategory([FromBody] CreateServiceCategoryRequest req, CancellationToken ct)
+        => Ok(await _svc.CreateServiceCategoryAsync(req, ct));
 
     [HttpGet("staff")] [HasPermission(Modules.MyBusiness, Actions.View)]
     public async Task<IActionResult> Staff(CancellationToken ct) => Ok(await _svc.ListStaffAsync(ct));

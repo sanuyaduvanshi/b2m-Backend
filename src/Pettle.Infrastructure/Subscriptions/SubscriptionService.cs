@@ -118,4 +118,18 @@ public class SubscriptionService : ISubscriptionService
         await _db.SaveChangesAsync(ct);
         return true;
     }
+
+    public async Task<bool> CancelAsync(Guid id, CancellationToken ct = default)
+    {
+        if (_user.TenantId is null) return false;
+        var s = await _db.IssuedSubscriptions.FirstOrDefaultAsync(x => x.Id == id && x.TenantId == _user.TenantId, ct);
+        if (s is null) return false;
+        if (s.Status == IssuedSubscriptionStatus.Cancelled)
+            throw AppException.BusinessRule("Subscription is already cancelled.");
+        if (s.Status == IssuedSubscriptionStatus.Expired)
+            throw AppException.BusinessRule("Cannot cancel an expired subscription.");
+        s.Status = IssuedSubscriptionStatus.Cancelled;
+        await _db.SaveChangesAsync(ct);
+        return true;
+    }
 }
