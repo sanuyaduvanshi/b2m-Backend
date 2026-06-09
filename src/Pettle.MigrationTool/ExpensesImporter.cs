@@ -21,13 +21,14 @@ public class ExpensesImporter
     {
         var result = new ImportResult();
 
-        // No legacy id on Expense — dedupe by (Description, Time, Amount) signature so a re-run is safe.
+        // No legacy id on Expense — dedupe by (Description, Time, Amount, Category) signature so a re-run is safe.
+        // Category is part of the key so two same-amount/same-time rows under different categories are kept distinct.
         var existingList = await _db.Expenses.IgnoreQueryFilters()
             .Where(e => e.TenantId == tenantId)
-            .Select(e => new { e.Description, e.Time, e.Amount })
+            .Select(e => new { e.Description, e.Time, e.Amount, e.CategoryName })
             .ToListAsync(ct);
         var existingKeys = new HashSet<string>(
-            existingList.Select(x => MakeKey(x.Description, x.Time, x.Amount)),
+            existingList.Select(x => MakeKey(x.Description, x.Time, x.Amount, x.CategoryName)),
             StringComparer.Ordinal);
 
         // Cache categories (auto-create on first sight)
@@ -45,11 +46,10 @@ public class ExpensesImporter
                 var description = row.GetOrNull("Expense") ?? "(no description)";
                 var when = ParseDateTime(row.Get("Time")) ?? DateTimeOffset.UtcNow;
                 var amount = ParseDecimal(row.Get("Amount"));
-
-                var key = MakeKey(description, when, amount);
-                if (existingKeys.Contains(key)) { result.Inc("skipped_existing"); continue; }
-
                 var catName = row.GetOrNull("Category");
+
+                var key = MakeKey(description, when, amount, catName);
+                if (existingKeys.Contains(key)) { result.Inc("skipped_existing"); continue; }
                 Guid? catId = null;
                 if (catName is not null)
                 {
@@ -92,6 +92,6 @@ public class ExpensesImporter
         return result;
     }
 
-    private static string MakeKey(string desc, DateTimeOffset when, decimal amount)
-        => $"{desc}|{when.UtcDateTime:O}|{amount}";
+    private static string MakeKey(string desc, DateTimeOffset when, decimal amount, string? category)
+        => $"{desc.Trim()}|{when.UtcDateTime:O}|{amount}|{category?.Trim()}";
 }

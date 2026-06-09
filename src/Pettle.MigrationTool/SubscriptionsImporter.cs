@@ -21,11 +21,12 @@ public class SubscriptionsImporter
     {
         var result = new ImportResult();
 
-        // Dedupe by Name (unique within tenant).
-        var existingNames = (await _db.SubscriptionPackages.IgnoreQueryFilters()
+        // Dedupe by (Name + Price): the export can carry two packages with the same name but different prices.
+        var existingKeys = (await _db.SubscriptionPackages.IgnoreQueryFilters()
             .Where(p => p.TenantId == tenantId)
-            .Select(p => p.Name)
+            .Select(p => new { p.Name, p.Price })
             .ToListAsync(ct))
+            .Select(x => PkgKey(x.Name, x.Price))
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         foreach (var row in XlsxReader.ReadSheet(xlsxPath, "Subscriptions"))
@@ -34,7 +35,9 @@ public class SubscriptionsImporter
             if (row.AllEmpty()) continue;
             var name = row.GetOrNull("Name");
             if (name is null) { result.Inc("skipped_no_name"); continue; }
-            if (existingNames.Contains(name)) { result.Inc("skipped_existing"); continue; }
+            var price = ParseDecimal(row.Get("Price"));
+            var key = PkgKey(name, price);
+            if (existingKeys.Contains(key)) { result.Inc("skipped_existing"); continue; }
 
             try
             {
@@ -44,7 +47,7 @@ public class SubscriptionsImporter
                     Name = name,
                     Description = row.GetOrNull("Description"),
                     ValidityDays = ParseInt(row.Get("Validity")),
-                    Price = ParseDecimal(row.Get("Price")),
+                    Price = price,
                     IsTaxInclusive = ParseYesNo(row.Get("Is Tax Inclusive")) || row.GetOrNull("Is Tax Inclusive")?.Equals("True", StringComparison.OrdinalIgnoreCase) == true,
                     TaxPercent = ParseDecimal(row.Get("Tax 1 percentage")),
                 };
@@ -106,7 +109,7 @@ public class SubscriptionsImporter
                 }
 
                 _db.SubscriptionPackages.Add(pkg);
-                existingNames.Add(name);
+                existingKeys.Add(key);
                 result.Inc("packages_created");
             }
             catch (Exception ex)
@@ -119,4 +122,6 @@ public class SubscriptionsImporter
         if (!dryRun) await _db.SaveChangesAsync(ct);
         return result;
     }
+
+    private static string PkgKey(string name, decimal price) => $"{name.Trim()}|{price}";
 }

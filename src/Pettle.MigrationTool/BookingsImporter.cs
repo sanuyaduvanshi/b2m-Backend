@@ -47,6 +47,9 @@ public class BookingsImporter
         var petsByParentAndName = petsList
             .GroupBy(p => $"{p.PetParentId}|{p.Name.ToLowerInvariant()}", StringComparer.Ordinal)
             .ToDictionary(g => g.Key, g => g.First().Id, StringComparer.Ordinal);
+        var petsByParent = petsList
+            .GroupBy(p => p.PetParentId)
+            .ToDictionary(g => g.Key, g => g.Select(x => x.Id).ToList());
 
         _log.LogInformation("Booking cache: {ExistingBookings} bookings, {Parents} parents, {Pets} pets pre-loaded.",
             existingBookings.Count, parentsByPhone.Count, petsList.Count);
@@ -125,9 +128,13 @@ public class BookingsImporter
 
         Guid? FindPetId(Guid parentId, string? petName)
         {
-            if (string.IsNullOrWhiteSpace(petName)) return null;
-            return petsByParentAndName.TryGetValue($"{parentId}|{petName.Trim().ToLowerInvariant()}", out var id)
-                ? id : null;
+            if (!string.IsNullOrWhiteSpace(petName)
+                && petsByParentAndName.TryGetValue($"{parentId}|{petName.Trim().ToLowerInvariant()}", out var id))
+                return id;
+            // Fallback: no pet name (or no name match) but the parent owns exactly one pet → attach to it.
+            // Handles unnamed pets / blank Pet Name cells in the export.
+            if (petsByParent.TryGetValue(parentId, out var pets) && pets.Count == 1) return pets[0];
+            return null;
         }
 
         // ----- Boarding sheet -----
