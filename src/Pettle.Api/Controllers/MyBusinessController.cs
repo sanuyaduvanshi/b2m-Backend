@@ -92,6 +92,10 @@ public class MyBusinessController : ControllerBase
         return r is null ? NotFound() : Ok(r);
     }
 
+    [HttpDelete("taxes/{id:guid}")] [HasPermission(Modules.MyBusiness, Actions.Delete)]
+    public async Task<IActionResult> DeleteTax(Guid id, CancellationToken ct)
+        => await _svc.DeleteTaxAsync(id, ct) ? NoContent() : NotFound();
+
     // ---- Client Tags ----
     [HttpGet("client-tags")] [HasPermission(Modules.MyBusiness, Actions.View)]
     public async Task<IActionResult> ClientTags(CancellationToken ct) => Ok(await _svc.ListClientTagsAsync(ct));

@@ -74,6 +74,7 @@ public interface IMyBusinessService
     Task<IReadOnlyList<TaxListItem>> ListTaxesAsync(CancellationToken ct = default);
     Task<TaxListItem> CreateTaxAsync(CreateOrUpdateTaxRequest req, CancellationToken ct = default);
     Task<TaxListItem?> UpdateTaxAsync(Guid id, CreateOrUpdateTaxRequest req, CancellationToken ct = default);
+    Task<bool> DeleteTaxAsync(Guid id, CancellationToken ct = default);
 
     Task<IReadOnlyList<ClientTagListItem>> ListClientTagsAsync(CancellationToken ct = default);
     Task<ClientTagListItem> CreateClientTagAsync(CreateOrUpdateClientTagRequest req, CancellationToken ct = default);

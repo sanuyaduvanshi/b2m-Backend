@@ -224,6 +224,19 @@ public class MyBusinessService : IMyBusinessService
         return new TaxListItem(t.Id, t.Name, t.Kind, t.Percent, t.IsInclusive, t.EffectiveFrom, t.IsActive);
     }
 
+    public async Task<bool> DeleteTaxAsync(Guid id, CancellationToken ct = default)
+    {
+        if (_user.TenantId is null) return false;
+        var t = await _db.Taxes.FirstOrDefaultAsync(x => x.Id == id && x.TenantId == _user.TenantId, ct);
+        if (t is null) return false;
+        var inUse = await _db.ServiceItems.AnyAsync(s => s.TaxId == id && s.TenantId == _user.TenantId, ct);
+        if (inUse)
+            throw AppException.Conflict($"Cannot delete “{t.Name}” — it is linked to one or more services. Mark it inactive instead.");
+        _db.Taxes.Remove(t);
+        await _db.SaveChangesAsync(ct);
+        return true;
+    }
+
     public async Task<IReadOnlyList<ClientTagListItem>> ListClientTagsAsync(CancellationToken ct = default)
     {
         if (_user.TenantId is null) return Array.Empty<ClientTagListItem>();
