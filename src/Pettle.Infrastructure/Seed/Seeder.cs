@@ -11,8 +11,7 @@ public static class Seeder
 {
     public static async Task SeedAsync(PettleDbContext db, UserManager<ApplicationUser> users)
     {
-        await db.Database.MigrateAsync();
-
+        // Schema migration is handled at startup (Program.cs, Database:AutoMigrate) — seeding only inserts data.
         Tenant? tenant = await db.Tenants.FirstOrDefaultAsync(t => t.Slug == "b2m-vet-care");
         if (tenant is null)
         {

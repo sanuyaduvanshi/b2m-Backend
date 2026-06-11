@@ -1,4 +1,5 @@
 using FluentValidation;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
@@ -78,6 +79,20 @@ using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<PettleDbContext>();
     var users = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+
+    // Auto-apply pending EF migrations on startup so each deploy upgrades the schema
+    // without a manual `dotnet ef database update`. Decoupled from seeding so it runs
+    // even when seeding is disabled. Set Database:AutoMigrate=false to opt out.
+    if (builder.Configuration.GetValue("Database:AutoMigrate", true))
+    {
+        try
+        {
+            await db.Database.MigrateAsync();
+            app.Logger.LogInformation("Database migrations applied (or already up to date).");
+        }
+        catch (Exception ex) { app.Logger.LogError(ex, "Database migration failed"); }
+    }
+
     if (builder.Configuration.GetValue("Seed:RunOnStartup", true))
     {
         try { await Seeder.SeedAsync(db, users); }
