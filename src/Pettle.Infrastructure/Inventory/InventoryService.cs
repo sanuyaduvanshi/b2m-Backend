@@ -31,7 +31,8 @@ public class InventoryService : IInventoryService
         var p = Math.Max(page, 1); var sz = Math.Clamp(pageSize, 1, 200);
         var items = await q.OrderBy(x => x.Name).Skip((p - 1) * sz).Take(sz)
             .Select(x => new SkuListItem(x.Id, x.Code, x.Name, x.Category!.Name, x.Unit, x.SellingPrice, x.CostPrice, x.TaxPercent,
-                x.StockOnHand, x.ReorderLevel, x.NearestExpiry, x.IsActive, x.IsListedInApp, x.AppImageUrl)).ToListAsync(ct);
+                x.StockOnHand, x.ReorderLevel, x.NearestExpiry, x.IsActive, x.IsListedInApp, x.AppImageUrl,
+                x.Description, x.CategoryId, x.MrpPrice, x.HsnSacCode, x.TrackExpiry)).ToListAsync(ct);
         return new PagedResult<SkuListItem>(items, total, p, sz);
     }
 
@@ -41,7 +42,8 @@ public class InventoryService : IInventoryService
         return await _db.Skus.AsNoTracking().Include(s => s.Category)
             .Where(s => s.Id == id && s.TenantId == _user.TenantId)
             .Select(x => new SkuListItem(x.Id, x.Code, x.Name, x.Category!.Name, x.Unit, x.SellingPrice, x.CostPrice, x.TaxPercent,
-                x.StockOnHand, x.ReorderLevel, x.NearestExpiry, x.IsActive, x.IsListedInApp, x.AppImageUrl))
+                x.StockOnHand, x.ReorderLevel, x.NearestExpiry, x.IsActive, x.IsListedInApp, x.AppImageUrl,
+                x.Description, x.CategoryId, x.MrpPrice, x.HsnSacCode, x.TrackExpiry))
             .FirstOrDefaultAsync(ct);
     }
 

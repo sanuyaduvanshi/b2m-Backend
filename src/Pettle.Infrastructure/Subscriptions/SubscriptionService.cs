@@ -47,6 +47,21 @@ public class SubscriptionService : ISubscriptionService
         return new PackageListItem(p.Id, p.Name, p.ValidityDays, p.Price, p.TaxPercent, p.IsTaxInclusive, p.IsActive);
     }
 
+    public async Task<bool> DeletePackageAsync(Guid id, CancellationToken ct = default)
+    {
+        if (_user.TenantId is null) return false;
+        var p = await _db.SubscriptionPackages.FirstOrDefaultAsync(x => x.Id == id && x.TenantId == _user.TenantId, ct);
+        if (p is null) return false;
+        var inUse = await _db.IssuedSubscriptions.AnyAsync(i => i.PackageId == id && i.TenantId == _user.TenantId, ct);
+        if (inUse)
+            throw AppException.Conflict($"Cannot delete “{p.Name}” — it has been issued to one or more customers. Mark it inactive instead.");
+        var services = await _db.SubscriptionPackageServices.Where(s => s.PackageId == id).ToListAsync(ct);
+        _db.SubscriptionPackageServices.RemoveRange(services);
+        _db.SubscriptionPackages.Remove(p);
+        await _db.SaveChangesAsync(ct);
+        return true;
+    }
+
     public async Task<PagedResult<IssuedListItem>> ListIssuedAsync(string? search, IssuedSubscriptionStatus? status, int page, int pageSize, CancellationToken ct = default)
     {
         if (_user.TenantId is null) return new PagedResult<IssuedListItem>(Array.Empty<IssuedListItem>(), 0, page, pageSize);

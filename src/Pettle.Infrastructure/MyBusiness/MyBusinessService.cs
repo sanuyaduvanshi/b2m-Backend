@@ -180,6 +180,17 @@ public class MyBusinessService : IMyBusinessService
         return new StaffListItem(s.Id, s.Name, s.RoleLabel, s.Vertical, s.Phone, s.Email, s.IsActive);
     }
 
+    public async Task<bool> DeleteStaffAsync(Guid id, CancellationToken ct = default)
+    {
+        if (_user.TenantId is null) return false;
+        var s = await _db.Staffs.Include(x => x.Shifts).FirstOrDefaultAsync(x => x.Id == id && x.TenantId == _user.TenantId, ct);
+        if (s is null) return false;
+        _db.StaffShifts.RemoveRange(s.Shifts);
+        _db.Staffs.Remove(s);
+        await _db.SaveChangesAsync(ct);
+        return true;
+    }
+
     public async Task<IReadOnlyList<TaxListItem>> ListTaxesAsync(CancellationToken ct = default)
     {
         if (_user.TenantId is null) return Array.Empty<TaxListItem>();

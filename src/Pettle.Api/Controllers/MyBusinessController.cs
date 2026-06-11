@@ -74,6 +74,10 @@ public class MyBusinessController : ControllerBase
         return r is null ? NotFound() : Ok(r);
     }
 
+    [HttpDelete("staff/{id:guid}")] [HasPermission(Modules.MyBusiness, Actions.Delete)]
+    public async Task<IActionResult> DeleteStaff(Guid id, CancellationToken ct)
+        => await _svc.DeleteStaffAsync(id, ct) ? NoContent() : NotFound();
+
     [HttpGet("taxes")] [HasPermission(Modules.MyBusiness, Actions.View)]
     public async Task<IActionResult> Taxes(CancellationToken ct) => Ok(await _svc.ListTaxesAsync(ct));
 

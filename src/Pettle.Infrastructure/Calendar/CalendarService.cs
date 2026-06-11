@@ -306,4 +306,55 @@ public class CalendarService : ICalendarService
         setDate(detail, newDate);
         setTimes(detail, newStart, newEnd);
     }
+
+    // ---- Manual appointments (add/edit/delete) ----
+    public async Task<IReadOnlyList<CalendarAppointmentDto>> ListAppointmentsAsync(DateOnly from, DateOnly to, CancellationToken ct = default)
+    {
+        if (_user.TenantId is null) return Array.Empty<CalendarAppointmentDto>();
+        if (to < from) (from, to) = (to, from);
+        return await _db.CalendarAppointments.AsNoTracking()
+            .Where(a => a.TenantId == _user.TenantId && a.Date >= from && a.Date <= to)
+            .OrderBy(a => a.Date).ThenBy(a => a.StartTime)
+            .Select(a => new CalendarAppointmentDto(a.Id, a.Title, a.Date, a.StartTime, a.EndTime, a.Notes, a.Color))
+            .ToListAsync(ct);
+    }
+
+    public async Task<CalendarAppointmentDto> CreateAppointmentAsync(CreateOrUpdateAppointmentRequest req, CancellationToken ct = default)
+    {
+        if (req.EndTime is { } e && req.StartTime is { } s && e < s)
+            throw AppException.Validation("Invalid time range",
+                new Dictionary<string, string[]> { ["endTime"] = new[] { "End time cannot be before start time." } });
+        var a = new Pettle.Domain.Calendar.CalendarAppointment
+        {
+            Title = req.Title, Date = req.Date, StartTime = req.StartTime,
+            EndTime = req.EndTime, Notes = req.Notes, Color = req.Color,
+        };
+        _db.CalendarAppointments.Add(a);
+        await _db.SaveChangesAsync(ct);
+        return new CalendarAppointmentDto(a.Id, a.Title, a.Date, a.StartTime, a.EndTime, a.Notes, a.Color);
+    }
+
+    public async Task<CalendarAppointmentDto?> UpdateAppointmentAsync(Guid id, CreateOrUpdateAppointmentRequest req, CancellationToken ct = default)
+    {
+        if (_user.TenantId is null) return null;
+        var a = await _db.CalendarAppointments.FirstOrDefaultAsync(x => x.Id == id && x.TenantId == _user.TenantId, ct);
+        if (a is null) return null;
+        if (req.EndTime is { } e && req.StartTime is { } s && e < s)
+            throw AppException.Validation("Invalid time range",
+                new Dictionary<string, string[]> { ["endTime"] = new[] { "End time cannot be before start time." } });
+        a.Title = req.Title; a.Date = req.Date; a.StartTime = req.StartTime;
+        a.EndTime = req.EndTime; a.Notes = req.Notes; a.Color = req.Color;
+        await _db.SaveChangesAsync(ct);
+        return new CalendarAppointmentDto(a.Id, a.Title, a.Date, a.StartTime, a.EndTime, a.Notes, a.Color);
+    }
+
+    public async Task<bool> DeleteAppointmentAsync(Guid id, CancellationToken ct = default)
+    {
+        if (_user.TenantId is null) return false;
+        var a = await _db.CalendarAppointments.FirstOrDefaultAsync(x => x.Id == id && x.TenantId == _user.TenantId, ct);
+        if (a is null) return false;
+        _db.CalendarAppointments.Remove(a);
+        await _db.SaveChangesAsync(ct);
+        return true;
+    }
 }

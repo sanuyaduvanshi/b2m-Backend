@@ -47,6 +47,19 @@ public class KennelService : IKennelService
         return new KennelListItem(k.Id, k.Name, k.KennelType, k.SizeClass, k.Capacity, k.PricePerNight, k.AllowedSpecies, k.IsActive);
     }
 
+    public async Task<bool> DeleteAsync(Guid id, CancellationToken ct = default)
+    {
+        if (_user.TenantId is null) return false;
+        var k = await _db.Kennels.FirstOrDefaultAsync(x => x.Id == id && x.TenantId == _user.TenantId, ct);
+        if (k is null) return false;
+        // Kennels aren't FK-referenced by bookings (boarding stores a label), only by blockings — remove those first.
+        var blockings = await _db.KennelBlockings.Where(b => b.KennelId == id && b.TenantId == _user.TenantId).ToListAsync(ct);
+        _db.KennelBlockings.RemoveRange(blockings);
+        _db.Kennels.Remove(k);
+        await _db.SaveChangesAsync(ct);
+        return true;
+    }
+
     public async Task<IReadOnlyList<KennelLiveGroup>> LiveGridAsync(DateOnly date, CancellationToken ct = default)
     {
         if (_user.TenantId is null) return Array.Empty<KennelLiveGroup>();

@@ -123,5 +123,5 @@ public class SubscriptionsImporter
         return result;
     }
 
-    private static string PkgKey(string name, decimal price) => $"{name.Trim()}|{price}";
+    private static string PkgKey(string name, decimal price) => $"{name.Trim()}|{price:F2}";
 }

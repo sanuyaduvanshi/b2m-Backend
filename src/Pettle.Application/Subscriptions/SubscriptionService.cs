@@ -19,6 +19,7 @@ public interface ISubscriptionService
     Task<IReadOnlyList<PackageListItem>> ListPackagesAsync(CancellationToken ct = default);
     Task<PackageListItem> CreatePackageAsync(CreateOrUpdatePackageRequest req, CancellationToken ct = default);
     Task<PackageListItem?> UpdatePackageAsync(Guid id, CreateOrUpdatePackageRequest req, CancellationToken ct = default);
+    Task<bool> DeletePackageAsync(Guid id, CancellationToken ct = default);
 
     Task<PagedResult<IssuedListItem>> ListIssuedAsync(string? search, IssuedSubscriptionStatus? status, int page, int pageSize, CancellationToken ct = default);
     Task<IssuedListItem> IssueAsync(IssueSubscriptionRequest req, CancellationToken ct = default);

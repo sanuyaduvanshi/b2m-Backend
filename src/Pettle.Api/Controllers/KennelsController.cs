@@ -29,6 +29,11 @@ public class KennelsController : ControllerBase
         return r is null ? NotFound() : Ok(r);
     }
 
+    [HttpDelete("{id:guid}")]
+    [HasPermission(Modules.Kennels, Actions.Delete)]
+    public async Task<IActionResult> Delete(Guid id, CancellationToken ct)
+        => await _svc.DeleteAsync(id, ct) ? NoContent() : NotFound();
+
     [HttpGet("live")]
     [HasPermission(Modules.Kennels, Actions.View)]
     public async Task<IActionResult> Live([FromQuery] DateOnly? date, CancellationToken ct)

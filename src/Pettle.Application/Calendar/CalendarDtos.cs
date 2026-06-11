@@ -34,6 +34,10 @@ public record RescheduleRequest(
     Guid? NewKennelId              // boarding only; null = keep current
 );
 
+// --- Manual calendar appointments (add/edit/delete) ---
+public record CalendarAppointmentDto(Guid Id, string Title, DateOnly Date, TimeOnly? StartTime, TimeOnly? EndTime, string? Notes, string? Color);
+public record CreateOrUpdateAppointmentRequest(string Title, DateOnly Date, TimeOnly? StartTime, TimeOnly? EndTime, string? Notes, string? Color);
+
 public interface ICalendarService
 {
     Task<IReadOnlyList<CalendarEvent>> EventsAsync(
@@ -45,4 +49,9 @@ public interface ICalendarService
     Task<CalendarCounters> CountersAsync(DateOnly date, CancellationToken ct = default);
 
     Task<CalendarEvent?> RescheduleAsync(Guid bookingServiceId, RescheduleRequest req, CancellationToken ct = default);
+
+    Task<IReadOnlyList<CalendarAppointmentDto>> ListAppointmentsAsync(DateOnly from, DateOnly to, CancellationToken ct = default);
+    Task<CalendarAppointmentDto> CreateAppointmentAsync(CreateOrUpdateAppointmentRequest req, CancellationToken ct = default);
+    Task<CalendarAppointmentDto?> UpdateAppointmentAsync(Guid id, CreateOrUpdateAppointmentRequest req, CancellationToken ct = default);
+    Task<bool> DeleteAppointmentAsync(Guid id, CancellationToken ct = default);
 }

@@ -76,6 +76,9 @@ public class PettleDbContext : IdentityDbContext<ApplicationUser, ApplicationRol
     public DbSet<Kennel> Kennels => Set<Kennel>();
     public DbSet<KennelBlocking> KennelBlockings => Set<KennelBlocking>();
 
+    // Calendar
+    public DbSet<Pettle.Domain.Calendar.CalendarAppointment> CalendarAppointments => Set<Pettle.Domain.Calendar.CalendarAppointment>();
+
     // Expenses
     public DbSet<ExpenseCategory> ExpenseCategories => Set<ExpenseCategory>();
     public DbSet<Expense> Expenses => Set<Expense>();

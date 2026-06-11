@@ -44,6 +44,7 @@ public interface IKennelService
     Task<IReadOnlyList<KennelListItem>> ListAsync(CancellationToken ct = default);
     Task<KennelListItem> CreateAsync(CreateOrUpdateKennelRequest req, CancellationToken ct = default);
     Task<KennelListItem?> UpdateAsync(Guid id, CreateOrUpdateKennelRequest req, CancellationToken ct = default);
+    Task<bool> DeleteAsync(Guid id, CancellationToken ct = default);
     Task<IReadOnlyList<KennelLiveGroup>> LiveGridAsync(DateOnly date, CancellationToken ct = default);
     Task<IReadOnlyList<KennelTimelineGroup>> TimelineAsync(DateOnly from, DateOnly to, CancellationToken ct = default);
     Task<bool> BlockAsync(Guid kennelId, KennelBlockRequest req, CancellationToken ct = default);

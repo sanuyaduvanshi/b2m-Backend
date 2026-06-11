@@ -7,7 +7,9 @@ public record SkuListItem(
     Guid Id, string Code, string Name, string? CategoryName,
     string Unit, decimal SellingPrice, decimal CostPrice, decimal TaxPercent,
     int StockOnHand, int ReorderLevel, DateOnly? NearestExpiry, bool IsActive,
-    bool IsListedInApp, string? AppImageUrl
+    bool IsListedInApp, string? AppImageUrl,
+    string? Description = null, Guid? CategoryId = null, decimal MrpPrice = 0,
+    string? HsnSacCode = null, bool TrackExpiry = false
 );
 
 public record CreateOrUpdateSkuRequest(

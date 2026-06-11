@@ -34,4 +34,28 @@ public class CalendarController : ControllerBase
         var ev = await _svc.RescheduleAsync(bookingServiceId, req, ct);
         return ev is null ? NotFound() : Ok(ev);
     }
+
+    // ---- Manual appointments ----
+    [HttpGet("appointments")]
+    [HasPermission(Modules.Calendar, Actions.View)]
+    public async Task<IActionResult> Appointments([FromQuery] DateOnly from, [FromQuery] DateOnly to, CancellationToken ct)
+        => Ok(await _svc.ListAppointmentsAsync(from, to, ct));
+
+    [HttpPost("appointments")]
+    [HasPermission(Modules.Calendar, Actions.Edit)]
+    public async Task<IActionResult> CreateAppointment([FromBody] CreateOrUpdateAppointmentRequest req, CancellationToken ct)
+        => Ok(await _svc.CreateAppointmentAsync(req, ct));
+
+    [HttpPut("appointments/{id:guid}")]
+    [HasPermission(Modules.Calendar, Actions.Edit)]
+    public async Task<IActionResult> UpdateAppointment(Guid id, [FromBody] CreateOrUpdateAppointmentRequest req, CancellationToken ct)
+    {
+        var r = await _svc.UpdateAppointmentAsync(id, req, ct);
+        return r is null ? NotFound() : Ok(r);
+    }
+
+    [HttpDelete("appointments/{id:guid}")]
+    [HasPermission(Modules.Calendar, Actions.Edit)]
+    public async Task<IActionResult> DeleteAppointment(Guid id, CancellationToken ct)
+        => await _svc.DeleteAppointmentAsync(id, ct) ? NoContent() : NotFound();
 }

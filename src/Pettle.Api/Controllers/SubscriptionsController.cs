@@ -30,6 +30,11 @@ public class SubscriptionsController : ControllerBase
         return r is null ? NotFound() : Ok(r);
     }
 
+    [HttpDelete("packages/{id:guid}")]
+    [HasPermission(Modules.Subscriptions, Actions.Delete)]
+    public async Task<IActionResult> DeletePackage(Guid id, CancellationToken ct)
+        => await _svc.DeletePackageAsync(id, ct) ? NoContent() : NotFound();
+
     [HttpGet("issued")]
     [HasPermission(Modules.Subscriptions, Actions.View)]
     public async Task<IActionResult> Issued([FromQuery] string? search, [FromQuery] IssuedSubscriptionStatus? status,

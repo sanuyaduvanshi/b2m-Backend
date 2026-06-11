@@ -69,6 +69,7 @@ public interface IMyBusinessService
     Task<IReadOnlyList<StaffListItem>> ListStaffAsync(CancellationToken ct = default);
     Task<StaffListItem> CreateStaffAsync(CreateOrUpdateStaffRequest req, CancellationToken ct = default);
     Task<StaffListItem?> UpdateStaffAsync(Guid id, CreateOrUpdateStaffRequest req, CancellationToken ct = default);
+    Task<bool> DeleteStaffAsync(Guid id, CancellationToken ct = default);
 
     Task<IReadOnlyList<TaxListItem>> ListTaxesAsync(CancellationToken ct = default);
     Task<TaxListItem> CreateTaxAsync(CreateOrUpdateTaxRequest req, CancellationToken ct = default);
