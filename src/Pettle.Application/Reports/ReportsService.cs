@@ -11,6 +11,12 @@ public record ClientsReport(int Active, int Archived, int NewInRange, IReadOnlyL
 public record TopClient(Guid Id, string Name, string Phone, int Bookings, decimal Spend);
 public record InventoryReport(int TotalSkus, int LowStock, int ExpiringSoon, decimal InventoryValue);
 
+public record ExpenseSlice(string Label, decimal Amount);
+public record ExpensesReport(decimal Total, int Count, IReadOnlyList<ExpenseSlice> ByCategory, IReadOnlyList<ExpenseSlice> ByMode);
+
+/// <summary>Money in (payments collected) vs money out (expenses) for the range.</summary>
+public record ProfitReport(decimal Collected, decimal Expenses, decimal Net);
+
 public record ReportsOverview(
     decimal RevenueInRange,
     int BookingsInRange,
@@ -25,4 +31,6 @@ public interface IReportsService
     Task<BookingsReport> BookingsAsync(DateRange range, CancellationToken ct = default);
     Task<ClientsReport> ClientsAsync(DateRange range, CancellationToken ct = default);
     Task<InventoryReport> InventoryAsync(CancellationToken ct = default);
+    Task<ExpensesReport> ExpensesAsync(DateRange range, CancellationToken ct = default);
+    Task<ProfitReport> ProfitAsync(DateRange range, CancellationToken ct = default);
 }

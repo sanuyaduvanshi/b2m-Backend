@@ -114,6 +114,40 @@ public class ReportsService : IReportsService
         return new ClientsReport(active, archived, newClients, top);
     }
 
+    public async Task<ExpensesReport> ExpensesAsync(DateRange range, CancellationToken ct = default)
+    {
+        if (_user.TenantId is null) return new ExpensesReport(0, 0, Array.Empty<ExpenseSlice>(), Array.Empty<ExpenseSlice>());
+        var tid = _user.TenantId.Value;
+        var (from, to) = RangeAsUtc(range);
+
+        var rows = await _db.Expenses.AsNoTracking()
+            .Where(e => e.TenantId == tid && e.Time >= from && e.Time <= to)
+            .Select(e => new { e.AmountIncTax, e.PaymentMode, Category = e.CategoryName ?? (e.Category != null ? e.Category.Name : null) })
+            .ToListAsync(ct);
+
+        var byCategory = rows.GroupBy(r => string.IsNullOrWhiteSpace(r.Category) ? "Uncategorised" : r.Category!)
+            .Select(g => new ExpenseSlice(g.Key, g.Sum(x => x.AmountIncTax)))
+            .OrderByDescending(s => s.Amount).ToList();
+        var byMode = rows.GroupBy(r => string.IsNullOrWhiteSpace(r.PaymentMode) ? "Cash" : r.PaymentMode)
+            .Select(g => new ExpenseSlice(g.Key, g.Sum(x => x.AmountIncTax)))
+            .OrderByDescending(s => s.Amount).ToList();
+
+        return new ExpensesReport(rows.Sum(r => r.AmountIncTax), rows.Count, byCategory, byMode);
+    }
+
+    public async Task<ProfitReport> ProfitAsync(DateRange range, CancellationToken ct = default)
+    {
+        if (_user.TenantId is null) return new ProfitReport(0, 0, 0);
+        var tid = _user.TenantId.Value;
+        var (from, to) = RangeAsUtc(range);
+
+        var collected = await _db.Payments.Where(p => p.TenantId == tid && p.PaymentTime >= from && p.PaymentTime <= to)
+            .SumAsync(p => (decimal?)p.Amount, ct) ?? 0m;
+        var expenses = await _db.Expenses.Where(e => e.TenantId == tid && e.Time >= from && e.Time <= to)
+            .SumAsync(e => (decimal?)e.AmountIncTax, ct) ?? 0m;
+        return new ProfitReport(collected, expenses, collected - expenses);
+    }
+
     public async Task<InventoryReport> InventoryAsync(CancellationToken ct = default)
     {
         if (_user.TenantId is null) return new InventoryReport(0, 0, 0, 0);
