@@ -3,9 +3,9 @@ using Pettle.Domain.Expenses;
 
 namespace Pettle.Application.Expenses;
 
-public record ExpenseListItem(Guid Id, DateTimeOffset Time, string Description, string? CategoryName, string PaymentMode, decimal Amount, decimal AmountIncTax, Guid? CategoryId = null, string? Notes = null);
+public record ExpenseListItem(Guid Id, DateTimeOffset Time, string Description, string? CategoryName, string PaymentMode, decimal Amount, decimal AmountIncTax, Guid? CategoryId = null, string? Notes = null, string? ReceiptUrl = null);
 public record ExpenseCategoryDto(Guid Id, string Name, bool IsActive);
-public record CreateOrUpdateExpenseRequest(DateTimeOffset Time, string Description, Guid? CategoryId, string PaymentMode, decimal Amount, decimal AmountIncTax, string? Notes);
+public record CreateOrUpdateExpenseRequest(DateTimeOffset Time, string Description, Guid? CategoryId, string PaymentMode, decimal Amount, decimal AmountIncTax, string? Notes, string? ReceiptUrl = null);
 
 public interface IExpenseService
 {

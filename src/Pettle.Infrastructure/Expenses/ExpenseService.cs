@@ -30,7 +30,7 @@ public class ExpenseService : IExpenseService
         var total = await q.CountAsync(ct);
         var p = Math.Max(page, 1); var sz = Math.Clamp(pageSize, 1, 200);
         var items = await q.OrderByDescending(e => e.Time).Skip((p - 1) * sz).Take(sz)
-            .Select(e => new ExpenseListItem(e.Id, e.Time, e.Description, e.Category!.Name, e.PaymentMode, e.Amount, e.AmountIncTax, e.CategoryId, e.Notes))
+            .Select(e => new ExpenseListItem(e.Id, e.Time, e.Description, e.Category!.Name, e.PaymentMode, e.Amount, e.AmountIncTax, e.CategoryId, e.Notes, e.ReceiptUrl))
             .ToListAsync(ct);
         return new PagedResult<ExpenseListItem>(items, total, p, sz);
     }
@@ -47,11 +47,12 @@ public class ExpenseService : IExpenseService
         var e = new Expense
         {
             Time = req.Time, Description = req.Description, CategoryId = req.CategoryId,
-            PaymentMode = req.PaymentMode, Amount = req.Amount, AmountIncTax = req.AmountIncTax, Notes = req.Notes
+            PaymentMode = req.PaymentMode, Amount = req.Amount, AmountIncTax = req.AmountIncTax,
+            Notes = req.Notes, ReceiptUrl = req.ReceiptUrl
         };
         _db.Expenses.Add(e);
         await _db.SaveChangesAsync(ct);
-        return new ExpenseListItem(e.Id, e.Time, e.Description, null, e.PaymentMode, e.Amount, e.AmountIncTax, e.CategoryId, e.Notes);
+        return new ExpenseListItem(e.Id, e.Time, e.Description, null, e.PaymentMode, e.Amount, e.AmountIncTax, e.CategoryId, e.Notes, e.ReceiptUrl);
     }
 
     public async Task<ExpenseListItem?> UpdateAsync(Guid id, CreateOrUpdateExpenseRequest req, CancellationToken ct = default)
@@ -60,9 +61,10 @@ public class ExpenseService : IExpenseService
         var e = await _db.Expenses.FirstOrDefaultAsync(x => x.Id == id && x.TenantId == _user.TenantId, ct);
         if (e is null) return null;
         e.Time = req.Time; e.Description = req.Description; e.CategoryId = req.CategoryId;
-        e.PaymentMode = req.PaymentMode; e.Amount = req.Amount; e.AmountIncTax = req.AmountIncTax; e.Notes = req.Notes;
+        e.PaymentMode = req.PaymentMode; e.Amount = req.Amount; e.AmountIncTax = req.AmountIncTax;
+        e.Notes = req.Notes; e.ReceiptUrl = req.ReceiptUrl;
         await _db.SaveChangesAsync(ct);
-        return new ExpenseListItem(e.Id, e.Time, e.Description, null, e.PaymentMode, e.Amount, e.AmountIncTax, e.CategoryId, e.Notes);
+        return new ExpenseListItem(e.Id, e.Time, e.Description, null, e.PaymentMode, e.Amount, e.AmountIncTax, e.CategoryId, e.Notes, e.ReceiptUrl);
     }
 
     public async Task<bool> DeleteAsync(Guid id, CancellationToken ct = default)
