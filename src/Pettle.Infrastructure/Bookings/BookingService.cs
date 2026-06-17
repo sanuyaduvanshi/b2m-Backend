@@ -111,21 +111,23 @@ public class BookingServiceImpl : IBookingService
     public async Task<IReadOnlyList<BookingEstimateLineDto>?> SaveEstimateAsync(Guid bookingId, SaveEstimateRequest req, CancellationToken ct = default)
     {
         if (_user.TenantId is null) return null;
-        var b = await _db.Bookings.Include(x => x.EstimateLines)
-            .FirstOrDefaultAsync(x => x.Id == bookingId && x.TenantId == _user.TenantId, ct);
-        if (b is null) return null;
+        var tid = _user.TenantId.Value;
+        var exists = await _db.Bookings.AnyAsync(x => x.Id == bookingId && x.TenantId == tid, ct);
+        if (!exists) return null;
 
-        // Replace the whole estimate (simplest, matches the on-screen editor).
-        _db.BookingEstimateLines.RemoveRange(b.EstimateLines);
-        b.EstimateLines.Clear();
+        // Replace the whole estimate. Bulk-delete the old rows directly (avoids tracked-graph fix-up),
+        // then insert the new ones as standalone entities.
+        await _db.BookingEstimateLines.Where(e => e.BookingId == bookingId && e.TenantId == tid).ExecuteDeleteAsync(ct);
+
         int order = 0;
         foreach (var line in req.Lines ?? Array.Empty<EstimateLineInput>())
         {
             if (string.IsNullOrWhiteSpace(line.Label)) continue;
             var qty = line.Quantity <= 0 ? 1 : line.Quantity;
-            b.EstimateLines.Add(new BookingEstimateLine
+            _db.BookingEstimateLines.Add(new BookingEstimateLine
             {
-                BookingId = b.Id,
+                BookingId = bookingId,
+                TenantId = tid,
                 Label = line.Label.Trim(),
                 Quantity = qty,
                 UnitAmount = line.UnitAmount,
@@ -134,8 +136,12 @@ public class BookingServiceImpl : IBookingService
             });
         }
         await _db.SaveChangesAsync(ct);
-        return b.EstimateLines.OrderBy(e => e.SortOrder)
-            .Select(e => new BookingEstimateLineDto(e.Id, e.Label, e.Quantity, e.UnitAmount, e.Amount, e.SortOrder)).ToList();
+
+        return await _db.BookingEstimateLines.AsNoTracking()
+            .Where(e => e.BookingId == bookingId && e.TenantId == tid)
+            .OrderBy(e => e.SortOrder)
+            .Select(e => new BookingEstimateLineDto(e.Id, e.Label, e.Quantity, e.UnitAmount, e.Amount, e.SortOrder))
+            .ToListAsync(ct);
     }
 
     public async Task<BookingChangeRequestDto?> AddChangeRequestAsync(Guid bookingId, CreateChangeRequestRequest req, CancellationToken ct = default)
