@@ -38,6 +38,7 @@ builder.Services.AddScoped<SubscriptionsImporter>();
 builder.Services.AddScoped<BookingsImporter>();
 builder.Services.AddScoped<InvoicesImporter>();
 builder.Services.AddScoped<PaymentsImporter>();
+builder.Services.AddScoped<SkusImporter>();
 
 using var host = builder.Build();
 using var scope = host.Services.CreateScope();
@@ -90,6 +91,7 @@ foreach (var (name, filePath) in jobs)
             "bookings"      => (await sp.GetRequiredService<BookingsImporter>().ImportAsync(tenant.Id, filePath, cli.DryRun, CancellationToken.None)).ToString(),
             "invoices"      => (await sp.GetRequiredService<InvoicesImporter>().ImportAsync(tenant.Id, filePath, cli.DryRun, CancellationToken.None)).ToString(),
             "payments"      => (await sp.GetRequiredService<PaymentsImporter>().ImportAsync(tenant.Id, filePath, cli.DryRun, CancellationToken.None)).ToString(),
+            "skus"          => (await sp.GetRequiredService<SkusImporter>().ImportAsync(tenant.Id, filePath, cli.DryRun, CancellationToken.None)).ToString(),
             _ => $"(unknown importer '{name}')",
         };
         sw.Stop();
@@ -118,7 +120,9 @@ return exitCode;
 static List<(string name, string file)> ResolveJobs(CliArgs cli)
 {
     // Default sequence (FK order). 'tasks' skipped — source export is empty.
-    var allInOrder = new[] { "clients", "catalogue", "pos", "expenses", "subscriptions", "bookings", "invoices", "payments" };
+    // 'skus' lives in a standalone file (skus_<date>.xlsx), so it's resolvable by name but
+    // excluded from 'all' (run it with: --import=skus --file=<path-to-skus.xlsx>).
+    var allInOrder = new[] { "clients", "skus", "catalogue", "pos", "expenses", "subscriptions", "bookings", "invoices", "payments" };
 
     var jobs = new List<(string, string)>();
     var requested = (cli.Import ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
@@ -131,7 +135,8 @@ static List<(string name, string file)> ResolveJobs(CliArgs cli)
         return jobs;
     }
 
-    if (requested.Contains("all")) requested = allInOrder.ToList();
+    // 'all' covers the export-root folder; skus comes from a separate file so it's not bundled in.
+    if (requested.Contains("all")) requested = allInOrder.Where(n => n != "skus").ToList();
 
     // Sort requested in our defined sequence so FKs resolve.
     var ordered = allInOrder.Where(requested.Contains).ToList();
@@ -150,6 +155,7 @@ static string ResolveDefaultPath(string name, string? root)
     return name switch
     {
         "clients"       => Path.Combine(root, "clients.csv"),
+        "skus"          => Path.Combine(root, "skus.xlsx"),   // override with --file=<skus_<date>.xlsx>
         "catalogue"     => Path.Combine(root, "catalogue", "B2M VET CARE"),
         "pos"           => Path.Combine(root, "purchase_orders", "B2M VET CARE.csv"),
         "expenses"      => Path.Combine(root, "expenses",      "B2M VET CARE.xlsx"),
