@@ -56,6 +56,8 @@ public class PettleDbContext : IdentityDbContext<ApplicationUser, ApplicationRol
     public DbSet<VetDetail> VetDetails => Set<VetDetail>();
     public DbSet<DayCareDetail> DayCareDetails => Set<DayCareDetail>();
     public DbSet<BookingAddOn> BookingAddOns => Set<BookingAddOn>();
+    public DbSet<BookingEstimateLine> BookingEstimateLines => Set<BookingEstimateLine>();
+    public DbSet<BookingChangeRequest> BookingChangeRequests => Set<BookingChangeRequest>();
     public DbSet<BookingRequest> BookingRequests => Set<BookingRequest>();
 
     // Invoices

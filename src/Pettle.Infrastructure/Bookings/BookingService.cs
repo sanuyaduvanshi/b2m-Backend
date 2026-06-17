@@ -77,6 +77,8 @@ public class BookingServiceImpl : IBookingService
             .Include(x => x.VetDetails)
             .Include(x => x.DayCareDetails)
             .Include(x => x.AddOns)
+            .Include(x => x.EstimateLines)
+            .Include(x => x.ChangeRequests)
             .FirstOrDefaultAsync(x => x.Id == id && x.TenantId == _user.TenantId, ct);
         if (b is null) return null;
 
@@ -100,8 +102,77 @@ public class BookingServiceImpl : IBookingService
                 s.ServiceName, s.FinalAmount, s.Notes,
                 subByService.TryGetValue(s.Id, out var sub) ? sub : null
             )).ToList(),
-            b.AddOns.Select(a => new BookingAddOnLine(a.Id, a.AddOnService, a.Count, a.Distance, a.Days, a.FinalAmount)).ToList()
+            b.AddOns.Select(a => new BookingAddOnLine(a.Id, a.AddOnService, a.Count, a.Distance, a.Days, a.FinalAmount)).ToList(),
+            b.EstimateLines.OrderBy(e => e.SortOrder).Select(e => new BookingEstimateLineDto(e.Id, e.Label, e.Quantity, e.UnitAmount, e.Amount, e.SortOrder)).ToList(),
+            b.ChangeRequests.OrderByDescending(c => c.RequestedAt).Select(c => new BookingChangeRequestDto(c.Id, c.Description, c.Status, c.RequestedAt, c.RequestedBy, c.ResolutionNote, c.ResolvedAt)).ToList()
         );
+    }
+
+    public async Task<IReadOnlyList<BookingEstimateLineDto>?> SaveEstimateAsync(Guid bookingId, SaveEstimateRequest req, CancellationToken ct = default)
+    {
+        if (_user.TenantId is null) return null;
+        var b = await _db.Bookings.Include(x => x.EstimateLines)
+            .FirstOrDefaultAsync(x => x.Id == bookingId && x.TenantId == _user.TenantId, ct);
+        if (b is null) return null;
+
+        // Replace the whole estimate (simplest, matches the on-screen editor).
+        _db.BookingEstimateLines.RemoveRange(b.EstimateLines);
+        b.EstimateLines.Clear();
+        int order = 0;
+        foreach (var line in req.Lines ?? Array.Empty<EstimateLineInput>())
+        {
+            if (string.IsNullOrWhiteSpace(line.Label)) continue;
+            var qty = line.Quantity <= 0 ? 1 : line.Quantity;
+            b.EstimateLines.Add(new BookingEstimateLine
+            {
+                BookingId = b.Id,
+                Label = line.Label.Trim(),
+                Quantity = qty,
+                UnitAmount = line.UnitAmount,
+                Amount = Math.Round(qty * line.UnitAmount, 2, MidpointRounding.AwayFromZero),
+                SortOrder = order++,
+            });
+        }
+        await _db.SaveChangesAsync(ct);
+        return b.EstimateLines.OrderBy(e => e.SortOrder)
+            .Select(e => new BookingEstimateLineDto(e.Id, e.Label, e.Quantity, e.UnitAmount, e.Amount, e.SortOrder)).ToList();
+    }
+
+    public async Task<BookingChangeRequestDto?> AddChangeRequestAsync(Guid bookingId, CreateChangeRequestRequest req, CancellationToken ct = default)
+    {
+        if (_user.TenantId is null) return null;
+        var b = await _db.Bookings.FirstOrDefaultAsync(x => x.Id == bookingId && x.TenantId == _user.TenantId, ct);
+        if (b is null) return null;
+        if (string.IsNullOrWhiteSpace(req.Description))
+            throw AppException.Validation("Empty change request",
+                new Dictionary<string, string[]> { ["description"] = new[] { "Describe the requested change." } });
+
+        var cr = new BookingChangeRequest
+        {
+            BookingId = b.Id,
+            Description = req.Description.Trim(),
+            Status = ChangeRequestStatus.Pending,
+            RequestedAt = DateTimeOffset.UtcNow,
+            RequestedBy = _user.DisplayName,
+        };
+        _db.BookingChangeRequests.Add(cr);
+        await _db.SaveChangesAsync(ct);
+        return new BookingChangeRequestDto(cr.Id, cr.Description, cr.Status, cr.RequestedAt, cr.RequestedBy, cr.ResolutionNote, cr.ResolvedAt);
+    }
+
+    public async Task<BookingChangeRequestDto?> ResolveChangeRequestAsync(Guid bookingId, Guid changeRequestId, ResolveChangeRequestRequest req, CancellationToken ct = default)
+    {
+        if (_user.TenantId is null) return null;
+        var cr = await _db.BookingChangeRequests
+            .FirstOrDefaultAsync(x => x.Id == changeRequestId && x.BookingId == bookingId && x.TenantId == _user.TenantId, ct);
+        if (cr is null) return null;
+        if (req.Status == ChangeRequestStatus.Pending)
+            throw AppException.BusinessRule("Resolve a change request as Approved or Rejected.");
+        cr.Status = req.Status;
+        cr.ResolutionNote = req.ResolutionNote;
+        cr.ResolvedAt = DateTimeOffset.UtcNow;
+        await _db.SaveChangesAsync(ct);
+        return new BookingChangeRequestDto(cr.Id, cr.Description, cr.Status, cr.RequestedAt, cr.RequestedBy, cr.ResolutionNote, cr.ResolvedAt);
     }
 
     public async Task<BookingDetail> CreateAsync(CreateBookingRequest req, CancellationToken ct = default)

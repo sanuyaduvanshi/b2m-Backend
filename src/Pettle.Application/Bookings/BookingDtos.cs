@@ -32,8 +32,18 @@ public record BookingDetail(
     string? Notes,
     string? AdditionalInstruction,
     IReadOnlyList<BookingServiceLine> Services,
-    IReadOnlyList<BookingAddOnLine> AddOns
+    IReadOnlyList<BookingAddOnLine> AddOns,
+    IReadOnlyList<BookingEstimateLineDto> Estimate,
+    IReadOnlyList<BookingChangeRequestDto> ChangeRequests
 );
+
+public record BookingEstimateLineDto(Guid Id, string Label, decimal Quantity, decimal UnitAmount, decimal Amount, int SortOrder);
+public record EstimateLineInput(string Label, decimal Quantity, decimal UnitAmount);
+public record SaveEstimateRequest(IReadOnlyList<EstimateLineInput> Lines);
+
+public record BookingChangeRequestDto(Guid Id, string Description, ChangeRequestStatus Status, DateTimeOffset RequestedAt, string? RequestedBy, string? ResolutionNote, DateTimeOffset? ResolvedAt);
+public record CreateChangeRequestRequest(string Description);
+public record ResolveChangeRequestRequest(ChangeRequestStatus Status, string? ResolutionNote);
 
 public record BookingServiceLine(
     Guid Id,

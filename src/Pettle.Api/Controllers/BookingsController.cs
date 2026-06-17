@@ -42,6 +42,30 @@ public class BookingsController : ControllerBase
     [HasPermission(Modules.BookingRecords, Actions.Edit)]
     public async Task<IActionResult> Cancel(Guid id, [FromBody] CancelRequest req, CancellationToken ct)
         => await _svc.CancelAsync(id, req.Reason, ct) ? NoContent() : NotFound();
+
+    [HttpPut("{id:guid}/estimate")]
+    [HasPermission(Modules.BookingRecords, Actions.Edit)]
+    public async Task<IActionResult> SaveEstimate(Guid id, [FromBody] SaveEstimateRequest req, CancellationToken ct)
+    {
+        var r = await _svc.SaveEstimateAsync(id, req, ct);
+        return r is null ? NotFound() : Ok(r);
+    }
+
+    [HttpPost("{id:guid}/change-requests")]
+    [HasPermission(Modules.BookingRecords, Actions.Edit)]
+    public async Task<IActionResult> AddChangeRequest(Guid id, [FromBody] CreateChangeRequestRequest req, CancellationToken ct)
+    {
+        var r = await _svc.AddChangeRequestAsync(id, req, ct);
+        return r is null ? NotFound() : Ok(r);
+    }
+
+    [HttpPost("{id:guid}/change-requests/{changeRequestId:guid}/resolve")]
+    [HasPermission(Modules.BookingRecords, Actions.Edit)]
+    public async Task<IActionResult> ResolveChangeRequest(Guid id, Guid changeRequestId, [FromBody] ResolveChangeRequestRequest req, CancellationToken ct)
+    {
+        var r = await _svc.ResolveChangeRequestAsync(id, changeRequestId, req, ct);
+        return r is null ? NotFound() : Ok(r);
+    }
 }
 
 public record CancelRequest(string? Reason);
