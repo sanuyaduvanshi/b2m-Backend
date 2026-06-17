@@ -76,6 +76,16 @@ public class CreateOrUpdateAddOnServiceValidator : AbstractValidator<CreateOrUpd
     }
 }
 
+public class CreateOrUpdateVetCatalogueItemValidator : AbstractValidator<CreateOrUpdateVetCatalogueItemRequest>
+{
+    public CreateOrUpdateVetCatalogueItemValidator()
+    {
+        RuleFor(x => x.Name).NotEmpty().WithMessage("Name is required.").MaximumLength(160);
+        RuleFor(x => x.Content).MaximumLength(8000);
+        RuleFor(x => x.Price!.Value).NonNegativeAmount().When(x => x.Price.HasValue);
+    }
+}
+
 public class CreateServiceCategoryValidator : AbstractValidator<CreateServiceCategoryRequest>
 {
     public CreateServiceCategoryValidator()

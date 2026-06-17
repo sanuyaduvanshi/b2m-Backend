@@ -109,6 +109,7 @@ public class PettleDbContext : IdentityDbContext<ApplicationUser, ApplicationRol
     public DbSet<ServiceVariant> ServiceVariants => Set<ServiceVariant>();
     public DbSet<ServiceAddOn> ServiceAddOns => Set<ServiceAddOn>();
     public DbSet<AddOnService> AddOnServices => Set<AddOnService>();
+    public DbSet<VetCatalogueItem> VetCatalogueItems => Set<VetCatalogueItem>();
     public DbSet<Staff> Staffs => Set<Staff>();
     public DbSet<StaffShift> StaffShifts => Set<StaffShift>();
     public DbSet<Tax> Taxes => Set<Tax>();

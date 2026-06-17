@@ -281,6 +281,50 @@ public class MyBusinessService : IMyBusinessService
         return true;
     }
 
+    public async Task<IReadOnlyList<VetCatalogueItemDto>> ListVetCatalogueAsync(VetItemKind? kind, CancellationToken ct = default)
+    {
+        if (_user.TenantId is null) return Array.Empty<VetCatalogueItemDto>();
+        var q = _db.VetCatalogueItems.AsNoTracking().Where(v => v.TenantId == _user.TenantId);
+        if (kind.HasValue) q = q.Where(v => v.Kind == kind.Value);
+        return await q.OrderBy(v => v.Kind).ThenBy(v => v.Name)
+            .Select(v => new VetCatalogueItemDto(v.Id, v.Kind, v.Name, v.Content, v.Price, v.IsActive))
+            .ToListAsync(ct);
+    }
+
+    public async Task<VetCatalogueItemDto> CreateVetCatalogueItemAsync(CreateOrUpdateVetCatalogueItemRequest req, CancellationToken ct = default)
+    {
+        if (_user.TenantId is null) throw AppException.Forbidden();
+        var v = new VetCatalogueItem
+        {
+            Kind = req.Kind, Name = req.Name.Trim(), Content = req.Content,
+            Price = req.Price, IsActive = req.IsActive
+        };
+        _db.VetCatalogueItems.Add(v);
+        await _db.SaveChangesAsync(ct);
+        return new VetCatalogueItemDto(v.Id, v.Kind, v.Name, v.Content, v.Price, v.IsActive);
+    }
+
+    public async Task<VetCatalogueItemDto?> UpdateVetCatalogueItemAsync(Guid id, CreateOrUpdateVetCatalogueItemRequest req, CancellationToken ct = default)
+    {
+        if (_user.TenantId is null) return null;
+        var v = await _db.VetCatalogueItems.FirstOrDefaultAsync(x => x.Id == id && x.TenantId == _user.TenantId, ct);
+        if (v is null) return null;
+        v.Kind = req.Kind; v.Name = req.Name.Trim(); v.Content = req.Content;
+        v.Price = req.Price; v.IsActive = req.IsActive;
+        await _db.SaveChangesAsync(ct);
+        return new VetCatalogueItemDto(v.Id, v.Kind, v.Name, v.Content, v.Price, v.IsActive);
+    }
+
+    public async Task<bool> DeleteVetCatalogueItemAsync(Guid id, CancellationToken ct = default)
+    {
+        if (_user.TenantId is null) return false;
+        var v = await _db.VetCatalogueItems.FirstOrDefaultAsync(x => x.Id == id && x.TenantId == _user.TenantId, ct);
+        if (v is null) return false;
+        _db.VetCatalogueItems.Remove(v);
+        await _db.SaveChangesAsync(ct);
+        return true;
+    }
+
     public async Task<IReadOnlyList<ClientTagListItem>> ListClientTagsAsync(CancellationToken ct = default)
     {
         if (_user.TenantId is null) return Array.Empty<ClientTagListItem>();

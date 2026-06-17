@@ -28,6 +28,9 @@ public record CreateOrUpdateTaxRequest(string Name, TaxKind Kind, decimal Percen
 public record AddOnServiceListItem(Guid Id, string Name, string? Description, decimal Price, decimal? TaxPercent, bool IsActive);
 public record CreateOrUpdateAddOnServiceRequest(string Name, string? Description, decimal Price, decimal? TaxPercent, bool IsActive);
 
+public record VetCatalogueItemDto(Guid Id, VetItemKind Kind, string Name, string? Content, decimal? Price, bool IsActive);
+public record CreateOrUpdateVetCatalogueItemRequest(VetItemKind Kind, string Name, string? Content, decimal? Price, bool IsActive);
+
 public record ClientTagListItem(Guid Id, string Name, string? Color, string? Description, int Usage);
 public record CreateOrUpdateClientTagRequest(string Name, string? Color, string? Description);
 
@@ -83,6 +86,11 @@ public interface IMyBusinessService
     Task<AddOnServiceListItem> CreateAddOnServiceAsync(CreateOrUpdateAddOnServiceRequest req, CancellationToken ct = default);
     Task<AddOnServiceListItem?> UpdateAddOnServiceAsync(Guid id, CreateOrUpdateAddOnServiceRequest req, CancellationToken ct = default);
     Task<bool> DeleteAddOnServiceAsync(Guid id, CancellationToken ct = default);
+
+    Task<IReadOnlyList<VetCatalogueItemDto>> ListVetCatalogueAsync(VetItemKind? kind, CancellationToken ct = default);
+    Task<VetCatalogueItemDto> CreateVetCatalogueItemAsync(CreateOrUpdateVetCatalogueItemRequest req, CancellationToken ct = default);
+    Task<VetCatalogueItemDto?> UpdateVetCatalogueItemAsync(Guid id, CreateOrUpdateVetCatalogueItemRequest req, CancellationToken ct = default);
+    Task<bool> DeleteVetCatalogueItemAsync(Guid id, CancellationToken ct = default);
 
     Task<IReadOnlyList<ClientTagListItem>> ListClientTagsAsync(CancellationToken ct = default);
     Task<ClientTagListItem> CreateClientTagAsync(CreateOrUpdateClientTagRequest req, CancellationToken ct = default);

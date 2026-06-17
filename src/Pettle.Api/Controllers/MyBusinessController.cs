@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Pettle.Api.Authorization;
 using Pettle.Application.MyBusiness;
 using Pettle.Domain.Identity;
+using Pettle.Domain.MyBusiness;
 
 namespace Pettle.Api.Controllers;
 
@@ -113,6 +114,25 @@ public class MyBusinessController : ControllerBase
     [HttpDelete("addon-services/{id:guid}")] [HasPermission(Modules.MyBusiness, Actions.Delete)]
     public async Task<IActionResult> DeleteAddOnService(Guid id, CancellationToken ct)
         => await _svc.DeleteAddOnServiceAsync(id, ct) ? NoContent() : NotFound();
+
+    [HttpGet("vet-catalogue")] [HasPermission(Modules.MyBusiness, Actions.View)]
+    public async Task<IActionResult> VetCatalogue([FromQuery] VetItemKind? kind, CancellationToken ct)
+        => Ok(await _svc.ListVetCatalogueAsync(kind, ct));
+
+    [HttpPost("vet-catalogue")] [HasPermission(Modules.MyBusiness, Actions.Create)]
+    public async Task<IActionResult> CreateVetCatalogueItem([FromBody] CreateOrUpdateVetCatalogueItemRequest req, CancellationToken ct)
+        => Ok(await _svc.CreateVetCatalogueItemAsync(req, ct));
+
+    [HttpPut("vet-catalogue/{id:guid}")] [HasPermission(Modules.MyBusiness, Actions.Edit)]
+    public async Task<IActionResult> UpdateVetCatalogueItem(Guid id, [FromBody] CreateOrUpdateVetCatalogueItemRequest req, CancellationToken ct)
+    {
+        var r = await _svc.UpdateVetCatalogueItemAsync(id, req, ct);
+        return r is null ? NotFound() : Ok(r);
+    }
+
+    [HttpDelete("vet-catalogue/{id:guid}")] [HasPermission(Modules.MyBusiness, Actions.Delete)]
+    public async Task<IActionResult> DeleteVetCatalogueItem(Guid id, CancellationToken ct)
+        => await _svc.DeleteVetCatalogueItemAsync(id, ct) ? NoContent() : NotFound();
 
     // ---- Client Tags ----
     [HttpGet("client-tags")] [HasPermission(Modules.MyBusiness, Actions.View)]
