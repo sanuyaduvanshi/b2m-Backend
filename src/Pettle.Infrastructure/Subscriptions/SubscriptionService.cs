@@ -54,9 +54,11 @@ public class SubscriptionService : ISubscriptionService
         if (_user.TenantId is null) return false;
         var p = await _db.SubscriptionPackages.FirstOrDefaultAsync(x => x.Id == id && x.TenantId == _user.TenantId, ct);
         if (p is null) return false;
-        var inUse = await _db.IssuedSubscriptions.AnyAsync(i => i.PackageId == id && i.TenantId == _user.TenantId, ct);
+        // Only *live* issuances block deletion — cancelled/expired ones shouldn't keep a package undeletable.
+        var inUse = await _db.IssuedSubscriptions.AnyAsync(i => i.PackageId == id && i.TenantId == _user.TenantId
+            && i.Status != IssuedSubscriptionStatus.Cancelled && i.Status != IssuedSubscriptionStatus.Expired, ct);
         if (inUse)
-            throw AppException.Conflict($"Cannot delete “{p.Name}” — it has been issued to one or more customers. Mark it inactive instead.");
+            throw AppException.Conflict($"Cannot delete “{p.Name}” — it is issued to one or more active customers. Cancel those first, or mark the package inactive.");
         var services = await _db.SubscriptionPackageServices.Where(s => s.PackageId == id).ToListAsync(ct);
         _db.SubscriptionPackageServices.RemoveRange(services);
         _db.SubscriptionPackages.Remove(p);
