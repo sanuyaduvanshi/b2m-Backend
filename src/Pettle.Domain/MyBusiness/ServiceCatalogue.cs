@@ -45,6 +45,16 @@ public class ServiceAddOn : TenantEntity
     public bool IsActive { get; set; } = true;
 }
 
+/// <summary>Standalone, tenant-level add-on services (e.g. nail clipping, teeth cleaning) usable as extra bill line items.</summary>
+public class AddOnService : SoftDeletableTenantEntity
+{
+    public string Name { get; set; } = string.Empty;
+    public string? Description { get; set; }
+    public decimal Price { get; set; }
+    public decimal? TaxPercent { get; set; }
+    public bool IsActive { get; set; } = true;
+}
+
 public class Staff : SoftDeletableTenantEntity
 {
     public string Name { get; set; } = string.Empty;

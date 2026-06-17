@@ -65,6 +65,17 @@ public class CreateOrUpdateServiceValidator : AbstractValidator<CreateOrUpdateSe
     }
 }
 
+public class CreateOrUpdateAddOnServiceValidator : AbstractValidator<CreateOrUpdateAddOnServiceRequest>
+{
+    public CreateOrUpdateAddOnServiceValidator()
+    {
+        RuleFor(x => x.Name).NotEmpty().WithMessage("Add-on name is required.").MaximumLength(120);
+        RuleFor(x => x.Description).MaximumLength(500);
+        RuleFor(x => x.Price).NonNegativeAmount();
+        RuleFor(x => x.TaxPercent!.Value).ValidTaxPercent().When(x => x.TaxPercent.HasValue);
+    }
+}
+
 public class CreateServiceCategoryValidator : AbstractValidator<CreateServiceCategoryRequest>
 {
     public CreateServiceCategoryValidator()

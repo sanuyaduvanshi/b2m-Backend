@@ -25,6 +25,9 @@ public record CreateOrUpdateStaffRequest(string Name, string? Phone, string? Ema
 public record TaxListItem(Guid Id, string Name, TaxKind Kind, decimal Percent, bool IsInclusive, DateOnly EffectiveFrom, bool IsActive);
 public record CreateOrUpdateTaxRequest(string Name, TaxKind Kind, decimal Percent, bool IsInclusive, DateOnly EffectiveFrom, DateOnly? EffectiveTo, bool IsActive);
 
+public record AddOnServiceListItem(Guid Id, string Name, string? Description, decimal Price, decimal? TaxPercent, bool IsActive);
+public record CreateOrUpdateAddOnServiceRequest(string Name, string? Description, decimal Price, decimal? TaxPercent, bool IsActive);
+
 public record ClientTagListItem(Guid Id, string Name, string? Color, string? Description, int Usage);
 public record CreateOrUpdateClientTagRequest(string Name, string? Color, string? Description);
 
@@ -75,6 +78,11 @@ public interface IMyBusinessService
     Task<TaxListItem> CreateTaxAsync(CreateOrUpdateTaxRequest req, CancellationToken ct = default);
     Task<TaxListItem?> UpdateTaxAsync(Guid id, CreateOrUpdateTaxRequest req, CancellationToken ct = default);
     Task<bool> DeleteTaxAsync(Guid id, CancellationToken ct = default);
+
+    Task<IReadOnlyList<AddOnServiceListItem>> ListAddOnServicesAsync(CancellationToken ct = default);
+    Task<AddOnServiceListItem> CreateAddOnServiceAsync(CreateOrUpdateAddOnServiceRequest req, CancellationToken ct = default);
+    Task<AddOnServiceListItem?> UpdateAddOnServiceAsync(Guid id, CreateOrUpdateAddOnServiceRequest req, CancellationToken ct = default);
+    Task<bool> DeleteAddOnServiceAsync(Guid id, CancellationToken ct = default);
 
     Task<IReadOnlyList<ClientTagListItem>> ListClientTagsAsync(CancellationToken ct = default);
     Task<ClientTagListItem> CreateClientTagAsync(CreateOrUpdateClientTagRequest req, CancellationToken ct = default);

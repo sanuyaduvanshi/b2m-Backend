@@ -237,6 +237,50 @@ public class MyBusinessService : IMyBusinessService
         return true;
     }
 
+    public async Task<IReadOnlyList<AddOnServiceListItem>> ListAddOnServicesAsync(CancellationToken ct = default)
+    {
+        if (_user.TenantId is null) return Array.Empty<AddOnServiceListItem>();
+        return await _db.AddOnServices.AsNoTracking()
+            .Where(a => a.TenantId == _user.TenantId)
+            .OrderBy(a => a.Name)
+            .Select(a => new AddOnServiceListItem(a.Id, a.Name, a.Description, a.Price, a.TaxPercent, a.IsActive))
+            .ToListAsync(ct);
+    }
+
+    public async Task<AddOnServiceListItem> CreateAddOnServiceAsync(CreateOrUpdateAddOnServiceRequest req, CancellationToken ct = default)
+    {
+        if (_user.TenantId is null) throw AppException.Forbidden();
+        var a = new AddOnService
+        {
+            Name = req.Name.Trim(), Description = req.Description, Price = req.Price,
+            TaxPercent = req.TaxPercent, IsActive = req.IsActive
+        };
+        _db.AddOnServices.Add(a);
+        await _db.SaveChangesAsync(ct);
+        return new AddOnServiceListItem(a.Id, a.Name, a.Description, a.Price, a.TaxPercent, a.IsActive);
+    }
+
+    public async Task<AddOnServiceListItem?> UpdateAddOnServiceAsync(Guid id, CreateOrUpdateAddOnServiceRequest req, CancellationToken ct = default)
+    {
+        if (_user.TenantId is null) return null;
+        var a = await _db.AddOnServices.FirstOrDefaultAsync(x => x.Id == id && x.TenantId == _user.TenantId, ct);
+        if (a is null) return null;
+        a.Name = req.Name.Trim(); a.Description = req.Description; a.Price = req.Price;
+        a.TaxPercent = req.TaxPercent; a.IsActive = req.IsActive;
+        await _db.SaveChangesAsync(ct);
+        return new AddOnServiceListItem(a.Id, a.Name, a.Description, a.Price, a.TaxPercent, a.IsActive);
+    }
+
+    public async Task<bool> DeleteAddOnServiceAsync(Guid id, CancellationToken ct = default)
+    {
+        if (_user.TenantId is null) return false;
+        var a = await _db.AddOnServices.FirstOrDefaultAsync(x => x.Id == id && x.TenantId == _user.TenantId, ct);
+        if (a is null) return false;
+        _db.AddOnServices.Remove(a);
+        await _db.SaveChangesAsync(ct);
+        return true;
+    }
+
     public async Task<IReadOnlyList<ClientTagListItem>> ListClientTagsAsync(CancellationToken ct = default)
     {
         if (_user.TenantId is null) return Array.Empty<ClientTagListItem>();

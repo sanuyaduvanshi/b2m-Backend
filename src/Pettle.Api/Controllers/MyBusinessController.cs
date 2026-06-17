@@ -96,6 +96,24 @@ public class MyBusinessController : ControllerBase
     public async Task<IActionResult> DeleteTax(Guid id, CancellationToken ct)
         => await _svc.DeleteTaxAsync(id, ct) ? NoContent() : NotFound();
 
+    [HttpGet("addon-services")] [HasPermission(Modules.MyBusiness, Actions.View)]
+    public async Task<IActionResult> AddOnServices(CancellationToken ct) => Ok(await _svc.ListAddOnServicesAsync(ct));
+
+    [HttpPost("addon-services")] [HasPermission(Modules.MyBusiness, Actions.Create)]
+    public async Task<IActionResult> CreateAddOnService([FromBody] CreateOrUpdateAddOnServiceRequest req, CancellationToken ct)
+        => Ok(await _svc.CreateAddOnServiceAsync(req, ct));
+
+    [HttpPut("addon-services/{id:guid}")] [HasPermission(Modules.MyBusiness, Actions.Edit)]
+    public async Task<IActionResult> UpdateAddOnService(Guid id, [FromBody] CreateOrUpdateAddOnServiceRequest req, CancellationToken ct)
+    {
+        var r = await _svc.UpdateAddOnServiceAsync(id, req, ct);
+        return r is null ? NotFound() : Ok(r);
+    }
+
+    [HttpDelete("addon-services/{id:guid}")] [HasPermission(Modules.MyBusiness, Actions.Delete)]
+    public async Task<IActionResult> DeleteAddOnService(Guid id, CancellationToken ct)
+        => await _svc.DeleteAddOnServiceAsync(id, ct) ? NoContent() : NotFound();
+
     // ---- Client Tags ----
     [HttpGet("client-tags")] [HasPermission(Modules.MyBusiness, Actions.View)]
     public async Task<IActionResult> ClientTags(CancellationToken ct) => Ok(await _svc.ListClientTagsAsync(ct));
