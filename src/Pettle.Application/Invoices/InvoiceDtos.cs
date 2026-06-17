@@ -3,6 +3,8 @@ using Pettle.Domain.Invoices;
 
 namespace Pettle.Application.Invoices;
 
+public record PaymentBrief(PaymentMode Mode, decimal Amount, PaymentRecordStatus Status);
+
 public record InvoiceListItem(
     Guid Id,
     string? LegacyInvoiceNo,
@@ -15,7 +17,8 @@ public record InvoiceListItem(
     decimal Revenue,
     decimal Paid,
     decimal Due,
-    InvoicePaymentStatus PaymentStatus
+    InvoicePaymentStatus PaymentStatus,
+    IReadOnlyList<PaymentBrief> Payments
 );
 
 public record InvoiceLineDto(
@@ -68,6 +71,7 @@ public record InvoiceListQuery(
     string? Search = null,
     InvoiceType? Type = null,
     InvoicePaymentStatus? Status = null,
+    PaymentMode? Mode = null,
     DateOnly? FromDate = null,
     DateOnly? ToDate = null,
     int Page = 1,

@@ -23,6 +23,7 @@ public class InvoiceService : IInvoiceService
         var q = _db.Invoices.AsNoTracking().Where(i => i.TenantId == _user.TenantId);
         if (query.Type.HasValue) q = q.Where(i => i.InvoiceType == query.Type.Value);
         if (query.Status.HasValue) q = q.Where(i => i.PaymentStatus == query.Status.Value);
+        if (query.Mode.HasValue) q = q.Where(i => i.Payments.Any(p => p.Mode == query.Mode.Value));
         if (query.FromDate is { } f) q = q.Where(i => i.InvoiceDate >= f);
         if (query.ToDate is { } t) q = q.Where(i => i.InvoiceDate <= t);
         if (!string.IsNullOrWhiteSpace(query.Search))
@@ -41,7 +42,9 @@ public class InvoiceService : IInvoiceService
             .Skip((page - 1) * size).Take(size)
             .Select(i => new InvoiceListItem(
                 i.Id, i.LegacyInvoiceNo, i.InvoiceNumber, i.InvoiceType, i.InvoiceDate,
-                i.ParentNameSnapshot, i.PhoneSnapshot, i.PetNameSnapshot, i.Revenue, i.Paid, i.Due, i.PaymentStatus))
+                i.ParentNameSnapshot, i.PhoneSnapshot, i.PetNameSnapshot, i.Revenue, i.Paid, i.Due, i.PaymentStatus,
+                i.Payments.OrderByDescending(p => p.PaymentTime)
+                    .Select(p => new PaymentBrief(p.Mode, p.Amount, p.Status)).ToList()))
             .ToListAsync(ct);
 
         return new PagedResult<InvoiceListItem>(items, total, page, size);
