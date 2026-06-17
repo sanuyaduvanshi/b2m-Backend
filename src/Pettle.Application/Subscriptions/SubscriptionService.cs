@@ -1,7 +1,21 @@
 using Pettle.Application.Clients;
+using Pettle.Application.Invoices;
+using Pettle.Domain.Invoices;
 using Pettle.Domain.Subscriptions;
 
 namespace Pettle.Application.Subscriptions;
+
+public record RecordSubscriptionPaymentRequest(
+    decimal Amount, PaymentMode Mode, PaymentSource Source = PaymentSource.WalkIn,
+    string? TransactionId = null, string? Notes = null,
+    PaymentType Type = PaymentType.Balance, PaymentRecordStatus Status = PaymentRecordStatus.Success,
+    DateTimeOffset? PaymentTime = null);
+
+public record IssuedSubscriptionDetail(
+    Guid Id, string PackageName, Guid PetParentId, string ParentName, string Phone,
+    DateOnly IssuedOn, DateOnly ValidUntil, int RemainingSessions, int TotalSessions,
+    IssuedSubscriptionStatus Status, IssuedPaymentStatus PaymentStatus, decimal AmountPaid, decimal AmountDue,
+    IReadOnlyList<PaymentDto> Payments);
 
 public record PackageListItem(Guid Id, string Name, int ValidityDays, decimal Price, decimal TaxPercent, bool IsTaxInclusive, bool IsActive);
 public record CreateOrUpdatePackageRequest(string Name, string? Description, int ValidityDays, decimal Price, decimal TaxPercent, bool IsTaxInclusive, bool IsActive);
@@ -25,4 +39,8 @@ public interface ISubscriptionService
     Task<IssuedListItem> IssueAsync(IssueSubscriptionRequest req, CancellationToken ct = default);
     Task<bool> FreezeAsync(Guid id, CancellationToken ct = default);
     Task<bool> CancelAsync(Guid id, CancellationToken ct = default);
+
+    Task<IssuedSubscriptionDetail?> GetIssuedAsync(Guid id, CancellationToken ct = default);
+    Task<PaymentDto?> RecordPaymentAsync(Guid issuedId, RecordSubscriptionPaymentRequest req, CancellationToken ct = default);
+    Task<bool> DeletePaymentAsync(Guid issuedId, Guid paymentId, CancellationToken ct = default);
 }

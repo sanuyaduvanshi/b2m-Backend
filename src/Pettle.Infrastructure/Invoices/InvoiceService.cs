@@ -63,7 +63,7 @@ public class InvoiceService : IInvoiceService
             i.IgstAmount, i.CgstAmount, i.SgstAmount,
             i.Revenue, i.Paid, i.Due, i.PaymentStatus,
             i.Lines.Select(l => new InvoiceLineDto(l.Id, l.BillItemName, l.Category, l.Quantity, l.UnitAmount, l.Discount, l.Subtotal, l.Total)).ToList(),
-            i.Payments.OrderByDescending(p => p.PaymentTime).Select(p => new PaymentDto(p.Id, p.PaymentTime, p.Amount, p.Mode, p.Source, p.TransactionId)).ToList()
+            i.Payments.OrderByDescending(p => p.PaymentTime).Select(p => new PaymentDto(p.Id, p.PaymentTime, p.Amount, p.Mode, p.Source, p.TransactionId, p.Type, p.Status, p.Notes)).ToList()
         );
     }
 
@@ -227,17 +227,65 @@ public class InvoiceService : IInvoiceService
             Amount = req.Amount,
             Mode = req.Mode,
             Source = req.Source,
+            Type = req.Type,
+            Status = req.Status,
             TransactionId = req.TransactionId,
             Notes = req.Notes
         };
         _db.Payments.Add(payment);
-        invoice.Paid += req.Amount;
+        // Only successful payments move the invoice balance; Pending/Failed are logged but don't settle.
+        if (payment.Status == PaymentRecordStatus.Success)
+        {
+            invoice.Paid += req.Amount;
+            invoice.Due = Math.Max(0, invoice.Revenue - invoice.Paid);
+            invoice.PaymentStatus = invoice.Due == 0
+                ? InvoicePaymentStatus.Paid
+                : invoice.Paid > 0 ? InvoicePaymentStatus.PartiallyPaid : InvoicePaymentStatus.Pending;
+        }
+        await _db.SaveChangesAsync(ct);
+        return new PaymentDto(payment.Id, payment.PaymentTime, payment.Amount, payment.Mode, payment.Source, payment.TransactionId, payment.Type, payment.Status, payment.Notes);
+    }
+
+    public async Task<PaymentDto?> UpdatePaymentAsync(Guid invoiceId, Guid paymentId, RecordPaymentRequest req, CancellationToken ct = default)
+    {
+        if (_user.TenantId is null) return null;
+        var invoice = await _db.Invoices.Include(i => i.Payments).FirstOrDefaultAsync(i => i.Id == invoiceId && i.TenantId == _user.TenantId, ct);
+        if (invoice is null) return null;
+        var payment = invoice.Payments.FirstOrDefault(p => p.Id == paymentId);
+        if (payment is null) return null;
+        payment.Amount = req.Amount; payment.Mode = req.Mode; payment.Source = req.Source;
+        payment.Type = req.Type; payment.Status = req.Status;
+        payment.TransactionId = req.TransactionId; payment.Notes = req.Notes;
+        if (req.PaymentTime is { } t) payment.PaymentTime = t;
+        RecomputeInvoiceBalance(invoice);
+        if (invoice.Paid > invoice.Revenue + 0.01m)
+            throw AppException.Validation("Payments exceed total",
+                new Dictionary<string, string[]> { ["amount"] = new[] { $"Total payments ₹{invoice.Paid:F2} would exceed the invoice total ₹{invoice.Revenue:F2}." } });
+        await _db.SaveChangesAsync(ct);
+        return new PaymentDto(payment.Id, payment.PaymentTime, payment.Amount, payment.Mode, payment.Source, payment.TransactionId, payment.Type, payment.Status, payment.Notes);
+    }
+
+    public async Task<bool> DeletePaymentAsync(Guid invoiceId, Guid paymentId, CancellationToken ct = default)
+    {
+        if (_user.TenantId is null) return false;
+        var invoice = await _db.Invoices.Include(i => i.Payments).FirstOrDefaultAsync(i => i.Id == invoiceId && i.TenantId == _user.TenantId, ct);
+        if (invoice is null) return false;
+        var payment = invoice.Payments.FirstOrDefault(p => p.Id == paymentId);
+        if (payment is null) return false;
+        _db.Payments.Remove(payment);
+        invoice.Payments.Remove(payment);
+        RecomputeInvoiceBalance(invoice);
+        await _db.SaveChangesAsync(ct);
+        return true;
+    }
+
+    private static void RecomputeInvoiceBalance(Invoice invoice)
+    {
+        invoice.Paid = invoice.Payments.Where(p => p.Status == PaymentRecordStatus.Success).Sum(p => p.Amount);
         invoice.Due = Math.Max(0, invoice.Revenue - invoice.Paid);
-        invoice.PaymentStatus = invoice.Due == 0
+        invoice.PaymentStatus = invoice.Due == 0 && invoice.Paid > 0
             ? InvoicePaymentStatus.Paid
             : invoice.Paid > 0 ? InvoicePaymentStatus.PartiallyPaid : InvoicePaymentStatus.Pending;
-        await _db.SaveChangesAsync(ct);
-        return new PaymentDto(payment.Id, payment.PaymentTime, payment.Amount, payment.Mode, payment.Source, payment.TransactionId);
     }
 
     public async Task<bool> RefundAsync(Guid invoiceId, RefundRequest req, CancellationToken ct = default)

@@ -8,5 +8,7 @@ public interface IInvoiceService
     Task<InvoiceDetail?> GetAsync(Guid id, CancellationToken ct = default);
     Task<InvoiceDetail> CreateSaleAsync(CreateSaleRequest req, CancellationToken ct = default);
     Task<PaymentDto?> RecordPaymentAsync(Guid invoiceId, RecordPaymentRequest req, CancellationToken ct = default);
+    Task<PaymentDto?> UpdatePaymentAsync(Guid invoiceId, Guid paymentId, RecordPaymentRequest req, CancellationToken ct = default);
+    Task<bool> DeletePaymentAsync(Guid invoiceId, Guid paymentId, CancellationToken ct = default);
     Task<bool> RefundAsync(Guid invoiceId, RefundRequest req, CancellationToken ct = default);
 }

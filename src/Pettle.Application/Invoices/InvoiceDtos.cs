@@ -35,7 +35,10 @@ public record PaymentDto(
     decimal Amount,
     PaymentMode Mode,
     PaymentSource Source,
-    string? TransactionId
+    string? TransactionId,
+    PaymentType Type = PaymentType.Balance,
+    PaymentRecordStatus Status = PaymentRecordStatus.Success,
+    string? Notes = null
 );
 
 public record InvoiceDetail(
@@ -77,7 +80,9 @@ public record RecordPaymentRequest(
     PaymentSource Source = PaymentSource.WalkIn,
     string? TransactionId = null,
     string? Notes = null,
-    DateTimeOffset? PaymentTime = null
+    DateTimeOffset? PaymentTime = null,
+    PaymentType Type = PaymentType.Balance,
+    PaymentRecordStatus Status = PaymentRecordStatus.Success
 );
 
 public record RefundRequest(decimal Amount, string Reason);

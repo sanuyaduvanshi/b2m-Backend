@@ -73,15 +73,22 @@ public class InvoiceLineItem : TenantEntity
 public class Payment : TenantEntity
 {
     public string? LegacyPaymentId { get; set; }
-    public Guid InvoiceId { get; set; }
+    /// <summary>A payment belongs to either an invoice or an issued subscription.</summary>
+    public Guid? InvoiceId { get; set; }
     public Invoice? Invoice { get; set; }
+    public Guid? IssuedSubscriptionId { get; set; }
     public DateTimeOffset PaymentTime { get; set; }
     public decimal Amount { get; set; }
     public PaymentMode Mode { get; set; } = PaymentMode.Cash;
     public PaymentSource Source { get; set; } = PaymentSource.WalkIn;
+    /// <summary>Pre-service deposit (Advance) vs balance settlement (Balance) — Pettle distinction.</summary>
+    public PaymentType Type { get; set; } = PaymentType.Balance;
+    public PaymentRecordStatus Status { get; set; } = PaymentRecordStatus.Success;
     public string? TransactionId { get; set; }
     public string? Notes { get; set; }
 }
 
 public enum PaymentMode { Cash = 0, Card = 1, Upi = 2, NetBanking = 3, Wallet = 4, Cheque = 5, Credit = 6, Other = 99 }
 public enum PaymentSource { WalkIn = 0, Online = 1, Gateway = 2, App = 3 }
+public enum PaymentType { Advance = 0, Balance = 1 }
+public enum PaymentRecordStatus { Success = 0, Pending = 1, Failed = 2 }

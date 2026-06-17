@@ -55,4 +55,25 @@ public class SubscriptionsController : ControllerBase
     [HasPermission(Modules.Subscriptions, Actions.Edit)]
     public async Task<IActionResult> Cancel(Guid id, CancellationToken ct)
         => await _svc.CancelAsync(id, ct) ? NoContent() : NotFound();
+
+    [HttpGet("issued/{id:guid}")]
+    [HasPermission(Modules.Subscriptions, Actions.View)]
+    public async Task<IActionResult> IssuedDetail(Guid id, CancellationToken ct)
+    {
+        var r = await _svc.GetIssuedAsync(id, ct);
+        return r is null ? NotFound() : Ok(r);
+    }
+
+    [HttpPost("issued/{id:guid}/payments")]
+    [HasPermission(Modules.Subscriptions, Actions.Edit)]
+    public async Task<IActionResult> RecordPayment(Guid id, [FromBody] RecordSubscriptionPaymentRequest req, CancellationToken ct)
+    {
+        var p = await _svc.RecordPaymentAsync(id, req, ct);
+        return p is null ? NotFound() : Ok(p);
+    }
+
+    [HttpDelete("issued/{id:guid}/payments/{paymentId:guid}")]
+    [HasPermission(Modules.Subscriptions, Actions.Edit)]
+    public async Task<IActionResult> DeletePayment(Guid id, Guid paymentId, CancellationToken ct)
+        => await _svc.DeletePaymentAsync(id, paymentId, ct) ? NoContent() : NotFound();
 }

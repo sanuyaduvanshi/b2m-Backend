@@ -2,7 +2,9 @@ using Microsoft.EntityFrameworkCore;
 using Pettle.Application.Clients;
 using Pettle.Application.Common;
 using Pettle.Application.Common.Errors;
+using Pettle.Application.Invoices;
 using Pettle.Application.Subscriptions;
+using Pettle.Domain.Invoices;
 using Pettle.Domain.Subscriptions;
 using Pettle.Infrastructure.Persistence;
 
@@ -144,6 +146,74 @@ public class SubscriptionService : ISubscriptionService
         if (s.Status == IssuedSubscriptionStatus.Expired)
             throw AppException.BusinessRule("Cannot cancel an expired subscription.");
         s.Status = IssuedSubscriptionStatus.Cancelled;
+        await _db.SaveChangesAsync(ct);
+        return true;
+    }
+
+    // ---- Payments against a subscription's Due (G2) ----
+    public async Task<IssuedSubscriptionDetail?> GetIssuedAsync(Guid id, CancellationToken ct = default)
+    {
+        if (_user.TenantId is null) return null;
+        var s = await _db.IssuedSubscriptions.AsNoTracking()
+            .Include(x => x.Package).Include(x => x.PetParent)
+            .FirstOrDefaultAsync(x => x.Id == id && x.TenantId == _user.TenantId, ct);
+        if (s is null) return null;
+        var payments = await _db.Payments.AsNoTracking()
+            .Where(p => p.IssuedSubscriptionId == id && p.TenantId == _user.TenantId)
+            .OrderByDescending(p => p.PaymentTime)
+            .Select(p => new PaymentDto(p.Id, p.PaymentTime, p.Amount, p.Mode, p.Source, p.TransactionId, p.Type, p.Status, p.Notes))
+            .ToListAsync(ct);
+        return new IssuedSubscriptionDetail(s.Id, s.Package!.Name, s.PetParentId, s.PetParent!.Name, s.PetParent.Phone,
+            s.IssuedOn, s.ValidUntil, s.RemainingSessions, s.TotalSessions, s.Status, s.PaymentStatus, s.AmountPaid, s.AmountDue, payments);
+    }
+
+    public async Task<PaymentDto?> RecordPaymentAsync(Guid issuedId, RecordSubscriptionPaymentRequest req, CancellationToken ct = default)
+    {
+        if (_user.TenantId is null) return null;
+        var s = await _db.IssuedSubscriptions.FirstOrDefaultAsync(x => x.Id == issuedId && x.TenantId == _user.TenantId, ct);
+        if (s is null) return null;
+        if (s.Status == IssuedSubscriptionStatus.Cancelled)
+            throw AppException.BusinessRule("Cannot record a payment on a cancelled subscription.");
+        if (req.Amount <= 0)
+            throw AppException.Validation("Invalid amount",
+                new Dictionary<string, string[]> { ["amount"] = new[] { "Payment amount must be greater than zero." } });
+        if (req.Status == PaymentRecordStatus.Success && req.Amount > s.AmountDue + 0.01m)
+            throw AppException.Validation("Payment exceeds amount due",
+                new Dictionary<string, string[]> { ["amount"] = new[] { $"Payment ₹{req.Amount:F2} exceeds amount due ₹{s.AmountDue:F2}." } });
+
+        var payment = new Payment
+        {
+            IssuedSubscriptionId = s.Id,
+            PaymentTime = req.PaymentTime ?? DateTimeOffset.UtcNow,
+            Amount = req.Amount, Mode = req.Mode, Source = req.Source,
+            Type = req.Type, Status = req.Status, TransactionId = req.TransactionId, Notes = req.Notes,
+        };
+        _db.Payments.Add(payment);
+        if (payment.Status == PaymentRecordStatus.Success)
+        {
+            s.AmountPaid += req.Amount;
+            s.AmountDue = Math.Max(0, s.AmountDue - req.Amount);
+            s.PaymentStatus = s.AmountDue == 0 ? IssuedPaymentStatus.Paid
+                : s.AmountPaid > 0 ? IssuedPaymentStatus.PartiallyPaid : IssuedPaymentStatus.Pending;
+        }
+        await _db.SaveChangesAsync(ct);
+        return new PaymentDto(payment.Id, payment.PaymentTime, payment.Amount, payment.Mode, payment.Source, payment.TransactionId, payment.Type, payment.Status, payment.Notes);
+    }
+
+    public async Task<bool> DeletePaymentAsync(Guid issuedId, Guid paymentId, CancellationToken ct = default)
+    {
+        if (_user.TenantId is null) return false;
+        var p = await _db.Payments.FirstOrDefaultAsync(x => x.Id == paymentId && x.IssuedSubscriptionId == issuedId && x.TenantId == _user.TenantId, ct);
+        if (p is null) return false;
+        var s = await _db.IssuedSubscriptions.FirstOrDefaultAsync(x => x.Id == issuedId && x.TenantId == _user.TenantId, ct);
+        if (s is not null && p.Status == PaymentRecordStatus.Success)
+        {
+            s.AmountPaid = Math.Max(0, s.AmountPaid - p.Amount);
+            s.AmountDue += p.Amount;
+            s.PaymentStatus = s.AmountPaid <= 0 ? IssuedPaymentStatus.Pending
+                : s.AmountDue == 0 ? IssuedPaymentStatus.Paid : IssuedPaymentStatus.PartiallyPaid;
+        }
+        _db.Payments.Remove(p);
         await _db.SaveChangesAsync(ct);
         return true;
     }

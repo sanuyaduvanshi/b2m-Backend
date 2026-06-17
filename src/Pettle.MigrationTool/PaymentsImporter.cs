@@ -29,10 +29,10 @@ public class PaymentsImporter
 
         // Dedupe by (invoiceId, time, amount, mode) signature — no LegacyPaymentId on the source.
         var existingKeys = (await _db.Payments.AsNoTracking()
-            .Where(p => p.TenantId == tenantId)
+            .Where(p => p.TenantId == tenantId && p.InvoiceId != null)
             .Select(p => new { p.InvoiceId, p.PaymentTime, p.Amount, p.Mode })
             .ToListAsync(ct))
-            .Select(x => MakeKey(x.InvoiceId, x.PaymentTime, x.Amount, x.Mode))
+            .Select(x => MakeKey(x.InvoiceId!.Value, x.PaymentTime, x.Amount, x.Mode))
             .ToHashSet(StringComparer.Ordinal);
 
         _log.LogInformation("Payments cache: {Invoices} invoices, {Existing} existing payments.",

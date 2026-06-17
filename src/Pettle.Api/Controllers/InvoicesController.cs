@@ -41,6 +41,19 @@ public class InvoicesController : ControllerBase
         return p is null ? NotFound() : Ok(p);
     }
 
+    [HttpPut("{id:guid}/payments/{paymentId:guid}")]
+    [HasPermission(Modules.Invoices, Actions.Edit)]
+    public async Task<IActionResult> UpdatePayment(Guid id, Guid paymentId, [FromBody] RecordPaymentRequest req, CancellationToken ct)
+    {
+        var p = await _svc.UpdatePaymentAsync(id, paymentId, req, ct);
+        return p is null ? NotFound() : Ok(p);
+    }
+
+    [HttpDelete("{id:guid}/payments/{paymentId:guid}")]
+    [HasPermission(Modules.Invoices, Actions.Edit)]
+    public async Task<IActionResult> DeletePayment(Guid id, Guid paymentId, CancellationToken ct)
+        => await _svc.DeletePaymentAsync(id, paymentId, ct) ? NoContent() : NotFound();
+
     [HttpPost("{id:guid}/refund")]
     [HasPermission(Modules.Invoices, Actions.Approve)]
     public async Task<IActionResult> Refund(Guid id, [FromBody] RefundRequest req, CancellationToken ct)
