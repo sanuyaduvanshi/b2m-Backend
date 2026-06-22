@@ -15,7 +15,8 @@ public record SkuListItem(
 public record CreateOrUpdateSkuRequest(
     string Code, string Name, string? Description, Guid? CategoryId, string Unit,
     decimal MrpPrice, decimal SellingPrice, decimal CostPrice, decimal TaxPercent,
-    string? HsnSacCode, int ReorderLevel, bool TrackExpiry, bool IsActive
+    string? HsnSacCode, int ReorderLevel, bool TrackExpiry, bool IsActive,
+    string? ImageUrl = null
 );
 
 public record UpdateSkuListingRequest(bool IsListedInApp, string? AppImageUrl);
