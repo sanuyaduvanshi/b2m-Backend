@@ -82,6 +82,11 @@ public class BookingServiceImpl : IBookingService
             .FirstOrDefaultAsync(x => x.Id == id && x.TenantId == _user.TenantId, ct);
         if (b is null) return null;
 
+        var inv = await _db.Invoices.AsNoTracking()
+            .Where(i => i.BookingId == id && i.TenantId == _user.TenantId)
+            .Select(i => new { i.Id, i.Paid, i.Due })
+            .FirstOrDefaultAsync(ct);
+
         var subByService = new Dictionary<Guid, BookingSubDetail>();
         foreach (var d in b.BoardingDetails)
             subByService[d.BookingServiceId] = new BookingSubDetail(d.CheckInDate, d.CheckOutDate, d.CheckInTime, d.CheckOutTime, null, d.KennelLabel, d.BoardingType, d.CompanionName);
@@ -96,6 +101,7 @@ public class BookingServiceImpl : IBookingService
             b.Id, b.LegacyBookingId, b.BookingDate, b.PetParentId,
             b.PetParent!.Name, b.PetParent!.Phone, b.PetParent.Email,
             b.Source, b.PaymentStatus, b.TotalBillingAmount, b.InvoiceNumber,
+            inv?.Id, inv?.Paid ?? 0m, inv?.Due ?? 0m,
             b.Notes, b.AdditionalInstruction,
             b.Services.Select(s => new BookingServiceLine(
                 s.Id, s.ServiceType, s.Status, s.PetId, s.Pet?.Name ?? "(deleted pet)",

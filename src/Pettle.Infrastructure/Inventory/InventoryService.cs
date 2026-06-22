@@ -346,6 +346,96 @@ public class InventoryService : IInventoryService
         return true;
     }
 
+    public async Task<IReadOnlyList<SkuCategoryDto>> ListCategoriesAsync(CancellationToken ct = default)
+    {
+        if (_user.TenantId is null) return Array.Empty<SkuCategoryDto>();
+
+        var cats = await _db.SkuCategories
+            .Where(c => c.TenantId == _user.TenantId)
+            .Include(c => c.Parent)
+            .OrderBy(c => c.ParentId == null ? 0 : 1).ThenBy(c => c.Name)
+            .ToListAsync(ct);
+
+        var skuCounts = await _db.Skus
+            .Where(s => s.TenantId == _user.TenantId && s.CategoryId != null)
+            .GroupBy(s => s.CategoryId!)
+            .Select(g => new { CategoryId = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.CategoryId, x => x.Count, ct);
+
+        return cats.Select(c => new SkuCategoryDto(
+            c.Id, c.Name, c.ParentId, c.Parent?.Name,
+            skuCounts.TryGetValue(c.Id, out var cnt) ? cnt : 0
+        )).ToList();
+    }
+
+    public async Task<SkuCategoryDto> CreateCategoryAsync(CreateOrUpdateCategoryRequest req, CancellationToken ct = default)
+    {
+        if (_user.TenantId is null) throw AppException.Forbidden();
+        var name = req.Name.Trim();
+        var dup = await _db.SkuCategories.AnyAsync(c => c.TenantId == _user.TenantId && c.ParentId == req.ParentId && c.Name == name, ct);
+        if (dup) throw AppException.Conflict($"Category '{name}' already exists at this level.");
+
+        var cat = new SkuCategory { TenantId = _user.TenantId.Value, Name = name, ParentId = req.ParentId };
+        _db.SkuCategories.Add(cat);
+        await _db.SaveChangesAsync(ct);
+
+        string? parentName = null;
+        if (req.ParentId.HasValue)
+            parentName = await _db.SkuCategories.Where(c => c.Id == req.ParentId.Value).Select(c => c.Name).FirstOrDefaultAsync(ct);
+
+        return new SkuCategoryDto(cat.Id, cat.Name, cat.ParentId, parentName, 0);
+    }
+
+    public async Task<SkuCategoryDto?> UpdateCategoryAsync(Guid id, CreateOrUpdateCategoryRequest req, CancellationToken ct = default)
+    {
+        if (_user.TenantId is null) return null;
+        var cat = await _db.SkuCategories.FirstOrDefaultAsync(c => c.Id == id && c.TenantId == _user.TenantId, ct);
+        if (cat is null) return null;
+
+        var name = req.Name.Trim();
+        if (req.ParentId == id) throw AppException.BusinessRule("A category cannot be its own parent.");
+
+        var dup = await _db.SkuCategories.AnyAsync(c => c.TenantId == _user.TenantId && c.ParentId == req.ParentId && c.Name == name && c.Id != id, ct);
+        if (dup) throw AppException.Conflict($"Category '{name}' already exists at this level.");
+
+        cat.Name = name;
+        cat.ParentId = req.ParentId;
+        await _db.SaveChangesAsync(ct);
+
+        var skuCount = await _db.Skus.CountAsync(s => s.TenantId == _user.TenantId && s.CategoryId == id, ct);
+        string? parentName = null;
+        if (req.ParentId.HasValue)
+            parentName = await _db.SkuCategories.Where(c => c.Id == req.ParentId.Value).Select(c => c.Name).FirstOrDefaultAsync(ct);
+
+        return new SkuCategoryDto(cat.Id, cat.Name, cat.ParentId, parentName, skuCount);
+    }
+
+    public async Task<bool> DeleteCategoryAsync(Guid id, CancellationToken ct = default)
+    {
+        if (_user.TenantId is null) return false;
+        var cat = await _db.SkuCategories.Include(c => c.Children)
+            .FirstOrDefaultAsync(c => c.Id == id && c.TenantId == _user.TenantId, ct);
+        if (cat is null) return false;
+
+        if (cat.Children.Count > 0)
+            throw AppException.BusinessRule("Cannot delete a category that has sub-categories. Remove the sub-categories first.");
+
+        // Block if any ACTIVE SKUs are still assigned to this category.
+        var inUse = await _db.Skus.AnyAsync(s => s.TenantId == _user.TenantId && s.CategoryId == id, ct);
+        if (inUse)
+            throw AppException.BusinessRule("Cannot delete a category that has SKUs assigned to it. Reassign or delete the SKUs first.");
+
+        // Soft-deleted SKUs still hold the FK in the DB even though they're invisible to queries.
+        // Null out their CategoryId so the hard-delete of the category row doesn't hit a FK violation.
+        await _db.Skus.IgnoreQueryFilters()
+            .Where(s => s.TenantId == _user.TenantId && s.CategoryId == id)
+            .ExecuteUpdateAsync(s => s.SetProperty(x => x.CategoryId, (Guid?)null), ct);
+
+        _db.SkuCategories.Remove(cat);
+        await _db.SaveChangesAsync(ct);
+        return true;
+    }
+
     private async Task<string> NextPoNumberAsync(CancellationToken ct)
     {
         var year = DateTime.UtcNow.Year;

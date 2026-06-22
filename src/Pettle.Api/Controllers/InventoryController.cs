@@ -12,6 +12,29 @@ public class InventoryController : ControllerBase
     private readonly IInventoryService _svc;
     public InventoryController(IInventoryService svc) => _svc = svc;
 
+    [HttpGet("categories")]
+    [HasPermission(Modules.Inventory, Actions.View)]
+    public async Task<IActionResult> Categories(CancellationToken ct)
+        => Ok(await _svc.ListCategoriesAsync(ct));
+
+    [HttpPost("categories")]
+    [HasPermission(Modules.Inventory, Actions.Create)]
+    public async Task<IActionResult> CreateCategory([FromBody] CreateOrUpdateCategoryRequest req, CancellationToken ct)
+        => Ok(await _svc.CreateCategoryAsync(req, ct));
+
+    [HttpPut("categories/{id:guid}")]
+    [HasPermission(Modules.Inventory, Actions.Edit)]
+    public async Task<IActionResult> UpdateCategory(Guid id, [FromBody] CreateOrUpdateCategoryRequest req, CancellationToken ct)
+    {
+        var r = await _svc.UpdateCategoryAsync(id, req, ct);
+        return r is null ? NotFound() : Ok(r);
+    }
+
+    [HttpDelete("categories/{id:guid}")]
+    [HasPermission(Modules.Inventory, Actions.Delete)]
+    public async Task<IActionResult> DeleteCategory(Guid id, CancellationToken ct)
+        => await _svc.DeleteCategoryAsync(id, ct) ? NoContent() : NotFound();
+
     [HttpGet("skus")]
     [HasPermission(Modules.Inventory, Actions.View)]
     public async Task<IActionResult> Skus([FromQuery] string? search, [FromQuery] bool? lowStock, [FromQuery] bool? inAppStore, [FromQuery] int page = 1, [FromQuery] int pageSize = 50, CancellationToken ct = default)

@@ -24,6 +24,14 @@ public class CreateOrUpdateSkuValidator : AbstractValidator<CreateOrUpdateSkuReq
     }
 }
 
+public class CreateOrUpdateCategoryValidator : AbstractValidator<CreateOrUpdateCategoryRequest>
+{
+    public CreateOrUpdateCategoryValidator()
+    {
+        RuleFor(x => x.Name).NotEmpty().WithMessage("Category name is required.").MaximumLength(80);
+    }
+}
+
 public class CreateOrUpdateVendorValidator : AbstractValidator<CreateOrUpdateVendorRequest>
 {
     public CreateOrUpdateVendorValidator()
