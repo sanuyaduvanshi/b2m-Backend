@@ -23,7 +23,7 @@ public class SkusImporter
         _log = log;
     }
 
-    public async Task<ImportResult> ImportAsync(Guid tenantId, string xlsxPath, bool dryRun, CancellationToken ct)
+    public async Task<ImportResult> ImportAsync(Guid tenantId, string filePath, bool dryRun, CancellationToken ct)
     {
         var result = new ImportResult();
 
@@ -33,7 +33,6 @@ public class SkusImporter
             .ToListAsync(ct))
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-        // Category cache keyed by "parent" and "parent>child" so the hierarchy is reused across rows.
         var catList = await _db.SkuCategories.Where(c => c.TenantId == tenantId).ToListAsync(ct);
         var catById = catList.ToDictionary(c => c.Id);
         var catKey = new Dictionary<string, Guid>(StringComparer.OrdinalIgnoreCase);
@@ -43,63 +42,137 @@ public class SkusImporter
             catKey[CatKey(parentName, c.Name)] = c.Id;
         }
 
+        bool isCsv = filePath.EndsWith(".csv", StringComparison.OrdinalIgnoreCase);
         int batched = 0;
-        foreach (var row in XlsxReader.ReadSheet(xlsxPath, "SKUs"))
+
+        if (isCsv)
         {
-            ct.ThrowIfCancellationRequested();
-            if (row.AllEmpty()) continue;
-
-            try
+            foreach (var (idx, row) in ReadCsvRows(filePath))
             {
-                var legacy = row.GetOrNull("SKU ID");
-                var name = row.GetOrNull("Name");
-                if (name is null) { result.Inc("skipped_no_name"); continue; }
-                if (legacy is not null && existingLegacy.Contains(legacy)) { result.Inc("skipped_existing"); continue; }
+                ct.ThrowIfCancellationRequested();
+                string? Get(string col) => idx.TryGetValue(col, out var i) && i < row.Length ? Clean(row[i]) : null;
 
-                var categoryName = row.GetOrNull("Category");
-                var subName = row.GetOrNull("Subcategory");
-                Guid? categoryId = ResolveCategory(tenantId, categoryName, subName, catKey, result);
-
-                var price = ParseDecimal(row.Get("Price"));
-                var cost = ParseDecimal(row.Get("Cost Price"));
-                var qty = (int)Math.Round(ParseDecimal(row.Get("Quantity")));
-                var barcode = row.GetOrNull("Barcode");
-
-                _db.Skus.Add(new Sku
+                try
                 {
-                    TenantId = tenantId,
-                    LegacySkuId = legacy,
-                    Code = barcode ?? legacy ?? name,
-                    Name = name,
-                    CategoryId = categoryId,
-                    Unit = "ea",
-                    MrpPrice = price,
-                    SellingPrice = price,
-                    CostPrice = cost,
-                    TaxPercent = ParseTaxPercent(row.Get("Taxes")),
-                    HsnSacCode = row.GetOrNull("HSN Code"),
-                    StockOnHand = qty < 0 ? 0 : qty,
-                    IsActive = IsActiveStatus(row.Get("SKU Status")),
-                });
-                if (legacy is not null) existingLegacy.Add(legacy);
-                result.Inc("skus_created");
-                batched++;
+                    var legacy = Get("SKU ID");
+                    var name = Get("Name");
+                    if (name is null) { result.Inc("skipped_no_name"); continue; }
+                    if (legacy is not null && existingLegacy.Contains(legacy)) { result.Inc("skipped_existing"); continue; }
 
-                if (batched >= 500)
+                    var categoryName = Get("Category");
+                    var subName = Get("Sub Category");
+                    Guid? categoryId = ResolveCategory(tenantId, categoryName, subName, catKey, result);
+
+                    var price = ParseDecimal(Get("Selling Price"));
+                    var cost = ParseDecimal(Get("Cost Price"));
+                    var unit = Get("Measuring Unit") ?? "ea";
+                    var reorder = TryInt(Get("Low Inventory Threshold Count")) ?? 0;
+
+                    _db.Skus.Add(new Sku
+                    {
+                        TenantId = tenantId,
+                        LegacySkuId = legacy,
+                        Code = legacy ?? name,
+                        Name = name,
+                        CategoryId = categoryId,
+                        Unit = unit,
+                        MrpPrice = price,
+                        SellingPrice = price,
+                        CostPrice = cost,
+                        TaxPercent = 0m,
+                        HsnSacCode = Get("HSN Code"),
+                        ReorderLevel = reorder < 0 ? 0 : reorder,
+                        StockOnHand = 0,
+                        IsActive = IsActiveStatus(Get("Status")),
+                    });
+                    if (legacy is not null) existingLegacy.Add(legacy);
+                    result.Inc("skus_created");
+                    batched++;
+
+                    if (batched >= 500) { if (!dryRun) { await _db.SaveChangesAsync(ct); } batched = 0; }
+                }
+                catch (Exception ex)
                 {
-                    if (!dryRun) { await _db.SaveChangesAsync(ct); }
-                    batched = 0;
+                    _log.LogError(ex, "SKU CSV row failed: {Msg}", ex.Message);
+                    result.Errors++;
                 }
             }
-            catch (Exception ex)
+        }
+        else
+        {
+            foreach (var row in XlsxReader.ReadSheet(filePath, "SKUs"))
             {
-                _log.LogError(ex, "SKU row {Row} failed.", row.RowNumber);
-                result.Errors++;
+                ct.ThrowIfCancellationRequested();
+                if (row.AllEmpty()) continue;
+
+                try
+                {
+                    var legacy = row.GetOrNull("SKU ID");
+                    var name = row.GetOrNull("Name");
+                    if (name is null) { result.Inc("skipped_no_name"); continue; }
+                    if (legacy is not null && existingLegacy.Contains(legacy)) { result.Inc("skipped_existing"); continue; }
+
+                    var categoryName = row.GetOrNull("Category");
+                    var subName = row.GetOrNull("Subcategory");
+                    Guid? categoryId = ResolveCategory(tenantId, categoryName, subName, catKey, result);
+
+                    var price = ParseDecimal(row.Get("Price"));
+                    var cost = ParseDecimal(row.Get("Cost Price"));
+                    var qty = (int)Math.Round(ParseDecimal(row.Get("Quantity")));
+                    var barcode = row.GetOrNull("Barcode");
+
+                    _db.Skus.Add(new Sku
+                    {
+                        TenantId = tenantId,
+                        LegacySkuId = legacy,
+                        Code = barcode ?? legacy ?? name,
+                        Name = name,
+                        CategoryId = categoryId,
+                        Unit = "ea",
+                        MrpPrice = price,
+                        SellingPrice = price,
+                        CostPrice = cost,
+                        TaxPercent = ParseTaxPercent(row.Get("Taxes")),
+                        HsnSacCode = row.GetOrNull("HSN Code"),
+                        StockOnHand = qty < 0 ? 0 : qty,
+                        IsActive = IsActiveStatus(row.Get("SKU Status")),
+                    });
+                    if (legacy is not null) existingLegacy.Add(legacy);
+                    result.Inc("skus_created");
+                    batched++;
+
+                    if (batched >= 500) { if (!dryRun) { await _db.SaveChangesAsync(ct); } batched = 0; }
+                }
+                catch (Exception ex)
+                {
+                    _log.LogError(ex, "SKU row {Row} failed.", row.RowNumber);
+                    result.Errors++;
+                }
             }
         }
 
         if (!dryRun && batched > 0) await _db.SaveChangesAsync(ct);
         return result;
+    }
+
+    private static IEnumerable<(Dictionary<string, int> idx, string[] row)> ReadCsvRows(string path)
+    {
+        using var reader = new StreamReader(path);
+        var rows = CsvReader.Read(reader).GetEnumerator();
+        if (!rows.MoveNext()) yield break;
+        var idx = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        var headers = rows.Current;
+        for (int i = 0; i < headers.Length; i++)
+        {
+            var h = headers[i].Trim();
+            if (h.Length > 0 && !idx.ContainsKey(h)) idx[h] = i;
+        }
+        while (rows.MoveNext())
+        {
+            var row = rows.Current;
+            if (row.All(string.IsNullOrWhiteSpace)) continue;
+            yield return (idx, row);
+        }
     }
 
     private Guid? ResolveCategory(Guid tenantId, string? category, string? sub, Dictionary<string, Guid> cache, ImportResult result)
