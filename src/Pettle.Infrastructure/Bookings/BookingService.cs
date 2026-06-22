@@ -4,6 +4,7 @@ using Pettle.Application.Clients;
 using Pettle.Application.Common;
 using Pettle.Application.Common.Errors;
 using Pettle.Domain.Bookings;
+using Pettle.Domain.Invoices;
 using Pettle.Infrastructure.Persistence;
 
 namespace Pettle.Infrastructure.Bookings;
@@ -219,6 +220,13 @@ public class BookingServiceImpl : IBookingService
                     new Dictionary<string, string[]> { ["services"] = new[] { "One or more selected kennels are inactive or unknown." } });
         }
 
+        var parent = await _db.PetParents.AsNoTracking()
+            .Where(p => p.Id == req.PetParentId && p.TenantId == _user.TenantId)
+            .Select(p => new { p.Name, p.Phone })
+            .FirstOrDefaultAsync(ct);
+
+        var invNum = await NextBookingInvoiceNumberAsync(ct);
+
         var b = new Booking
         {
             PetParentId = req.PetParentId,
@@ -226,7 +234,8 @@ public class BookingServiceImpl : IBookingService
             Source = req.Source,
             Notes = req.Notes,
             AdditionalInstruction = req.AdditionalInstruction,
-            TotalBillingAmount = req.Services.Sum(s => s.FinalAmount)
+            TotalBillingAmount = req.Services.Sum(s => s.FinalAmount),
+            InvoiceNumber = invNum,
         };
         foreach (var line in req.Services)
         {
@@ -257,7 +266,37 @@ public class BookingServiceImpl : IBookingService
                     break;
             }
         }
+
+        var invoice = new Invoice
+        {
+            InvoiceNumber = invNum,
+            InvoiceType = InvoiceType.Booking,
+            InvoiceDate = b.BookingDate,
+            BookingId = b.Id,
+            PetParentId = b.PetParentId,
+            ParentNameSnapshot = parent?.Name ?? "",
+            PhoneSnapshot = parent?.Phone ?? "",
+            Revenue = b.TotalBillingAmount,
+            BaseAmount = b.TotalBillingAmount,
+            Due = b.TotalBillingAmount,
+            Paid = 0,
+            PaymentStatus = InvoicePaymentStatus.Pending,
+        };
+        foreach (var line in req.Services)
+        {
+            invoice.Lines.Add(new InvoiceLineItem
+            {
+                BillItemName = line.ServiceName,
+                BillSection = line.ServiceType.ToString(),
+                Quantity = 1,
+                UnitAmount = line.FinalAmount,
+                Subtotal = line.FinalAmount,
+                Total = line.FinalAmount,
+            });
+        }
+
         _db.Bookings.Add(b);
+        _db.Invoices.Add(invoice);
         await _db.SaveChangesAsync(ct);
         return (await GetAsync(b.Id, ct))!;
     }
@@ -286,5 +325,13 @@ public class BookingServiceImpl : IBookingService
         if (!string.IsNullOrWhiteSpace(reason)) b.Notes = (b.Notes is null ? "" : b.Notes + " | ") + $"Cancelled: {reason}";
         await _db.SaveChangesAsync(ct);
         return true;
+    }
+
+    private async Task<string> NextBookingInvoiceNumberAsync(CancellationToken ct)
+    {
+        var count = await _db.Invoices.IgnoreQueryFilters()
+            .Where(i => i.TenantId == _user.TenantId && i.InvoiceType == InvoiceType.Booking && i.LegacyInvoiceNo == null)
+            .CountAsync(ct);
+        return $"BKG-{(count + 1).ToString().PadLeft(5, '0')}";
     }
 }
