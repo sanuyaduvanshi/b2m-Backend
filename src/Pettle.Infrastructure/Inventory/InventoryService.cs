@@ -334,6 +334,26 @@ public class InventoryService : IInventoryService
         return true;
     }
 
+    public async Task<bool> RecordPoPaymentAsync(Guid id, RecordPoPaymentRequest req, CancellationToken ct = default)
+    {
+        if (_user.TenantId is null) return false;
+        var po = await _db.PurchaseOrders.FirstOrDefaultAsync(p => p.Id == id && p.TenantId == _user.TenantId, ct);
+        if (po is null) return false;
+        if (req.Amount <= 0)
+            throw AppException.Validation("Invalid amount",
+                new Dictionary<string, string[]> { ["amount"] = new[] { "Amount must be greater than zero." } });
+        if (req.Amount > po.Due + 0.01m)
+            throw AppException.Validation("Payment exceeds due",
+                new Dictionary<string, string[]> { ["amount"] = new[] { $"Payment ₹{req.Amount:F2} exceeds amount due ₹{po.Due:F2}." } });
+        po.Paid += req.Amount;
+        po.Due = Math.Max(0, po.Total - po.Paid);
+        po.PaymentStatus = po.Due == 0 ? PoPaymentStatus.Paid : PoPaymentStatus.PartiallyPaid;
+        if (!string.IsNullOrWhiteSpace(req.Notes))
+            po.Notes = (po.Notes is null ? "" : po.Notes + " | ") + $"Paid ₹{req.Amount:F2} via {req.Mode}: {req.Notes}";
+        await _db.SaveChangesAsync(ct);
+        return true;
+    }
+
     public async Task<bool> DeletePoAsync(Guid id, CancellationToken ct = default)
     {
         if (_user.TenantId is null) return false;

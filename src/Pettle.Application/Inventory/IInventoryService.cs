@@ -25,5 +25,6 @@ public interface IInventoryService
     Task<PoDetail?> GetPoAsync(Guid id, CancellationToken ct = default);
     Task<PoDetail> CreatePoAsync(CreatePoRequest req, CancellationToken ct = default);
     Task<bool> ReceivePoAsync(Guid id, ReceivePoRequest req, CancellationToken ct = default);
+    Task<bool> RecordPoPaymentAsync(Guid id, RecordPoPaymentRequest req, CancellationToken ct = default);
     Task<bool> DeletePoAsync(Guid id, CancellationToken ct = default);
 }

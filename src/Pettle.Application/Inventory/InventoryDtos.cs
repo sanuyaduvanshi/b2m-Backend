@@ -66,5 +66,7 @@ public record CreatePoLine(
     DateOnly? ExpiryDate, string? BatchNumber
 );
 
+public record RecordPoPaymentRequest(decimal Amount, string Mode, string? Notes);
+
 public record ReceivePoRequest(List<ReceivePoLine> Lines);
 public record ReceivePoLine(Guid LineId, decimal ReceivedQuantity);

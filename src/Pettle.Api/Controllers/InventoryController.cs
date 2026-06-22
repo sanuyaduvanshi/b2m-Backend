@@ -112,6 +112,11 @@ public class InventoryController : ControllerBase
     public async Task<IActionResult> ReceivePo(Guid id, [FromBody] ReceivePoRequest req, CancellationToken ct)
         => await _svc.ReceivePoAsync(id, req, ct) ? NoContent() : NotFound();
 
+    [HttpPost("purchase-orders/{id:guid}/pay")]
+    [HasPermission(Modules.Inventory, Actions.Edit)]
+    public async Task<IActionResult> PayPo(Guid id, [FromBody] RecordPoPaymentRequest req, CancellationToken ct)
+        => await _svc.RecordPoPaymentAsync(id, req, ct) ? NoContent() : NotFound();
+
     [HttpDelete("purchase-orders/{id:guid}")]
     [HasPermission(Modules.Inventory, Actions.Delete)]
     public async Task<IActionResult> DeletePo(Guid id, CancellationToken ct)
