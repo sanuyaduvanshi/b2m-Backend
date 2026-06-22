@@ -50,6 +50,29 @@ public class ClientsController : ControllerBase
     [HasPermission(Modules.ClientDatabase, Actions.Delete)]
     public async Task<IActionResult> Delete(Guid id, CancellationToken ct)
         => await _service.DeleteAsync(id, ct) ? NoContent() : NotFound();
+
+    // --- Pet endpoints ---
+
+    [HttpPost("{id:guid}/pets")]
+    [HasPermission(Modules.ClientDatabase, Actions.Edit)]
+    public async Task<IActionResult> AddPet(Guid id, [FromBody] CreatePetRequest req, CancellationToken ct)
+    {
+        var r = await _service.AddPetAsync(id, req, ct);
+        return r is null ? NotFound() : Ok(r);
+    }
+
+    [HttpPut("{id:guid}/pets/{petId:guid}")]
+    [HasPermission(Modules.ClientDatabase, Actions.Edit)]
+    public async Task<IActionResult> UpdatePet(Guid id, Guid petId, [FromBody] UpdatePetRequest req, CancellationToken ct)
+    {
+        var r = await _service.UpdatePetAsync(id, petId, req, ct);
+        return r is null ? NotFound() : Ok(r);
+    }
+
+    [HttpDelete("{id:guid}/pets/{petId:guid}")]
+    [HasPermission(Modules.ClientDatabase, Actions.Edit)]
+    public async Task<IActionResult> DeletePet(Guid id, Guid petId, CancellationToken ct)
+        => await _service.DeletePetAsync(id, petId, ct) ? NoContent() : NotFound();
 }
 
 public record ArchiveRequest(string Reason);

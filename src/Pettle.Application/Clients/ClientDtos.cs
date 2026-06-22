@@ -82,6 +82,26 @@ public record UpdatePetParentRequest(
     string? ArchiveReason
 );
 
+public record CreatePetRequest(
+    string Name,
+    PetSpecies Species,
+    string? Breed,
+    PetGender? Gender,
+    DateOnly? Birthday,
+    BreedSize? BreedSize,
+    decimal? WeightKg
+);
+
+public record UpdatePetRequest(
+    string Name,
+    PetSpecies Species,
+    string? Breed,
+    PetGender? Gender,
+    DateOnly? Birthday,
+    BreedSize? BreedSize,
+    decimal? WeightKg
+);
+
 public record ClientListQuery(
     string? Search,
     ClientStatus? Status,

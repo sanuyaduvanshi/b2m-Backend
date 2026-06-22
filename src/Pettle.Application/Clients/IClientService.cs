@@ -10,4 +10,8 @@ public interface IClientService
     Task<PetParentDetail?> UpdateAsync(Guid id, UpdatePetParentRequest req, CancellationToken ct = default);
     Task<bool> ArchiveAsync(Guid id, string reason, CancellationToken ct = default);
     Task<bool> DeleteAsync(Guid id, CancellationToken ct = default);
+
+    Task<PetSummary?> AddPetAsync(Guid parentId, CreatePetRequest req, CancellationToken ct = default);
+    Task<PetSummary?> UpdatePetAsync(Guid parentId, Guid petId, UpdatePetRequest req, CancellationToken ct = default);
+    Task<bool> DeletePetAsync(Guid parentId, Guid petId, CancellationToken ct = default);
 }

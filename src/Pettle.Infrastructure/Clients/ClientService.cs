@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Pettle.Application.Clients;
 using Pettle.Application.Common;
 using Pettle.Application.Common.Errors;
+using Pettle.Domain.Bookings;
 using Pettle.Domain.Clients;
 using Pettle.Infrastructure.Persistence;
 
@@ -155,6 +156,60 @@ public class ClientService : IClientService
     }
 
     /// <summary>Normalize a phone string: strip spaces/dashes/parens, keep leading +.</summary>
+    public async Task<PetSummary?> AddPetAsync(Guid parentId, CreatePetRequest req, CancellationToken ct = default)
+    {
+        if (_user.TenantId is null) return null;
+        var parentExists = await _db.PetParents.AnyAsync(p => p.Id == parentId && p.TenantId == _user.TenantId, ct);
+        if (!parentExists) return null;
+        if (string.IsNullOrWhiteSpace(req.Name))
+            throw AppException.Validation("Name required", new Dictionary<string, string[]> { ["name"] = new[] { "Pet name is required." } });
+        var pet = new Pet
+        {
+            PetParentId = parentId,
+            Name = req.Name.Trim(),
+            Species = req.Species,
+            Breed = req.Breed?.Trim(),
+            Gender = req.Gender,
+            Birthday = req.Birthday,
+            BreedSize = req.BreedSize,
+            WeightKg = req.WeightKg,
+        };
+        _db.Pets.Add(pet);
+        await _db.SaveChangesAsync(ct);
+        return new PetSummary(pet.Id, null, pet.Name, pet.Species, pet.Breed, pet.Gender, pet.Birthday, pet.BreedSize, pet.WeightKg, pet.PhotoUrl);
+    }
+
+    public async Task<PetSummary?> UpdatePetAsync(Guid parentId, Guid petId, UpdatePetRequest req, CancellationToken ct = default)
+    {
+        if (_user.TenantId is null) return null;
+        var pet = await _db.Pets.FirstOrDefaultAsync(p => p.Id == petId && p.PetParentId == parentId && p.TenantId == _user.TenantId, ct);
+        if (pet is null) return null;
+        if (string.IsNullOrWhiteSpace(req.Name))
+            throw AppException.Validation("Name required", new Dictionary<string, string[]> { ["name"] = new[] { "Pet name is required." } });
+        pet.Name = req.Name.Trim();
+        pet.Species = req.Species;
+        pet.Breed = req.Breed?.Trim();
+        pet.Gender = req.Gender;
+        pet.Birthday = req.Birthday;
+        pet.BreedSize = req.BreedSize;
+        pet.WeightKg = req.WeightKg;
+        await _db.SaveChangesAsync(ct);
+        return new PetSummary(pet.Id, pet.LegacyPetId, pet.Name, pet.Species, pet.Breed, pet.Gender, pet.Birthday, pet.BreedSize, pet.WeightKg, pet.PhotoUrl);
+    }
+
+    public async Task<bool> DeletePetAsync(Guid parentId, Guid petId, CancellationToken ct = default)
+    {
+        if (_user.TenantId is null) return false;
+        var pet = await _db.Pets.FirstOrDefaultAsync(p => p.Id == petId && p.PetParentId == parentId && p.TenantId == _user.TenantId, ct);
+        if (pet is null) return false;
+        var usedInBooking = await _db.BookingServices.AnyAsync(bs => bs.PetId == petId && bs.TenantId == _user.TenantId, ct);
+        if (usedInBooking)
+            throw AppException.Conflict("Cannot delete pet — it has booking history.");
+        _db.Pets.Remove(pet);
+        await _db.SaveChangesAsync(ct);
+        return true;
+    }
+
     private static string NormalizePhone(string raw)
     {
         if (string.IsNullOrWhiteSpace(raw)) return raw;
