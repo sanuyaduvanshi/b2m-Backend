@@ -3,6 +3,7 @@ using Pettle.Application.Clients;
 using Pettle.Application.Common;
 using Pettle.Application.Common.Errors;
 using Pettle.Application.Invoices;
+using Pettle.Domain.Bookings;
 using Pettle.Domain.Inventory;
 using Pettle.Domain.Invoices;
 using Pettle.Infrastructure.Persistence;
@@ -245,6 +246,7 @@ public class InvoiceService : IInvoiceService
                 ? InvoicePaymentStatus.Paid
                 : invoice.Paid > 0 ? InvoicePaymentStatus.PartiallyPaid : InvoicePaymentStatus.Pending;
         }
+        await SyncBookingStatusAsync(invoice, ct);
         await _db.SaveChangesAsync(ct);
         return new PaymentDto(payment.Id, payment.PaymentTime, payment.Amount, payment.Mode, payment.Source, payment.TransactionId, payment.Type, payment.Status, payment.Notes);
     }
@@ -264,6 +266,7 @@ public class InvoiceService : IInvoiceService
         if (invoice.Paid > invoice.Revenue + 0.01m)
             throw AppException.Validation("Payments exceed total",
                 new Dictionary<string, string[]> { ["amount"] = new[] { $"Total payments ₹{invoice.Paid:F2} would exceed the invoice total ₹{invoice.Revenue:F2}." } });
+        await SyncBookingStatusAsync(invoice, ct);
         await _db.SaveChangesAsync(ct);
         return new PaymentDto(payment.Id, payment.PaymentTime, payment.Amount, payment.Mode, payment.Source, payment.TransactionId, payment.Type, payment.Status, payment.Notes);
     }
@@ -278,6 +281,7 @@ public class InvoiceService : IInvoiceService
         _db.Payments.Remove(payment);
         invoice.Payments.Remove(payment);
         RecomputeInvoiceBalance(invoice);
+        await SyncBookingStatusAsync(invoice, ct);
         await _db.SaveChangesAsync(ct);
         return true;
     }
@@ -289,6 +293,20 @@ public class InvoiceService : IInvoiceService
         invoice.PaymentStatus = invoice.Due == 0 && invoice.Paid > 0
             ? InvoicePaymentStatus.Paid
             : invoice.Paid > 0 ? InvoicePaymentStatus.PartiallyPaid : InvoicePaymentStatus.Pending;
+    }
+
+    private async Task SyncBookingStatusAsync(Invoice invoice, CancellationToken ct)
+    {
+        if (invoice.BookingId is not { } bookingId) return;
+        var booking = await _db.Bookings.FirstOrDefaultAsync(b => b.Id == bookingId && b.TenantId == _user.TenantId, ct);
+        if (booking is null) return;
+        booking.PaymentStatus = invoice.PaymentStatus switch
+        {
+            InvoicePaymentStatus.Paid         => BookingPaymentStatus.Paid,
+            InvoicePaymentStatus.PartiallyPaid => BookingPaymentStatus.PartiallyPaid,
+            InvoicePaymentStatus.Refunded      => BookingPaymentStatus.Refunded,
+            _                                  => BookingPaymentStatus.Pending,
+        };
     }
 
     public async Task<bool> RefundAsync(Guid invoiceId, RefundRequest req, CancellationToken ct = default)
@@ -305,6 +323,7 @@ public class InvoiceService : IInvoiceService
         invoice.Due = Math.Max(0, invoice.Revenue - invoice.Paid);
         invoice.PaymentStatus = InvoicePaymentStatus.Refunded;
         invoice.Notes = (invoice.Notes is null ? "" : invoice.Notes + " | ") + $"Refund {req.Amount}: {req.Reason}";
+        await SyncBookingStatusAsync(invoice, ct);
         await _db.SaveChangesAsync(ct);
         return true;
     }
