@@ -88,7 +88,7 @@ public class InventoryService : IInventoryService
         sku.Unit = req.Unit; sku.MrpPrice = req.MrpPrice; sku.SellingPrice = req.SellingPrice; sku.CostPrice = req.CostPrice;
         sku.TaxPercent = req.TaxPercent; sku.HsnSacCode = req.HsnSacCode; sku.ReorderLevel = req.ReorderLevel;
         sku.TrackExpiry = req.TrackExpiry; sku.IsActive = req.IsActive;
-        if (req.ImageUrl is not null) sku.AppImageUrl = req.ImageUrl;
+        sku.AppImageUrl = req.ImageUrl;
         await _db.SaveChangesAsync(ct);
         return await GetSkuAsync(id, ct);
     }
