@@ -45,18 +45,26 @@ public class SubscriptionService : ISubscriptionService
     public async Task<PackageListItem?> UpdatePackageAsync(Guid id, CreateOrUpdatePackageRequest req, CancellationToken ct = default)
     {
         if (_user.TenantId is null) return null;
-        var p = await _db.SubscriptionPackages.Include(x => x.Services)
+        // Load WITHOUT Services nav-prop so EF change tracker doesn't track old services
+        var p = await _db.SubscriptionPackages
             .FirstOrDefaultAsync(x => x.Id == id && x.TenantId == _user.TenantId, ct);
         if (p is null) return null;
         p.Name = req.Name; p.Description = req.Description; p.ValidityDays = req.ValidityDays;
         p.Price = req.Price; p.TaxPercent = req.TaxPercent; p.IsTaxInclusive = req.IsTaxInclusive; p.IsActive = req.IsActive;
+        // ExecuteDelete bypasses change tracker — then add new via DbSet (not nav prop)
         await _db.SubscriptionPackageServices.Where(s => s.PackageId == id).ExecuteDeleteAsync(ct);
-        p.Services.Clear();
         if (req.Services != null)
-            foreach (var s in req.Services)
-                p.Services.Add(MapService(s));
+            foreach (var svc in req.Services)
+            {
+                var entity = MapService(svc);
+                entity.PackageId = id;
+                _db.SubscriptionPackageServices.Add(entity);
+            }
         await _db.SaveChangesAsync(ct);
-        return ToListItem(p);
+        // Reload with services for response
+        var updated = await _db.SubscriptionPackages.Include(x => x.Services)
+            .FirstAsync(x => x.Id == id, ct);
+        return ToListItem(updated);
     }
 
     private static SubscriptionPackageService MapService(PackageServiceItem s) => new()
