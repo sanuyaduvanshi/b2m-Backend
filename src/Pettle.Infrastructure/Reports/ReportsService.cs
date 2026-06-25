@@ -155,7 +155,7 @@ public class ReportsService : IReportsService
         var soon = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(30);
 
         var total = await _db.Skus.CountAsync(s => s.TenantId == tid, ct);
-        var low = await _db.Skus.CountAsync(s => s.TenantId == tid && s.IsActive && s.StockOnHand <= s.ReorderLevel, ct);
+        var low = await _db.Skus.CountAsync(s => s.TenantId == tid && s.IsActive && s.ReorderLevel > 0 && s.StockOnHand <= s.ReorderLevel, ct);
         var expiring = await _db.Skus.CountAsync(s => s.TenantId == tid && s.TrackExpiry && s.NearestExpiry != null && s.NearestExpiry <= soon, ct);
         var value = await _db.Skus.Where(s => s.TenantId == tid).SumAsync(s => (decimal?)(s.StockOnHand * s.CostPrice), ct) ?? 0m;
 
