@@ -57,7 +57,9 @@ public record BookingServiceLine(
     string? ServiceName,
     decimal FinalAmount,
     string? Notes,
-    BookingSubDetail? Sub
+    BookingSubDetail? Sub,
+    Guid? SkuId = null,
+    int SkuQuantity = 1
 );
 
 public record BookingSubDetail(
@@ -105,7 +107,9 @@ public record CreateBookingServiceLine(
     TimeOnly? EndTime,
     Guid? KennelId,
     string? Notes,
-    string? PetNameOverride = null
+    string? PetNameOverride = null,
+    Guid? SkuId = null,
+    int SkuQuantity = 1
 );
 
 public record BookingStateChangeRequest(BookingStatus NewStatus, string? Reason);

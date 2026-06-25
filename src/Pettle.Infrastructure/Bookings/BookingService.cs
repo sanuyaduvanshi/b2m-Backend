@@ -4,6 +4,7 @@ using Pettle.Application.Clients;
 using Pettle.Application.Common;
 using Pettle.Application.Common.Errors;
 using Pettle.Domain.Bookings;
+using Pettle.Domain.Inventory;
 using Pettle.Domain.Invoices;
 using Pettle.Infrastructure.Persistence;
 
@@ -110,7 +111,8 @@ public class BookingServiceImpl : IBookingService
                 s.Id, s.ServiceType, s.Status, s.PetId,
                 s.Pet?.Name ?? s.PetNameSnapshot ?? "(walk-in)",
                 s.ServiceName, s.FinalAmount, s.Notes,
-                subByService.TryGetValue(s.Id, out var sub) ? sub : null
+                subByService.TryGetValue(s.Id, out var sub) ? sub : null,
+                s.SkuId, s.SkuQuantity
             )).ToList(),
             b.AddOns.Select(a => new BookingAddOnLine(a.Id, a.AddOnService, a.Count, a.Distance, a.Days, a.FinalAmount)).ToList(),
             b.EstimateLines.OrderBy(e => e.SortOrder).Select(e => new BookingEstimateLineDto(e.Id, e.Label, e.Quantity, e.UnitAmount, e.Amount, e.SortOrder)).ToList(),
@@ -264,7 +266,9 @@ public class BookingServiceImpl : IBookingService
                 ServiceName = line.ServiceName,
                 FinalAmount = line.FinalAmount,
                 Notes = line.Notes,
-                Status = BookingStatus.Upcoming
+                Status = BookingStatus.Upcoming,
+                SkuId = line.SkuId,
+                SkuQuantity = line.SkuQuantity > 0 ? line.SkuQuantity : 1,
             };
             b.Services.Add(svc);
 
@@ -315,6 +319,37 @@ public class BookingServiceImpl : IBookingService
 
         _db.Bookings.Add(b);
         _db.Invoices.Add(invoice);
+
+        // Deduct inventory for service lines that have an associated SKU
+        var skuIds = req.Services
+            .Where(l => l.SkuId.HasValue)
+            .Select(l => l.SkuId!.Value)
+            .Distinct()
+            .ToList();
+        if (skuIds.Count > 0)
+        {
+            var skus = await _db.Skus
+                .Where(s => skuIds.Contains(s.Id) && s.TenantId == _user.TenantId)
+                .ToListAsync(ct);
+
+            foreach (var line in req.Services.Where(l => l.SkuId.HasValue))
+            {
+                var sku = skus.FirstOrDefault(s => s.Id == line.SkuId!.Value);
+                if (sku is null) continue;
+                var qty = line.SkuQuantity > 0 ? line.SkuQuantity : 1;
+                sku.StockOnHand = Math.Max(0, sku.StockOnHand - qty);
+                _db.Set<StockMovement>().Add(new StockMovement
+                {
+                    SkuId = sku.Id,
+                    TenantId = _user.TenantId!.Value,
+                    Reason = StockMovementReason.Sale,
+                    QuantityChange = -qty,
+                    StockAfter = sku.StockOnHand,
+                    Note = $"Booking service: {line.ServiceName}",
+                });
+            }
+        }
+
         await _db.SaveChangesAsync(ct);
         return (await GetAsync(b.Id, ct))!;
     }

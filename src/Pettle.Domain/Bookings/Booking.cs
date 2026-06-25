@@ -89,6 +89,8 @@ public class BookingService : TenantEntity
     public string? ServiceName { get; set; }
     public decimal FinalAmount { get; set; }
     public string? Notes { get; set; }
+    public Guid? SkuId { get; set; }
+    public int SkuQuantity { get; set; } = 1;
 }
 
 public class BoardingDetail : TenantEntity
