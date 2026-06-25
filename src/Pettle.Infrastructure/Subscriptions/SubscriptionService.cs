@@ -19,11 +19,12 @@ public class SubscriptionService : ISubscriptionService
     public async Task<IReadOnlyList<PackageListItem>> ListPackagesAsync(CancellationToken ct = default)
     {
         if (_user.TenantId is null) return Array.Empty<PackageListItem>();
-        return await _db.SubscriptionPackages.AsNoTracking()
+        var packages = await _db.SubscriptionPackages.AsNoTracking()
+            .Include(p => p.Services)
             .Where(p => p.TenantId == _user.TenantId)
             .OrderBy(p => p.Name)
-            .Select(p => new PackageListItem(p.Id, p.Name, p.ValidityDays, p.Price, p.TaxPercent, p.IsTaxInclusive, p.IsActive))
             .ToListAsync(ct);
+        return packages.Select(p => ToListItem(p)).ToList();
     }
 
     public async Task<PackageListItem> CreatePackageAsync(CreateOrUpdatePackageRequest req, CancellationToken ct = default)
@@ -33,34 +34,58 @@ public class SubscriptionService : ISubscriptionService
             Name = req.Name, Description = req.Description, ValidityDays = req.ValidityDays,
             Price = req.Price, TaxPercent = req.TaxPercent, IsTaxInclusive = req.IsTaxInclusive, IsActive = req.IsActive
         };
+        if (req.Services != null)
+            foreach (var s in req.Services)
+                p.Services.Add(MapService(s));
         _db.SubscriptionPackages.Add(p);
         await _db.SaveChangesAsync(ct);
-        return new PackageListItem(p.Id, p.Name, p.ValidityDays, p.Price, p.TaxPercent, p.IsTaxInclusive, p.IsActive);
+        return ToListItem(p);
     }
 
     public async Task<PackageListItem?> UpdatePackageAsync(Guid id, CreateOrUpdatePackageRequest req, CancellationToken ct = default)
     {
         if (_user.TenantId is null) return null;
-        var p = await _db.SubscriptionPackages.FirstOrDefaultAsync(x => x.Id == id && x.TenantId == _user.TenantId, ct);
+        var p = await _db.SubscriptionPackages.Include(x => x.Services)
+            .FirstOrDefaultAsync(x => x.Id == id && x.TenantId == _user.TenantId, ct);
         if (p is null) return null;
         p.Name = req.Name; p.Description = req.Description; p.ValidityDays = req.ValidityDays;
         p.Price = req.Price; p.TaxPercent = req.TaxPercent; p.IsTaxInclusive = req.IsTaxInclusive; p.IsActive = req.IsActive;
+        await _db.SubscriptionPackageServices.Where(s => s.PackageId == id).ExecuteDeleteAsync(ct);
+        p.Services.Clear();
+        if (req.Services != null)
+            foreach (var s in req.Services)
+                p.Services.Add(MapService(s));
         await _db.SaveChangesAsync(ct);
-        return new PackageListItem(p.Id, p.Name, p.ValidityDays, p.Price, p.TaxPercent, p.IsTaxInclusive, p.IsActive);
+        return ToListItem(p);
     }
+
+    private static SubscriptionPackageService MapService(PackageServiceItem s) => new()
+    {
+        ServiceName = s.ServiceName,
+        Discount = s.Discount,
+        DiscountType = Enum.TryParse<DiscountType>(s.DiscountType, true, out var dt) ? dt : DiscountType.Percentage,
+        DaysOrSessions = s.DaysOrSessions,
+        BoardingType = s.BoardingType,
+        SkuCategory = s.SkuCategory,
+        SkuSubCategory = s.SkuSubCategory,
+        SkuId = s.SkuId,
+    };
+
+    private static PackageListItem ToListItem(SubscriptionPackage p) => new(
+        p.Id, p.Name, p.ValidityDays, p.Price, p.TaxPercent, p.IsTaxInclusive, p.IsActive,
+        p.Services.Select(s => new PackageServiceItem(s.ServiceName, s.Discount, s.DiscountType.ToString(),
+            s.DaysOrSessions, s.BoardingType, s.SkuCategory, s.SkuSubCategory, s.SkuId)).ToList());
 
     public async Task<bool> DeletePackageAsync(Guid id, CancellationToken ct = default)
     {
         if (_user.TenantId is null) return false;
         var p = await _db.SubscriptionPackages.FirstOrDefaultAsync(x => x.Id == id && x.TenantId == _user.TenantId, ct);
         if (p is null) return false;
-        // Only *live* issuances block deletion — cancelled/expired ones shouldn't keep a package undeletable.
         var inUse = await _db.IssuedSubscriptions.AnyAsync(i => i.PackageId == id && i.TenantId == _user.TenantId
             && i.Status != IssuedSubscriptionStatus.Cancelled && i.Status != IssuedSubscriptionStatus.Expired, ct);
         if (inUse)
-            throw AppException.Conflict($"Cannot delete “{p.Name}” — it is issued to one or more active customers. Cancel those first, or mark the package inactive.");
-        var services = await _db.SubscriptionPackageServices.Where(s => s.PackageId == id).ToListAsync(ct);
-        _db.SubscriptionPackageServices.RemoveRange(services);
+            throw AppException.Conflict($"Cannot delete \"{p.Name}\" — it is issued to one or more active customers. Cancel those first, or mark the package inactive.");
+        await _db.SubscriptionPackageServices.Where(s => s.PackageId == id).ExecuteDeleteAsync(ct);
         _db.SubscriptionPackages.Remove(p);
         await _db.SaveChangesAsync(ct);
         return true;
@@ -84,7 +109,7 @@ public class SubscriptionService : ISubscriptionService
             .Select(i => new IssuedListItem(
                 i.Id, i.Package!.Name, i.PetParentId, i.PetParent!.Name, i.PetParent!.Phone,
                 i.IssuedOn, i.ValidUntil, i.RemainingSessions, i.TotalSessions,
-                i.Status, i.PaymentStatus, i.AmountPaid, i.AmountDue))
+                i.Status, i.PaymentStatus, i.AmountPaid, i.AmountDue, i.BalanceUsed))
             .ToListAsync(ct);
         return new PagedResult<IssuedListItem>(items, total, p, sz);
     }
@@ -102,7 +127,7 @@ public class SubscriptionService : ISubscriptionService
                 new Dictionary<string, string[]> { ["petParentId"] = new[] { "Pet parent not found in this business." } });
         if (req.AmountPaid > pkg.Price + 0.01m)
             throw AppException.Validation("Amount paid exceeds package price",
-                new Dictionary<string, string[]> { ["amountPaid"] = new[] { $"Amount paid ₹{req.AmountPaid:F2} > price ₹{pkg.Price:F2}." } });
+                new Dictionary<string, string[]> { ["amountPaid"] = new[] { $"Amount paid Rs.{req.AmountPaid:F2} > price Rs.{pkg.Price:F2}." } });
 
         var issued = new IssuedSubscription
         {
@@ -120,7 +145,7 @@ public class SubscriptionService : ISubscriptionService
         await _db.SaveChangesAsync(ct);
         return new IssuedListItem(issued.Id, pkg.Name, parent.Id, parent.Name, parent.Phone,
             issued.IssuedOn, issued.ValidUntil, issued.RemainingSessions, issued.TotalSessions,
-            issued.Status, issued.PaymentStatus, issued.AmountPaid, issued.AmountDue);
+            issued.Status, issued.PaymentStatus, issued.AmountPaid, issued.AmountDue, issued.BalanceUsed);
     }
 
     public async Task<bool> FreezeAsync(Guid id, CancellationToken ct = default)
@@ -152,7 +177,6 @@ public class SubscriptionService : ISubscriptionService
         return true;
     }
 
-    // ---- Payments against a subscription's Due (G2) ----
     public async Task<IssuedSubscriptionDetail?> GetIssuedAsync(Guid id, CancellationToken ct = default)
     {
         if (_user.TenantId is null) return null;
@@ -166,7 +190,7 @@ public class SubscriptionService : ISubscriptionService
             .Select(p => new PaymentDto(p.Id, p.PaymentTime, p.Amount, p.Mode, p.Source, p.TransactionId, p.Type, p.Status, p.Notes))
             .ToListAsync(ct);
         return new IssuedSubscriptionDetail(s.Id, s.Package!.Name, s.PetParentId, s.PetParent!.Name, s.PetParent.Phone,
-            s.IssuedOn, s.ValidUntil, s.RemainingSessions, s.TotalSessions, s.Status, s.PaymentStatus, s.AmountPaid, s.AmountDue, payments);
+            s.IssuedOn, s.ValidUntil, s.RemainingSessions, s.TotalSessions, s.Status, s.PaymentStatus, s.AmountPaid, s.AmountDue, payments, s.BalanceUsed);
     }
 
     public async Task<PaymentDto?> RecordPaymentAsync(Guid issuedId, RecordSubscriptionPaymentRequest req, CancellationToken ct = default)
@@ -181,7 +205,7 @@ public class SubscriptionService : ISubscriptionService
                 new Dictionary<string, string[]> { ["amount"] = new[] { "Payment amount must be greater than zero." } });
         if (req.Status == PaymentRecordStatus.Success && req.Amount > s.AmountDue + 0.01m)
             throw AppException.Validation("Payment exceeds amount due",
-                new Dictionary<string, string[]> { ["amount"] = new[] { $"Payment ₹{req.Amount:F2} exceeds amount due ₹{s.AmountDue:F2}." } });
+                new Dictionary<string, string[]> { ["amount"] = new[] { $"Payment Rs.{req.Amount:F2} exceeds amount due Rs.{s.AmountDue:F2}." } });
 
         var payment = new Payment
         {
@@ -218,5 +242,22 @@ public class SubscriptionService : ISubscriptionService
         _db.Payments.Remove(p);
         await _db.SaveChangesAsync(ct);
         return true;
+    }
+
+    public async Task<ActiveSubscriptionSummary?> GetActiveByClientAsync(Guid petParentId, CancellationToken ct = default)
+    {
+        if (_user.TenantId is null) return null;
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var sub = await _db.IssuedSubscriptions.AsNoTracking()
+            .Include(s => s.Package)
+            .Where(s => s.TenantId == _user.TenantId && s.PetParentId == petParentId
+                && s.Status == IssuedSubscriptionStatus.Active && s.ValidUntil >= today)
+            .OrderByDescending(s => s.IssuedOn)
+            .FirstOrDefaultAsync(ct);
+        if (sub is null) return null;
+        var remaining = sub.AmountPaid - sub.BalanceUsed;
+        return new ActiveSubscriptionSummary(
+            sub.Id, sub.Package!.Name, sub.AmountPaid, sub.BalanceUsed, Math.Max(0, remaining),
+            sub.RemainingSessions, sub.TotalSessions, sub.ValidUntil, sub.Status.ToString());
     }
 }

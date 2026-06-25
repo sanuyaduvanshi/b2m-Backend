@@ -93,7 +93,8 @@ public record CreateBookingRequest(
     string? AdditionalInstruction,
     List<CreateBookingServiceLine> Services,
     string? GuestName = null,
-    string? GuestPhone = null
+    string? GuestPhone = null,
+    Guid? UseSubscriptionId = null
 );
 
 public record CreateBookingServiceLine(

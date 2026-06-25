@@ -15,15 +15,29 @@ public record IssuedSubscriptionDetail(
     Guid Id, string PackageName, Guid PetParentId, string ParentName, string Phone,
     DateOnly IssuedOn, DateOnly ValidUntil, int RemainingSessions, int TotalSessions,
     IssuedSubscriptionStatus Status, IssuedPaymentStatus PaymentStatus, decimal AmountPaid, decimal AmountDue,
-    IReadOnlyList<PaymentDto> Payments);
+    IReadOnlyList<PaymentDto> Payments, decimal BalanceUsed = 0);
 
-public record PackageListItem(Guid Id, string Name, int ValidityDays, decimal Price, decimal TaxPercent, bool IsTaxInclusive, bool IsActive);
-public record CreateOrUpdatePackageRequest(string Name, string? Description, int ValidityDays, decimal Price, decimal TaxPercent, bool IsTaxInclusive, bool IsActive);
+public record PackageServiceItem(
+    string ServiceName, decimal Discount, string DiscountType,
+    int? DaysOrSessions, string? BoardingType, string? SkuCategory, string? SkuSubCategory, Guid? SkuId);
+
+public record PackageListItem(
+    Guid Id, string Name, int ValidityDays, decimal Price, decimal TaxPercent, bool IsTaxInclusive, bool IsActive,
+    IReadOnlyList<PackageServiceItem>? Services = null);
+
+public record CreateOrUpdatePackageRequest(
+    string Name, string? Description, int ValidityDays, decimal Price, decimal TaxPercent, bool IsTaxInclusive, bool IsActive,
+    List<PackageServiceItem>? Services = null);
+
+public record ActiveSubscriptionSummary(
+    Guid Id, string PackageName, decimal PackagePrice, decimal BalanceUsed, decimal RemainingBalance,
+    int RemainingSessions, int TotalSessions, DateOnly ValidUntil, string Status);
 
 public record IssuedListItem(
     Guid Id, string PackageName, Guid PetParentId, string ParentName, string Phone,
     DateOnly IssuedOn, DateOnly ValidUntil, int RemainingSessions, int TotalSessions,
-    IssuedSubscriptionStatus Status, IssuedPaymentStatus PaymentStatus, decimal AmountPaid, decimal AmountDue
+    IssuedSubscriptionStatus Status, IssuedPaymentStatus PaymentStatus, decimal AmountPaid, decimal AmountDue,
+    decimal BalanceUsed = 0
 );
 
 public record IssueSubscriptionRequest(Guid PackageId, Guid PetParentId, int TotalSessions, DateOnly? IssuedOn, decimal AmountPaid);
@@ -43,4 +57,6 @@ public interface ISubscriptionService
     Task<IssuedSubscriptionDetail?> GetIssuedAsync(Guid id, CancellationToken ct = default);
     Task<PaymentDto?> RecordPaymentAsync(Guid issuedId, RecordSubscriptionPaymentRequest req, CancellationToken ct = default);
     Task<bool> DeletePaymentAsync(Guid issuedId, Guid paymentId, CancellationToken ct = default);
+
+    Task<ActiveSubscriptionSummary?> GetActiveByClientAsync(Guid petParentId, CancellationToken ct = default);
 }

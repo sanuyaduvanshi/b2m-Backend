@@ -6,6 +6,7 @@ using Pettle.Application.Common.Errors;
 using Pettle.Domain.Bookings;
 using Pettle.Domain.Inventory;
 using Pettle.Domain.Invoices;
+using Pettle.Domain.Subscriptions;
 using Pettle.Infrastructure.Persistence;
 
 namespace Pettle.Infrastructure.Bookings;
@@ -319,6 +320,35 @@ public class BookingServiceImpl : IBookingService
 
         _db.Bookings.Add(b);
         _db.Invoices.Add(invoice);
+
+        // SUB-4/5: Auto-debit from subscription if client has an active subscription
+        if (req.UseSubscriptionId.HasValue && req.PetParentId.HasValue)
+        {
+            var sub = await _db.IssuedSubscriptions
+                .FirstOrDefaultAsync(s => s.Id == req.UseSubscriptionId.Value
+                    && s.TenantId == _user.TenantId && s.PetParentId == req.PetParentId.Value
+                    && s.Status == IssuedSubscriptionStatus.Active, ct);
+            if (sub != null)
+            {
+                sub.BalanceUsed += invoice.Revenue;
+                if (sub.RemainingSessions > 0) sub.RemainingSessions--;
+                // Auto-pay the booking invoice from subscription balance
+                invoice.Paid = invoice.Revenue;
+                invoice.Due = 0;
+                invoice.PaymentStatus = InvoicePaymentStatus.Paid;
+                _db.Payments.Add(new Payment
+                {
+                    InvoiceId = invoice.Id,
+                    PaymentTime = DateTimeOffset.UtcNow,
+                    Amount = invoice.Revenue,
+                    Mode = PaymentMode.Other,
+                    Source = PaymentSource.WalkIn,
+                    Type = PaymentType.Balance,
+                    Status = PaymentRecordStatus.Success,
+                    Notes = $"Auto-debited from subscription: {sub.Id}",
+                });
+            }
+        }
 
         // Deduct inventory for service lines that have an associated SKU
         var skuIds = req.Services

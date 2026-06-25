@@ -45,6 +45,7 @@ public class IssuedSubscription : SoftDeletableTenantEntity
     public IssuedPaymentStatus PaymentStatus { get; set; } = IssuedPaymentStatus.Pending;
     public decimal AmountPaid { get; set; }
     public decimal AmountDue { get; set; }
+    public decimal BalanceUsed { get; set; }
     public Guid? FrozenUntilTransferredTo { get; set; }
     public DateTimeOffset? FrozenAt { get; set; }
 }

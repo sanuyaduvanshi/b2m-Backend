@@ -76,4 +76,12 @@ public class SubscriptionsController : ControllerBase
     [HasPermission(Modules.Subscriptions, Actions.Edit)]
     public async Task<IActionResult> DeletePayment(Guid id, Guid paymentId, CancellationToken ct)
         => await _svc.DeletePaymentAsync(id, paymentId, ct) ? NoContent() : NotFound();
+
+    [HttpGet("issued/active-for-client/{petParentId:guid}")]
+    [HasPermission(Modules.Subscriptions, Actions.View)]
+    public async Task<IActionResult> ActiveForClient(Guid petParentId, CancellationToken ct)
+    {
+        var r = await _svc.GetActiveByClientAsync(petParentId, ct);
+        return r is null ? NoContent() : Ok(r);
+    }
 }
