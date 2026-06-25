@@ -66,7 +66,7 @@ public class InvoiceService : IInvoiceService
             i.BaseAmount, i.AddOnAmount, i.DiscountAmount,
             i.IgstAmount, i.CgstAmount, i.SgstAmount,
             i.Revenue, i.Paid, i.Due, i.PaymentStatus,
-            i.Lines.Select(l => new InvoiceLineDto(l.Id, l.BillItemName, l.Category, l.Quantity, l.UnitAmount, l.Discount, l.Subtotal, l.Total)).ToList(),
+            i.Lines.Select(l => new InvoiceLineDto(l.Id, l.BillItemName, l.Category, l.Description, l.Quantity, l.UnitAmount, l.Discount, l.Subtotal, l.Total)).ToList(),
             i.Payments.OrderByDescending(p => p.PaymentTime).Select(p => new PaymentDto(p.Id, p.PaymentTime, p.Amount, p.Mode, p.Source, p.TransactionId, p.Type, p.Status, p.Notes)).ToList()
         );
     }
@@ -93,6 +93,14 @@ public class InvoiceService : IInvoiceService
             PaymentStatus = InvoicePaymentStatus.Pending,
         };
 
+        // Batch-load SKU descriptions for lines that reference a SKU
+        var skuIds = req.Lines.Where(l => l.SkuId.HasValue).Select(l => l.SkuId!.Value).Distinct().ToList();
+        var skuDescriptions = skuIds.Count > 0
+            ? await _db.Skus.Where(s => skuIds.Contains(s.Id) && s.TenantId == _user.TenantId)
+                            .Select(s => new { s.Id, s.Description })
+                            .ToDictionaryAsync(s => s.Id, s => s.Description, ct)
+            : new Dictionary<Guid, string?>();
+
         // Retail rates are GST-inclusive: extract tax out of the net (mirrors the on-screen totals).
         decimal sumGross = 0, sumLineDiscount = 0, sumTaxable = 0, sumTax = 0;
         foreach (var line in req.Lines)
@@ -112,6 +120,7 @@ public class InvoiceService : IInvoiceService
             {
                 BillItemName = line.ItemName,
                 SkuName = line.SkuId.HasValue ? line.ItemName : null,
+                Description = line.SkuId.HasValue && skuDescriptions.TryGetValue(line.SkuId.Value, out var desc) ? desc : null,
                 Quantity = line.Quantity,
                 UnitAmount = line.UnitAmount,
                 Discount = R(disc1 + disc2),

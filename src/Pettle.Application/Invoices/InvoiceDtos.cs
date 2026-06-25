@@ -25,6 +25,7 @@ public record InvoiceLineDto(
     Guid Id,
     string BillItemName,
     string? Category,
+    string? Description,
     decimal Quantity,
     decimal UnitAmount,
     decimal Discount,
