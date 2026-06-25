@@ -71,3 +71,31 @@ public record RecordPoPaymentRequest(decimal Amount, string Mode, string? Notes)
 
 public record ReceivePoRequest(List<ReceivePoLine> Lines);
 public record ReceivePoLine(Guid LineId, decimal ReceivedQuantity);
+
+// --- Manual stock adjustment ---
+public enum ManualAdjustmentType { Procurement = 0, SelfConsumption = 1, Damage = 2, Adjustment = 3 }
+
+public record CreateStockAdjustmentRequest(
+    ManualAdjustmentType AdjustmentType,
+    string? Notes,
+    List<StockAdjustmentLine> Lines
+);
+
+public record StockAdjustmentLine(
+    Guid SkuId,
+    int Quantity,
+    decimal? UnitPrice,
+    string? LineNote
+);
+
+public record StockMovementDto(
+    Guid Id,
+    string SkuName,
+    string SkuCode,
+    string Reason,
+    int QuantityChange,
+    int StockAfter,
+    DateTimeOffset CreatedAt,
+    string? Note
+);
+

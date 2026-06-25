@@ -458,6 +458,72 @@ public class InventoryService : IInventoryService
         return true;
     }
 
+    public async Task<bool> CreateStockAdjustmentAsync(CreateStockAdjustmentRequest req, CancellationToken ct = default)
+    {
+        if (_user.TenantId is null) return false;
+        if (req.Lines.Count == 0) return false;
+
+        var skuIds = req.Lines.Select(l => l.SkuId).Distinct().ToList();
+        var skus = await _db.Skus
+            .Where(s => s.TenantId == _user.TenantId && skuIds.Contains(s.Id))
+            .ToListAsync(ct);
+
+        var reason = req.AdjustmentType switch
+        {
+            ManualAdjustmentType.Procurement => StockMovementReason.Procurement,
+            ManualAdjustmentType.SelfConsumption => StockMovementReason.SelfConsumption,
+            ManualAdjustmentType.Damage => StockMovementReason.Damage,
+            _ => StockMovementReason.Adjustment,
+        };
+
+        // Procurement adds stock; all others deduct
+        bool isIncoming = req.AdjustmentType == ManualAdjustmentType.Procurement;
+
+        foreach (var line in req.Lines)
+        {
+            var sku = skus.FirstOrDefault(s => s.Id == line.SkuId);
+            if (sku is null) continue;
+
+            var delta = isIncoming ? line.Quantity : -line.Quantity;
+            sku.StockOnHand = Math.Max(0, sku.StockOnHand + delta);
+
+            _db.StockMovements.Add(new StockMovement
+            {
+                TenantId = _user.TenantId.Value,
+                SkuId = sku.Id,
+                Reason = reason,
+                QuantityChange = delta,
+                StockAfter = sku.StockOnHand,
+                Note = string.IsNullOrWhiteSpace(line.LineNote)
+                    ? req.Notes
+                    : (string.IsNullOrWhiteSpace(req.Notes) ? line.LineNote : $"{req.Notes} | {line.LineNote}"),
+            });
+        }
+
+        await _db.SaveChangesAsync(ct);
+        return true;
+    }
+
+    public async Task<PagedResult<StockMovementDto>> ListMovementsAsync(Guid skuId, int page, int pageSize, CancellationToken ct = default)
+    {
+        if (_user.TenantId is null) return Empty<StockMovementDto>(page, pageSize);
+        page = Math.Max(page, 1); pageSize = Math.Clamp(pageSize, 1, 200);
+
+        var q = _db.StockMovements
+            .Include(m => m.Sku)
+            .Where(m => m.TenantId == _user.TenantId && m.SkuId == skuId)
+            .OrderByDescending(m => m.CreatedAt);
+
+        var total = await q.CountAsync(ct);
+        var items = await q.Skip((page - 1) * pageSize).Take(pageSize)
+            .Select(m => new StockMovementDto(
+                m.Id, m.Sku!.Name, m.Sku.Code, m.Reason.ToString(),
+                m.QuantityChange, m.StockAfter, m.CreatedAt, m.Note))
+            .ToListAsync(ct);
+
+        return new PagedResult<StockMovementDto>(items, total, page, pageSize);
+    }
+
     private async Task<string> NextPoNumberAsync(CancellationToken ct)
     {
         var year = DateTime.UtcNow.Year;

@@ -131,4 +131,4 @@ public class StockMovement : TenantEntity
     public string? Note { get; set; }
 }
 
-public enum StockMovementReason { Sale = 0, PoReceipt = 1, Adjustment = 2, Return = 3, Wastage = 4, Transfer = 5 }
+public enum StockMovementReason { Sale = 0, PoReceipt = 1, Adjustment = 2, Return = 3, Wastage = 4, Transfer = 5, SelfConsumption = 6, Procurement = 7, Damage = 8 }

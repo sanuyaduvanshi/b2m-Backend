@@ -121,4 +121,14 @@ public class InventoryController : ControllerBase
     [HasPermission(Modules.Inventory, Actions.Delete)]
     public async Task<IActionResult> DeletePo(Guid id, CancellationToken ct)
         => await _svc.DeletePoAsync(id, ct) ? NoContent() : NotFound();
+
+    [HttpPost("adjustments")]
+    [HasPermission(Modules.Inventory, Actions.Edit)]
+    public async Task<IActionResult> CreateAdjustment([FromBody] CreateStockAdjustmentRequest req, CancellationToken ct)
+        => await _svc.CreateStockAdjustmentAsync(req, ct) ? NoContent() : BadRequest();
+
+    [HttpGet("skus/{id:guid}/movements")]
+    [HasPermission(Modules.Inventory, Actions.View)]
+    public async Task<IActionResult> SkuMovements(Guid id, [FromQuery] int page = 1, [FromQuery] int pageSize = 30, CancellationToken ct = default)
+        => Ok(await _svc.ListMovementsAsync(id, page, pageSize, ct));
 }
