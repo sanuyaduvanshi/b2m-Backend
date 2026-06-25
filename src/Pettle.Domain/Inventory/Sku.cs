@@ -10,6 +10,11 @@ public class SkuCategory : TenantEntity
     public ICollection<SkuCategory> Children { get; set; } = new List<SkuCategory>();
 }
 
+public class SkuBrand : TenantEntity
+{
+    public string Name { get; set; } = string.Empty;
+}
+
 public class Sku : SoftDeletableTenantEntity
 {
     public string? LegacySkuId { get; set; }
@@ -18,6 +23,8 @@ public class Sku : SoftDeletableTenantEntity
     public string? Description { get; set; }
     public Guid? CategoryId { get; set; }
     public SkuCategory? Category { get; set; }
+    public Guid? BrandId { get; set; }
+    public SkuBrand? Brand { get; set; }
     public string Unit { get; set; } = "ea";
     public decimal MrpPrice { get; set; }
     public decimal SellingPrice { get; set; }

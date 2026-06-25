@@ -18,7 +18,7 @@ public class InventoryService : IInventoryService
     public async Task<PagedResult<SkuListItem>> ListSkusAsync(string? search, bool? lowStock, bool? inAppStore, int page, int pageSize, CancellationToken ct = default)
     {
         if (_user.TenantId is null) return Empty<SkuListItem>(page, pageSize);
-        var q = _db.Skus.AsNoTracking().Include(s => s.Category).Where(s => s.TenantId == _user.TenantId);
+        var q = _db.Skus.AsNoTracking().Include(s => s.Category).Include(s => s.Brand).Where(s => s.TenantId == _user.TenantId);
         if (!string.IsNullOrWhiteSpace(search))
         {
             var s = search.Trim().ToLower();
@@ -30,20 +30,22 @@ public class InventoryService : IInventoryService
         var total = await q.CountAsync(ct);
         var p = Math.Max(page, 1); var sz = Math.Clamp(pageSize, 1, 200);
         var items = await q.OrderBy(x => x.Name).Skip((p - 1) * sz).Take(sz)
-            .Select(x => new SkuListItem(x.Id, x.Code, x.Name, x.Category!.Name, x.Unit, x.SellingPrice, x.CostPrice, x.TaxPercent,
+            .Select(x => new SkuListItem(x.Id, x.Code, x.Name, x.Category != null ? x.Category.Name : null, x.Unit, x.SellingPrice, x.CostPrice, x.TaxPercent,
                 x.StockOnHand, x.ReorderLevel, x.NearestExpiry, x.IsActive, x.IsListedInApp, x.AppImageUrl,
-                x.Description, x.CategoryId, x.MrpPrice, x.HsnSacCode, x.TrackExpiry)).ToListAsync(ct);
+                x.Description, x.CategoryId, x.MrpPrice, x.HsnSacCode, x.TrackExpiry,
+                x.BrandId, x.Brand != null ? x.Brand.Name : null)).ToListAsync(ct);
         return new PagedResult<SkuListItem>(items, total, p, sz);
     }
 
     public async Task<SkuListItem?> GetSkuAsync(Guid id, CancellationToken ct = default)
     {
         if (_user.TenantId is null) return null;
-        return await _db.Skus.AsNoTracking().Include(s => s.Category)
+        return await _db.Skus.AsNoTracking().Include(s => s.Category).Include(s => s.Brand)
             .Where(s => s.Id == id && s.TenantId == _user.TenantId)
-            .Select(x => new SkuListItem(x.Id, x.Code, x.Name, x.Category!.Name, x.Unit, x.SellingPrice, x.CostPrice, x.TaxPercent,
+            .Select(x => new SkuListItem(x.Id, x.Code, x.Name, x.Category != null ? x.Category.Name : null, x.Unit, x.SellingPrice, x.CostPrice, x.TaxPercent,
                 x.StockOnHand, x.ReorderLevel, x.NearestExpiry, x.IsActive, x.IsListedInApp, x.AppImageUrl,
-                x.Description, x.CategoryId, x.MrpPrice, x.HsnSacCode, x.TrackExpiry))
+                x.Description, x.CategoryId, x.MrpPrice, x.HsnSacCode, x.TrackExpiry,
+                x.BrandId, x.Brand != null ? x.Brand.Name : null))
             .FirstOrDefaultAsync(ct);
     }
 
@@ -69,6 +71,7 @@ public class InventoryService : IInventoryService
         var sku = new Sku
         {
             Code = code, Name = req.Name.Trim(), Description = req.Description, CategoryId = req.CategoryId,
+            BrandId = req.BrandId,
             Unit = req.Unit, MrpPrice = req.MrpPrice, SellingPrice = req.SellingPrice, CostPrice = req.CostPrice,
             TaxPercent = req.TaxPercent, HsnSacCode = req.HsnSacCode, ReorderLevel = req.ReorderLevel,
             TrackExpiry = req.TrackExpiry, IsActive = req.IsActive,
@@ -84,7 +87,8 @@ public class InventoryService : IInventoryService
         if (_user.TenantId is null) return null;
         var sku = await _db.Skus.FirstOrDefaultAsync(x => x.Id == id && x.TenantId == _user.TenantId, ct);
         if (sku is null) return null;
-        sku.Code = req.Code; sku.Name = req.Name; sku.Description = req.Description; sku.CategoryId = req.CategoryId;
+        sku.Code = req.Code; sku.Name = req.Name; sku.Description = req.Description;
+        sku.CategoryId = req.CategoryId; sku.BrandId = req.BrandId;
         sku.Unit = req.Unit; sku.MrpPrice = req.MrpPrice; sku.SellingPrice = req.SellingPrice; sku.CostPrice = req.CostPrice;
         sku.TaxPercent = req.TaxPercent; sku.HsnSacCode = req.HsnSacCode; sku.ReorderLevel = req.ReorderLevel;
         sku.TrackExpiry = req.TrackExpiry; sku.IsActive = req.IsActive;
@@ -454,6 +458,53 @@ public class InventoryService : IInventoryService
             .ExecuteUpdateAsync(s => s.SetProperty(x => x.CategoryId, (Guid?)null), ct);
 
         _db.SkuCategories.Remove(cat);
+        await _db.SaveChangesAsync(ct);
+        return true;
+    }
+
+    public async Task<IReadOnlyList<SkuBrandDto>> ListBrandsAsync(CancellationToken ct = default)
+    {
+        if (_user.TenantId is null) return Array.Empty<SkuBrandDto>();
+        return await _db.SkuBrands
+            .Where(b => b.TenantId == _user.TenantId)
+            .OrderBy(b => b.Name)
+            .Select(b => new SkuBrandDto(b.Id, b.Name))
+            .ToListAsync(ct);
+    }
+
+    public async Task<SkuBrandDto> CreateBrandAsync(CreateOrUpdateBrandRequest req, CancellationToken ct = default)
+    {
+        if (_user.TenantId is null) throw AppException.Forbidden();
+        var name = req.Name.Trim();
+        var dup = await _db.SkuBrands.AnyAsync(b => b.TenantId == _user.TenantId && b.Name == name, ct);
+        if (dup) throw AppException.Conflict($"Brand '{name}' already exists.");
+        var brand = new SkuBrand { TenantId = _user.TenantId.Value, Name = name };
+        _db.SkuBrands.Add(brand);
+        await _db.SaveChangesAsync(ct);
+        return new SkuBrandDto(brand.Id, brand.Name);
+    }
+
+    public async Task<SkuBrandDto?> UpdateBrandAsync(Guid id, CreateOrUpdateBrandRequest req, CancellationToken ct = default)
+    {
+        if (_user.TenantId is null) return null;
+        var brand = await _db.SkuBrands.FirstOrDefaultAsync(b => b.Id == id && b.TenantId == _user.TenantId, ct);
+        if (brand is null) return null;
+        brand.Name = req.Name.Trim();
+        await _db.SaveChangesAsync(ct);
+        return new SkuBrandDto(brand.Id, brand.Name);
+    }
+
+    public async Task<bool> DeleteBrandAsync(Guid id, CancellationToken ct = default)
+    {
+        if (_user.TenantId is null) return false;
+        var brand = await _db.SkuBrands.FirstOrDefaultAsync(b => b.Id == id && b.TenantId == _user.TenantId, ct);
+        if (brand is null) return false;
+        var inUse = await _db.Skus.AnyAsync(s => s.TenantId == _user.TenantId && s.BrandId == id, ct);
+        if (inUse) throw AppException.BusinessRule("Cannot delete a brand that has SKUs assigned to it.");
+        await _db.Skus.IgnoreQueryFilters()
+            .Where(s => s.TenantId == _user.TenantId && s.BrandId == id)
+            .ExecuteUpdateAsync(s => s.SetProperty(x => x.BrandId, (Guid?)null), ct);
+        _db.SkuBrands.Remove(brand);
         await _db.SaveChangesAsync(ct);
         return true;
     }

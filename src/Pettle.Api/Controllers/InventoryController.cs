@@ -131,4 +131,27 @@ public class InventoryController : ControllerBase
     [HasPermission(Modules.Inventory, Actions.View)]
     public async Task<IActionResult> SkuMovements(Guid id, [FromQuery] int page = 1, [FromQuery] int pageSize = 30, CancellationToken ct = default)
         => Ok(await _svc.ListMovementsAsync(id, page, pageSize, ct));
+
+    [HttpGet("brands")]
+    [HasPermission(Modules.Inventory, Actions.View)]
+    public async Task<IActionResult> Brands(CancellationToken ct)
+        => Ok(await _svc.ListBrandsAsync(ct));
+
+    [HttpPost("brands")]
+    [HasPermission(Modules.Inventory, Actions.Edit)]
+    public async Task<IActionResult> CreateBrand([FromBody] CreateOrUpdateBrandRequest req, CancellationToken ct)
+        => Ok(await _svc.CreateBrandAsync(req, ct));
+
+    [HttpPut("brands/{id:guid}")]
+    [HasPermission(Modules.Inventory, Actions.Edit)]
+    public async Task<IActionResult> UpdateBrand(Guid id, [FromBody] CreateOrUpdateBrandRequest req, CancellationToken ct)
+    {
+        var result = await _svc.UpdateBrandAsync(id, req, ct);
+        return result is null ? NotFound() : Ok(result);
+    }
+
+    [HttpDelete("brands/{id:guid}")]
+    [HasPermission(Modules.Inventory, Actions.Delete)]
+    public async Task<IActionResult> DeleteBrand(Guid id, CancellationToken ct)
+        => await _svc.DeleteBrandAsync(id, ct) ? NoContent() : NotFound();
 }

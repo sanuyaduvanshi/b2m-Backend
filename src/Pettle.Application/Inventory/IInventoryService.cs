@@ -16,6 +16,11 @@ public interface IInventoryService
     Task<SkuCategoryDto?> UpdateCategoryAsync(Guid id, CreateOrUpdateCategoryRequest req, CancellationToken ct = default);
     Task<bool> DeleteCategoryAsync(Guid id, CancellationToken ct = default);
 
+    Task<IReadOnlyList<SkuBrandDto>> ListBrandsAsync(CancellationToken ct = default);
+    Task<SkuBrandDto> CreateBrandAsync(CreateOrUpdateBrandRequest req, CancellationToken ct = default);
+    Task<SkuBrandDto?> UpdateBrandAsync(Guid id, CreateOrUpdateBrandRequest req, CancellationToken ct = default);
+    Task<bool> DeleteBrandAsync(Guid id, CancellationToken ct = default);
+
     Task<PagedResult<VendorListItem>> ListVendorsAsync(string? search, int page, int pageSize, CancellationToken ct = default);
     Task<VendorListItem> CreateVendorAsync(CreateOrUpdateVendorRequest req, CancellationToken ct = default);
     Task<VendorListItem?> UpdateVendorAsync(Guid id, CreateOrUpdateVendorRequest req, CancellationToken ct = default);

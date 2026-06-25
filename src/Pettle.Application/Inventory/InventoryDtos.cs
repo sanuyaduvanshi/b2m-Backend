@@ -9,20 +9,24 @@ public record SkuListItem(
     int StockOnHand, int ReorderLevel, DateOnly? NearestExpiry, bool IsActive,
     bool IsListedInApp, string? AppImageUrl,
     string? Description = null, Guid? CategoryId = null, decimal MrpPrice = 0,
-    string? HsnSacCode = null, bool TrackExpiry = false
+    string? HsnSacCode = null, bool TrackExpiry = false,
+    Guid? BrandId = null, string? BrandName = null
 );
 
 public record CreateOrUpdateSkuRequest(
     string Code, string Name, string? Description, Guid? CategoryId, string Unit,
     decimal MrpPrice, decimal SellingPrice, decimal CostPrice, decimal TaxPercent,
     string? HsnSacCode, int ReorderLevel, bool TrackExpiry, bool IsActive,
-    string? ImageUrl = null
+    string? ImageUrl = null, Guid? BrandId = null
 );
 
 public record UpdateSkuListingRequest(bool IsListedInApp, string? AppImageUrl);
 
 public record SkuCategoryDto(Guid Id, string Name, Guid? ParentId, string? ParentName, int SkuCount);
 public record CreateOrUpdateCategoryRequest(string Name, Guid? ParentId);
+
+public record SkuBrandDto(Guid Id, string Name);
+public record CreateOrUpdateBrandRequest(string Name);
 
 public record VendorListItem(Guid Id, string Name, string? Phone, string? Email, string? Gstin, int CreditDays, decimal CreditLimit, bool IsActive, string? Address = null, string? ContactPerson = null);
 public record CreateOrUpdateVendorRequest(string Name, string? ContactPerson, string? Phone, string? Email, string? Address, string? Gstin, int CreditDays, decimal CreditLimit, bool IsActive);
