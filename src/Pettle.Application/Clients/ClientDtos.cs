@@ -51,7 +51,8 @@ public record PetSummary(
     DateOnly? Birthday,
     BreedSize? BreedSize,
     decimal? WeightKg,
-    string? PhotoUrl
+    string? PhotoUrl,
+    bool BirthdayReminderEnabled = true
 );
 
 public record CreatePetParentRequest(
@@ -89,7 +90,8 @@ public record CreatePetRequest(
     PetGender? Gender,
     DateOnly? Birthday,
     BreedSize? BreedSize,
-    decimal? WeightKg
+    decimal? WeightKg,
+    bool BirthdayReminderEnabled = true
 );
 
 public record UpdatePetRequest(
@@ -99,7 +101,8 @@ public record UpdatePetRequest(
     PetGender? Gender,
     DateOnly? Birthday,
     BreedSize? BreedSize,
-    decimal? WeightKg
+    decimal? WeightKg,
+    bool BirthdayReminderEnabled = true
 );
 
 public record ClientListQuery(

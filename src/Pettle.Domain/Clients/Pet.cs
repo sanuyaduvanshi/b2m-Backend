@@ -18,6 +18,7 @@ public class Pet : SoftDeletableTenantEntity
     public decimal? WeightKg { get; set; }
     public string? PhotoUrl { get; set; }
     public bool ConsentToUsePetPhotos { get; set; }
+    public bool BirthdayReminderEnabled { get; set; } = true;
 
     public PetMedicalProfile? MedicalProfile { get; set; }
     public ICollection<PetVaccination> Vaccinations { get; set; } = new List<PetVaccination>();

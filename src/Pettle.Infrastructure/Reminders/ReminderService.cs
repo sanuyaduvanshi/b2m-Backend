@@ -157,10 +157,9 @@ public class ReminderService : IReminderService
     private async Task<IReadOnlyList<ReminderFeedItem>> BirthdaysAsync(DateOnly from, DateOnly to, CancellationToken ct)
     {
         var tid = _user.TenantId!.Value;
-        // Pet birthdays: project each pet's birthday into the requested year and check if it falls in range.
-        // Multi-year range fallback: iterate each year covered by [from, to].
+        // Only pets with birthday reminders enabled; reminder fires 1 day prior to birthday.
         var pets = await _db.Pets.AsNoTracking()
-            .Where(p => p.TenantId == tid && p.Birthday != null)
+            .Where(p => p.TenantId == tid && p.Birthday != null && p.BirthdayReminderEnabled)
             .Include(p => p.PetParent)
             .Select(p => new {
                 p.Id, p.Name, p.Birthday,
@@ -174,18 +173,20 @@ public class ReminderService : IReminderService
         foreach (var p in pets)
         {
             if (p.Birthday is null) continue;
-            for (int year = from.Year; year <= to.Year; year++)
+            for (int year = from.Year; year <= to.Year + 1; year++)
             {
                 DateOnly occurrence;
                 try { occurrence = new DateOnly(year, p.Birthday.Value.Month, p.Birthday.Value.Day); }
                 catch { continue; /* Feb 29 in non-leap year */ }
-                if (occurrence < from || occurrence > to) continue;
+                // Reminder fires 1 day prior to birthday
+                var reminderDate = occurrence.AddDays(-1);
+                if (reminderDate < from || reminderDate > to) continue;
                 items.Add(new ReminderFeedItem(
                     Id: $"birthday:{p.Id}:{occurrence:O}",
                     Type: "Birthday",
-                    Title: $"{p.Name}'s birthday",
+                    Title: $"{p.Name}'s birthday tomorrow!",
                     Subtitle: p.ParentName,
-                    DueDate: occurrence,
+                    DueDate: reminderDate,
                     ContactName: p.ParentName,
                     Phone: p.ParentPhone,
                     Email: p.ParentEmail,
@@ -316,6 +317,16 @@ public class ReminderService : IReminderService
             Subtitle: $"Expires · stock {s.StockOnHand} {s.Unit}",
             DueDate: s.NearestExpiry!.Value,
             ContactName: null, Phone: null, Email: null, RelatedId: s.Id)).ToList();
+    }
+
+    public async Task<bool> SetBirthdayReminderAsync(Guid petId, bool enabled, CancellationToken ct = default)
+    {
+        if (_user.TenantId is null) return false;
+        var pet = await _db.Pets.FirstOrDefaultAsync(p => p.Id == petId && p.TenantId == _user.TenantId, ct);
+        if (pet is null) return false;
+        pet.BirthdayReminderEnabled = enabled;
+        await _db.SaveChangesAsync(ct);
+        return true;
     }
 
     private async Task<IReadOnlyList<ReminderFeedItem>> LowInventoryAsync(CancellationToken ct)

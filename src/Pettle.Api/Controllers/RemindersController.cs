@@ -59,6 +59,12 @@ public class RemindersController : ControllerBase
     [HasPermission(Modules.Reminders, Actions.View)]
     public async Task<IActionResult> Calendar([FromQuery] int? year, [FromQuery] int? month, CancellationToken ct)
         => Ok(await _svc.CalendarAsync(year ?? DateTime.UtcNow.Year, month ?? DateTime.UtcNow.Month, ct));
+
+    [HttpPatch("pets/{petId:guid}/birthday-reminder")]
+    [HasPermission(Modules.Reminders, Actions.Edit)]
+    public async Task<IActionResult> ToggleBirthdayReminder(Guid petId, [FromBody] ToggleBirthdayReminderRequest req, CancellationToken ct)
+        => await _svc.SetBirthdayReminderAsync(petId, req.Enabled, ct) ? NoContent() : NotFound();
 }
 
 public record MarkSentRequest(string Via);
+public record ToggleBirthdayReminderRequest(bool Enabled);

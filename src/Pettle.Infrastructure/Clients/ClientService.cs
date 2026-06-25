@@ -173,10 +173,11 @@ public class ClientService : IClientService
             Birthday = req.Birthday,
             BreedSize = req.BreedSize,
             WeightKg = req.WeightKg,
+            BirthdayReminderEnabled = req.BirthdayReminderEnabled,
         };
         _db.Pets.Add(pet);
         await _db.SaveChangesAsync(ct);
-        return new PetSummary(pet.Id, null, pet.Name, pet.Species, pet.Breed, pet.Gender, pet.Birthday, pet.BreedSize, pet.WeightKg, pet.PhotoUrl);
+        return new PetSummary(pet.Id, null, pet.Name, pet.Species, pet.Breed, pet.Gender, pet.Birthday, pet.BreedSize, pet.WeightKg, pet.PhotoUrl, pet.BirthdayReminderEnabled);
     }
 
     public async Task<PetSummary?> UpdatePetAsync(Guid parentId, Guid petId, UpdatePetRequest req, CancellationToken ct = default)
@@ -193,8 +194,9 @@ public class ClientService : IClientService
         pet.Birthday = req.Birthday;
         pet.BreedSize = req.BreedSize;
         pet.WeightKg = req.WeightKg;
+        pet.BirthdayReminderEnabled = req.BirthdayReminderEnabled;
         await _db.SaveChangesAsync(ct);
-        return new PetSummary(pet.Id, pet.LegacyPetId, pet.Name, pet.Species, pet.Breed, pet.Gender, pet.Birthday, pet.BreedSize, pet.WeightKg, pet.PhotoUrl);
+        return new PetSummary(pet.Id, pet.LegacyPetId, pet.Name, pet.Species, pet.Breed, pet.Gender, pet.Birthday, pet.BreedSize, pet.WeightKg, pet.PhotoUrl, pet.BirthdayReminderEnabled);
     }
 
     public async Task<bool> DeletePetAsync(Guid parentId, Guid petId, CancellationToken ct = default)
@@ -224,7 +226,7 @@ public class ClientService : IClientService
         p.AddressLine1, p.AddressLine2, p.City, p.State, p.Country, p.PostalCode,
         p.OnboardingDate, p.WalletBalance, p.OutstandingBalance, p.TermsAccepted,
         p.Status, p.ArchiveReason,
-        p.Pets.Select(x => new PetSummary(x.Id, x.LegacyPetId, x.Name, x.Species, x.Breed, x.Gender, x.Birthday, x.BreedSize, x.WeightKg, x.PhotoUrl)).ToList(),
+        p.Pets.Select(x => new PetSummary(x.Id, x.LegacyPetId, x.Name, x.Species, x.Breed, x.Gender, x.Birthday, x.BreedSize, x.WeightKg, x.PhotoUrl, x.BirthdayReminderEnabled)).ToList(),
         p.Tags.Select(t => t.ClientTag?.Name ?? "").Where(s => !string.IsNullOrEmpty(s)).ToList()
     );
 }

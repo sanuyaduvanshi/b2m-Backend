@@ -50,4 +50,5 @@ public interface IReminderService
 
     Task<IReadOnlyList<ReminderFeedItem>> FeedAsync(string type, DateOnly from, DateOnly to, CancellationToken ct = default);
     Task<ReminderCalendarResponse> CalendarAsync(int year, int month, CancellationToken ct = default);
+    Task<bool> SetBirthdayReminderAsync(Guid petId, bool enabled, CancellationToken ct = default);
 }
