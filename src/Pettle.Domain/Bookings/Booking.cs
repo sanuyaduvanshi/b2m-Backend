@@ -6,8 +6,10 @@ namespace Pettle.Domain.Bookings;
 public class Booking : SoftDeletableTenantEntity
 {
     public string? LegacyBookingId { get; set; }
-    public Guid PetParentId { get; set; }
+    public Guid? PetParentId { get; set; }
     public PetParent? PetParent { get; set; }
+    public string? GuestName { get; set; }
+    public string? GuestPhone { get; set; }
 
     public DateOnly BookingDate { get; set; }
     public BookingSource Source { get; set; } = BookingSource.WalkIn;
@@ -80,8 +82,9 @@ public class BookingService : TenantEntity
     public Guid BookingId { get; set; }
     public Booking? Booking { get; set; }
     public BookingServiceType ServiceType { get; set; }
-    public Guid PetId { get; set; }
+    public Guid? PetId { get; set; }
     public Pet? Pet { get; set; }
+    public string? PetNameSnapshot { get; set; }
     public BookingStatus Status { get; set; } = BookingStatus.Upcoming;
     public string? ServiceName { get; set; }
     public decimal FinalAmount { get; set; }

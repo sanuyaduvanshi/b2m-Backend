@@ -21,7 +21,7 @@ public record BookingDetail(
     Guid Id,
     string? LegacyBookingId,
     DateOnly BookingDate,
-    Guid PetParentId,
+    Guid? PetParentId,
     string ParentName,
     string Phone,
     string? Email,
@@ -52,7 +52,7 @@ public record BookingServiceLine(
     Guid Id,
     BookingServiceType ServiceType,
     BookingStatus Status,
-    Guid PetId,
+    Guid? PetId,
     string PetName,
     string? ServiceName,
     decimal FinalAmount,
@@ -84,17 +84,19 @@ public record BookingListQuery(
 );
 
 public record CreateBookingRequest(
-    Guid PetParentId,
+    Guid? PetParentId,
     DateOnly BookingDate,
     BookingSource Source,
     string? Notes,
     string? AdditionalInstruction,
-    List<CreateBookingServiceLine> Services
+    List<CreateBookingServiceLine> Services,
+    string? GuestName = null,
+    string? GuestPhone = null
 );
 
 public record CreateBookingServiceLine(
     BookingServiceType ServiceType,
-    Guid PetId,
+    Guid? PetId,
     string ServiceName,
     decimal FinalAmount,
     DateOnly? CheckIn,
@@ -102,7 +104,8 @@ public record CreateBookingServiceLine(
     TimeOnly? StartTime,
     TimeOnly? EndTime,
     Guid? KennelId,
-    string? Notes
+    string? Notes,
+    string? PetNameOverride = null
 );
 
 public record BookingStateChangeRequest(BookingStatus NewStatus, string? Reason);

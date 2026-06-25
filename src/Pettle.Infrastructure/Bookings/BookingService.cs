@@ -100,12 +100,15 @@ public class BookingServiceImpl : IBookingService
 
         return new BookingDetail(
             b.Id, b.LegacyBookingId, b.BookingDate, b.PetParentId,
-            b.PetParent!.Name, b.PetParent!.Phone, b.PetParent.Email,
+            b.PetParent?.Name ?? b.GuestName ?? "Walk-in",
+            b.PetParent?.Phone ?? b.GuestPhone ?? "",
+            b.PetParent?.Email,
             b.Source, b.PaymentStatus, b.TotalBillingAmount, b.InvoiceNumber,
             inv?.Id, inv?.Paid ?? 0m, inv?.Due ?? 0m,
             b.Notes, b.AdditionalInstruction,
             b.Services.Select(s => new BookingServiceLine(
-                s.Id, s.ServiceType, s.Status, s.PetId, s.Pet?.Name ?? "(deleted pet)",
+                s.Id, s.ServiceType, s.Status, s.PetId,
+                s.Pet?.Name ?? s.PetNameSnapshot ?? "(walk-in)",
                 s.ServiceName, s.FinalAmount, s.Notes,
                 subByService.TryGetValue(s.Id, out var sub) ? sub : null
             )).ToList(),
@@ -192,20 +195,32 @@ public class BookingServiceImpl : IBookingService
     {
         if (_user.TenantId is null) throw AppException.Forbidden();
 
-        // Tenant ownership: pet parent must belong to current tenant
-        var parentOk = await _db.PetParents.AnyAsync(p => p.Id == req.PetParentId && p.TenantId == _user.TenantId, ct);
-        if (!parentOk) throw AppException.Validation("Invalid pet parent",
-            new Dictionary<string, string[]> { ["petParentId"] = new[] { "Pet parent does not belong to this business." } });
+        var isGuest = !req.PetParentId.HasValue;
 
-        // All pets must belong to this parent and tenant
-        var petIds = req.Services.Select(s => s.PetId).Distinct().ToList();
-        var validPets = await _db.Pets
-            .Where(p => petIds.Contains(p.Id) && p.PetParentId == req.PetParentId && p.TenantId == _user.TenantId)
-            .Select(p => p.Id).ToListAsync(ct);
-        var invalidPets = petIds.Except(validPets).ToList();
-        if (invalidPets.Count > 0)
-            throw AppException.Validation("Invalid pet selection",
-                new Dictionary<string, string[]> { ["services"] = new[] { $"{invalidPets.Count} pet(s) do not belong to this parent." } });
+        // For registered clients: validate ownership
+        if (!isGuest)
+        {
+            var parentOk = await _db.PetParents.AnyAsync(p => p.Id == req.PetParentId && p.TenantId == _user.TenantId, ct);
+            if (!parentOk) throw AppException.Validation("Invalid pet parent",
+                new Dictionary<string, string[]> { ["petParentId"] = new[] { "Pet parent does not belong to this business." } });
+
+            var petIds = req.Services.Where(s => s.PetId.HasValue).Select(s => s.PetId!.Value).Distinct().ToList();
+            if (petIds.Count > 0)
+            {
+                var validPets = await _db.Pets
+                    .Where(p => petIds.Contains(p.Id) && p.PetParentId == req.PetParentId && p.TenantId == _user.TenantId)
+                    .Select(p => p.Id).ToListAsync(ct);
+                var invalidPets = petIds.Except(validPets).ToList();
+                if (invalidPets.Count > 0)
+                    throw AppException.Validation("Invalid pet selection",
+                        new Dictionary<string, string[]> { ["services"] = new[] { $"{invalidPets.Count} pet(s) do not belong to this parent." } });
+            }
+        }
+        else if (string.IsNullOrWhiteSpace(req.GuestName))
+        {
+            throw AppException.Validation("Guest name required",
+                new Dictionary<string, string[]> { ["guestName"] = new[] { "Please enter the walk-in customer's name." } });
+        }
 
         // Kennel ownership for boarding lines
         var kennelIds = req.Services.Where(s => s.KennelId.HasValue).Select(s => s.KennelId!.Value).Distinct().ToList();
@@ -220,7 +235,7 @@ public class BookingServiceImpl : IBookingService
                     new Dictionary<string, string[]> { ["services"] = new[] { "One or more selected kennels are inactive or unknown." } });
         }
 
-        var parent = await _db.PetParents.AsNoTracking()
+        var parent = isGuest ? null : await _db.PetParents.AsNoTracking()
             .Where(p => p.Id == req.PetParentId && p.TenantId == _user.TenantId)
             .Select(p => new { p.Name, p.Phone })
             .FirstOrDefaultAsync(ct);
@@ -230,6 +245,8 @@ public class BookingServiceImpl : IBookingService
         var b = new Booking
         {
             PetParentId = req.PetParentId,
+            GuestName = req.GuestName,
+            GuestPhone = req.GuestPhone,
             BookingDate = req.BookingDate,
             Source = req.Source,
             Notes = req.Notes,
@@ -243,6 +260,7 @@ public class BookingServiceImpl : IBookingService
             {
                 ServiceType = line.ServiceType,
                 PetId = line.PetId,
+                PetNameSnapshot = line.PetNameOverride,
                 ServiceName = line.ServiceName,
                 FinalAmount = line.FinalAmount,
                 Notes = line.Notes,
@@ -274,8 +292,8 @@ public class BookingServiceImpl : IBookingService
             InvoiceDate = b.BookingDate,
             BookingId = b.Id,
             PetParentId = b.PetParentId,
-            ParentNameSnapshot = parent?.Name ?? "",
-            PhoneSnapshot = parent?.Phone ?? "",
+            ParentNameSnapshot = parent?.Name ?? b.GuestName ?? "",
+            PhoneSnapshot = parent?.Phone ?? b.GuestPhone ?? "",
             Revenue = b.TotalBillingAmount,
             BaseAmount = b.TotalBillingAmount,
             Due = b.TotalBillingAmount,
