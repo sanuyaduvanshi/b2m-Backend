@@ -24,7 +24,7 @@ public class InventoryService : IInventoryService
             var s = search.Trim().ToLower();
             q = q.Where(x => x.Name.ToLower().Contains(s) || x.Code.ToLower().Contains(s));
         }
-        if (lowStock == true) q = q.Where(x => x.StockOnHand <= x.ReorderLevel);
+        if (lowStock == true) q = q.Where(x => x.ReorderLevel > 0 && x.StockOnHand <= x.ReorderLevel);
         if (inAppStore == true) q = q.Where(x => x.IsListedInApp);
 
         var total = await q.CountAsync(ct);
