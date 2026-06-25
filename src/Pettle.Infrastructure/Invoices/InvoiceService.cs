@@ -321,18 +321,65 @@ public class InvoiceService : IInvoiceService
     public async Task<bool> RefundAsync(Guid invoiceId, RefundRequest req, CancellationToken ct = default)
     {
         if (_user.TenantId is null) return false;
-        var invoice = await _db.Invoices.FirstOrDefaultAsync(i => i.Id == invoiceId && i.TenantId == _user.TenantId, ct);
+        var invoice = await _db.Invoices
+            .Include(i => i.Lines)
+            .FirstOrDefaultAsync(i => i.Id == invoiceId && i.TenantId == _user.TenantId, ct);
         if (invoice is null) return false;
         if (invoice.PaymentStatus == InvoicePaymentStatus.Cancelled)
             throw AppException.BusinessRule("Cannot refund a cancelled invoice.");
         if (req.Amount > invoice.Paid + 0.01m)
             throw AppException.Validation("Refund exceeds amount paid",
                 new Dictionary<string, string[]> { ["amount"] = new[] { $"Refund ₹{req.Amount:F2} exceeds amount paid ₹{invoice.Paid:F2}." } });
+
+        // 1. Update original invoice balance
         invoice.Paid = Math.Max(0, invoice.Paid - req.Amount);
         invoice.Due = Math.Max(0, invoice.Revenue - invoice.Paid);
         invoice.PaymentStatus = InvoicePaymentStatus.Refunded;
-        invoice.Notes = (invoice.Notes is null ? "" : invoice.Notes + " | ") + $"Refund {req.Amount}: {req.Reason}";
+        invoice.Notes = (invoice.Notes is null ? "" : invoice.Notes + " | ") + $"Refund ₹{req.Amount:F2}: {req.Reason}";
         await SyncBookingStatusAsync(invoice, ct);
+
+        // 2. Return stock to inventory for Sale invoices (INV-5)
+        if (req.ReturnToStock && invoice.InvoiceType == InvoiceType.Sale && invoice.Lines.Count > 0)
+        {
+            var skuNames = invoice.Lines
+                .Where(l => !string.IsNullOrEmpty(l.SkuName))
+                .Select(l => l.SkuName!)
+                .Distinct()
+                .ToList();
+            if (skuNames.Count > 0)
+            {
+                var skus = await _db.Skus
+                    .Where(s => s.TenantId == _user.TenantId && skuNames.Contains(s.Name))
+                    .ToListAsync(ct);
+                foreach (var line in invoice.Lines.Where(l => !string.IsNullOrEmpty(l.SkuName)))
+                {
+                    var sku = skus.FirstOrDefault(s => s.Name == line.SkuName);
+                    if (sku != null) sku.StockOnHand += (int)Math.Round(line.Quantity);
+                }
+            }
+        }
+
+        // 3. Generate Credit Note (INV-7)
+        var year = DateTime.UtcNow.Year;
+        var cnCount = await _db.Invoices.IgnoreQueryFilters()
+            .CountAsync(i => i.TenantId == _user.TenantId && i.InvoiceType == InvoiceType.CreditNote && i.CreatedAt.Year == year, ct);
+        var creditNote = new Invoice
+        {
+            TenantId = _user.TenantId.Value,
+            InvoiceNumber = $"CN-{year}-{(cnCount + 1).ToString().PadLeft(4, '0')}",
+            InvoiceType = InvoiceType.CreditNote,
+            InvoiceDate = DateOnly.FromDateTime(DateTime.UtcNow),
+            PetParentId = invoice.PetParentId,
+            ParentNameSnapshot = invoice.ParentNameSnapshot,
+            PhoneSnapshot = invoice.PhoneSnapshot,
+            Notes = $"Credit note for {invoice.InvoiceNumber} — {req.Reason}",
+            PaymentStatus = InvoicePaymentStatus.Paid,
+            Revenue = req.Amount,
+            Paid = req.Amount,
+            Due = 0,
+        };
+        _db.Invoices.Add(creditNote);
+
         await _db.SaveChangesAsync(ct);
         return true;
     }

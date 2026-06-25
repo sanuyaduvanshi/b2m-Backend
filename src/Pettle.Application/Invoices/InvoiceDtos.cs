@@ -90,7 +90,7 @@ public record RecordPaymentRequest(
     PaymentRecordStatus Status = PaymentRecordStatus.Success
 );
 
-public record RefundRequest(decimal Amount, string Reason);
+public record RefundRequest(decimal Amount, string Reason, bool ReturnToStock = false);
 
 // --- POS / counter sale ---
 
