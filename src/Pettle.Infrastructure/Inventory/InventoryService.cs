@@ -270,6 +270,88 @@ public class InventoryService : IInventoryService
         return (await GetPoAsync(po.Id, ct))!;
     }
 
+    public async Task<PoDetail?> UpdatePoAsync(Guid id, CreatePoRequest req, CancellationToken ct = default)
+    {
+        if (_user.TenantId is null) return null;
+        var po = await _db.PurchaseOrders
+            .FirstOrDefaultAsync(p => p.Id == id && p.TenantId == _user.TenantId, ct);
+        if (po is null) return null;
+        if (po.Status != PoStatus.Draft)
+            throw AppException.BusinessRule("Only Draft purchase orders can be edited. Once items are received the bill is locked.");
+
+        // Update header
+        po.VendorId = req.VendorId;
+        po.PurchaseDate = req.PurchaseDate;
+        po.VendorInvoiceNumber = req.VendorInvoiceNumber;
+        po.ReferenceBillNumber = req.ReferenceBillNumber;
+        po.MaterialInwardNo = req.MaterialInwardNo;
+        po.PaymentTerm = req.PaymentTerm;
+        po.DueDate = req.DueDate;
+        po.ShippingDate = req.ShippingDate;
+        po.ReverseCharge = req.ReverseCharge;
+        po.ExportSez = req.ExportSez;
+        po.TaxType = req.TaxType;
+        po.AccountLedger = req.AccountLedger;
+        po.AdditionalCharges = req.AdditionalCharges;
+        po.Adjustment = req.Adjustment;
+        po.Notes = req.Notes;
+
+        // Replace lines (ExecuteDelete bypasses change tracker; safe before SaveChanges)
+        await _db.PurchaseOrderLines.Where(l => l.PurchaseOrderId == id).ExecuteDeleteAsync(ct);
+
+        var inclusiveTax = string.Equals(req.TaxType, "Inclusive", StringComparison.OrdinalIgnoreCase);
+        decimal grossAmount = 0, lineDiscountTotal = 0, sumTaxable = 0, sumTax = 0;
+        foreach (var line in req.Lines)
+        {
+            var gross = line.Quantity * line.UnitCost;
+            var disc1 = gross * (line.PurDisc1Percent / 100m);
+            var disc2 = (gross - disc1) * (line.PurDisc2Percent / 100m);
+            var net = gross - disc1 - disc2;
+            decimal taxable, taxAmt;
+            if (inclusiveTax) { taxable = net / (1 + line.TaxPercent / 100m); taxAmt = net - taxable; }
+            else               { taxable = net; taxAmt = net * (line.TaxPercent / 100m); }
+            var lineTotal = taxable + taxAmt;
+            var units = line.Quantity + line.FreeQuantity;
+            var landingCost = units > 0 ? lineTotal / units : 0m;
+
+            _db.PurchaseOrderLines.Add(new PurchaseOrderLine
+            {
+                PurchaseOrderId = id,
+                TenantId = _user.TenantId.Value,
+                SkuId = line.SkuId, ItemCode = line.ItemCode, ItemName = line.ItemName, Unit = line.Unit,
+                Quantity = line.Quantity, FreeQuantity = line.FreeQuantity, UnitCost = line.UnitCost,
+                Mrp = line.Mrp, SellingPrice = line.SellingPrice,
+                PurDisc1Percent = line.PurDisc1Percent, PurDisc2Percent = line.PurDisc2Percent,
+                TaxPercent = line.TaxPercent, TaxableAmount = R(taxable), TaxAmount = R(taxAmt),
+                LandingCost = R(landingCost), LineTotal = R(lineTotal),
+                ExpiryDate = line.ExpiryDate, BatchNumber = line.BatchNumber,
+            });
+
+            grossAmount += gross; lineDiscountTotal += disc1 + disc2; sumTaxable += taxable; sumTax += taxAmt;
+        }
+
+        var flatDiscountAmount = sumTaxable * (req.FlatDiscountPercent / 100m);
+        var finalTaxable = sumTaxable - flatDiscountAmount;
+        var finalTax = sumTaxable > 0 ? sumTax * (finalTaxable / sumTaxable) : 0m;
+        var rawTotal = finalTaxable + finalTax + req.AdditionalCharges + req.Adjustment;
+        var rounded = Math.Round(rawTotal, MidpointRounding.AwayFromZero);
+
+        po.GrossAmount = R(grossAmount);
+        po.FlatDiscountPercent = req.FlatDiscountPercent;
+        po.FlatDiscountAmount = R(flatDiscountAmount);
+        po.DiscountAmount = R(lineDiscountTotal + flatDiscountAmount);
+        po.SubTotal = R(sumTaxable);
+        po.TaxableAmount = R(finalTaxable);
+        po.TaxAmount = R(finalTax);
+        po.RoundOff = R(rounded - rawTotal);
+        po.Total = R(rounded);
+        po.Due = Math.Max(0, R(rounded) - po.Paid);
+        po.NumberOfItems = req.Lines.Count;
+
+        await _db.SaveChangesAsync(ct);
+        return await GetPoAsync(id, ct);
+    }
+
     private static decimal R(decimal value) => Math.Round(value, 2, MidpointRounding.AwayFromZero);
 
     public async Task<bool> ReceivePoAsync(Guid id, ReceivePoRequest req, CancellationToken ct = default)

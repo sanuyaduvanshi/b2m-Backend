@@ -107,6 +107,14 @@ public class InventoryController : ControllerBase
     public async Task<IActionResult> CreatePo([FromBody] CreatePoRequest req, CancellationToken ct)
         => Ok(await _svc.CreatePoAsync(req, ct));
 
+    [HttpPut("purchase-orders/{id:guid}")]
+    [HasPermission(Modules.Inventory, Actions.Edit)]
+    public async Task<IActionResult> UpdatePo(Guid id, [FromBody] CreatePoRequest req, CancellationToken ct)
+    {
+        var r = await _svc.UpdatePoAsync(id, req, ct);
+        return r is null ? NotFound() : Ok(r);
+    }
+
     [HttpPost("purchase-orders/{id:guid}/receive")]
     [HasPermission(Modules.Inventory, Actions.Approve)]
     public async Task<IActionResult> ReceivePo(Guid id, [FromBody] ReceivePoRequest req, CancellationToken ct)
