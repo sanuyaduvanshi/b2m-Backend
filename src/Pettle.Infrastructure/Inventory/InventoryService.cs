@@ -527,15 +527,20 @@ public class InventoryService : IInventoryService
             _ => StockMovementReason.Adjustment,
         };
 
-        // Procurement adds stock; all others deduct
-        bool isIncoming = req.AdjustmentType == ManualAdjustmentType.Procurement;
-
         foreach (var line in req.Lines)
         {
             var sku = skus.FirstOrDefault(s => s.Id == line.SkuId);
             if (sku is null) continue;
 
-            var delta = isIncoming ? line.Quantity : -line.Quantity;
+            // Procurement always adds; SelfConsumption/Damage always deduct (user enters positive qty);
+            // Adjustment uses the sign the user provided (positive = add, negative = reduce).
+            var delta = req.AdjustmentType switch
+            {
+                ManualAdjustmentType.Procurement    =>  line.Quantity,
+                ManualAdjustmentType.SelfConsumption => -Math.Abs(line.Quantity),
+                ManualAdjustmentType.Damage          => -Math.Abs(line.Quantity),
+                _                                    =>  line.Quantity, // Adjustment: honour sign
+            };
             sku.StockOnHand = Math.Max(0, sku.StockOnHand + delta);
 
             _db.StockMovements.Add(new StockMovement
