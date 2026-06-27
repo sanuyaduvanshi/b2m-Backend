@@ -318,6 +318,60 @@ public class InvoiceService : IInvoiceService
         };
     }
 
+    public async Task<bool> DeleteAsync(Guid id, CancellationToken ct = default)
+    {
+        if (_user.TenantId is null) return false;
+        var invoice = await _db.Invoices
+            .Include(i => i.Lines)
+            .FirstOrDefaultAsync(i => i.Id == id && i.TenantId == _user.TenantId, ct);
+        if (invoice is null) return false;
+        if (invoice.Paid > 0)
+            throw AppException.BusinessRule("Cannot delete an invoice that has recorded payments. Issue a refund first.");
+        if (invoice.PaymentStatus == InvoicePaymentStatus.Cancelled)
+            throw AppException.BusinessRule("Invoice is already cancelled.");
+        if (invoice.PaymentStatus == InvoicePaymentStatus.Refunded)
+            throw AppException.BusinessRule("Cannot delete a refunded invoice.");
+
+        // Restore stock for Sale invoices with SKU-linked lines
+        if (invoice.InvoiceType == InvoiceType.Sale && invoice.Lines.Count > 0)
+        {
+            var skuNames = invoice.Lines.Where(l => !string.IsNullOrEmpty(l.SkuName)).Select(l => l.SkuName!).Distinct().ToList();
+            if (skuNames.Count > 0)
+            {
+                var skus = await _db.Skus.Where(s => s.TenantId == _user.TenantId && skuNames.Contains(s.Name)).ToListAsync(ct);
+                foreach (var line in invoice.Lines.Where(l => !string.IsNullOrEmpty(l.SkuName)))
+                {
+                    var sku = skus.FirstOrDefault(s => s.Name == line.SkuName);
+                    if (sku is not null)
+                    {
+                        var qty = (int)Math.Round(line.Quantity);
+                        sku.StockOnHand += qty;
+                        _db.StockMovements.Add(new StockMovement
+                        {
+                            SkuId = sku.Id,
+                            Reason = StockMovementReason.Return,
+                            QuantityChange = qty,
+                            StockAfter = sku.StockOnHand,
+                            RelatedInvoiceId = invoice.Id,
+                            Note = $"Deleted invoice {invoice.InvoiceNumber}",
+                        });
+                    }
+                }
+            }
+        }
+
+        // Reset booking payment status to Pending if this was a booking invoice
+        if (invoice.BookingId is { } bookingId)
+        {
+            var booking = await _db.Bookings.FirstOrDefaultAsync(b => b.Id == bookingId && b.TenantId == _user.TenantId, ct);
+            if (booking is not null) booking.PaymentStatus = BookingPaymentStatus.Pending;
+        }
+
+        _db.Invoices.Remove(invoice); // soft-delete interceptor sets IsDeleted = true
+        await _db.SaveChangesAsync(ct);
+        return true;
+    }
+
     public async Task<bool> RefundAsync(Guid invoiceId, RefundRequest req, CancellationToken ct = default)
     {
         if (_user.TenantId is null) return false;

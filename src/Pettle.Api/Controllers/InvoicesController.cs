@@ -58,4 +58,9 @@ public class InvoicesController : ControllerBase
     [HasPermission(Modules.Invoices, Actions.Approve)]
     public async Task<IActionResult> Refund(Guid id, [FromBody] RefundRequest req, CancellationToken ct)
         => await _svc.RefundAsync(id, req, ct) ? NoContent() : NotFound();
+
+    [HttpDelete("{id:guid}")]
+    [HasPermission(Modules.Invoices, Actions.Delete)]
+    public async Task<IActionResult> Delete(Guid id, CancellationToken ct)
+        => await _svc.DeleteAsync(id, ct) ? NoContent() : NotFound();
 }

@@ -11,4 +11,5 @@ public interface IInvoiceService
     Task<PaymentDto?> UpdatePaymentAsync(Guid invoiceId, Guid paymentId, RecordPaymentRequest req, CancellationToken ct = default);
     Task<bool> DeletePaymentAsync(Guid invoiceId, Guid paymentId, CancellationToken ct = default);
     Task<bool> RefundAsync(Guid invoiceId, RefundRequest req, CancellationToken ct = default);
+    Task<bool> DeleteAsync(Guid id, CancellationToken ct = default);
 }
