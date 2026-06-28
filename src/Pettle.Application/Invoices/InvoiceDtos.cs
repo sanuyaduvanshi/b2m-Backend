@@ -65,7 +65,8 @@ public record InvoiceDetail(
     decimal Due,
     InvoicePaymentStatus PaymentStatus,
     IReadOnlyList<InvoiceLineDto> Lines,
-    IReadOnlyList<PaymentDto> Payments
+    IReadOnlyList<PaymentDto> Payments,
+    string? Notes = null
 );
 
 public record InvoiceListQuery(
@@ -108,6 +109,13 @@ public record CreateSalePayment(
     PaymentMode Mode,
     decimal Amount,
     string? TransactionId = null
+);
+
+public record UpdateInvoiceRequest(
+    DateOnly InvoiceDate,
+    string ParentName,
+    string Phone,
+    string? Notes
 );
 
 public record CreateSaleRequest(

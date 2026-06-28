@@ -67,7 +67,8 @@ public class InvoiceService : IInvoiceService
             i.IgstAmount, i.CgstAmount, i.SgstAmount,
             i.Revenue, i.Paid, i.Due, i.PaymentStatus,
             i.Lines.Select(l => new InvoiceLineDto(l.Id, l.BillItemName, l.Category, l.Description, l.Quantity, l.UnitAmount, l.Discount, l.Subtotal, l.Total)).ToList(),
-            i.Payments.OrderByDescending(p => p.PaymentTime).Select(p => new PaymentDto(p.Id, p.PaymentTime, p.Amount, p.Mode, p.Source, p.TransactionId, p.Type, p.Status, p.Notes)).ToList()
+            i.Payments.OrderByDescending(p => p.PaymentTime).Select(p => new PaymentDto(p.Id, p.PaymentTime, p.Amount, p.Mode, p.Source, p.TransactionId, p.Type, p.Status, p.Notes)).ToList(),
+            i.Notes
         );
     }
 
@@ -316,6 +317,22 @@ public class InvoiceService : IInvoiceService
             InvoicePaymentStatus.Refunded      => BookingPaymentStatus.Refunded,
             _                                  => BookingPaymentStatus.Pending,
         };
+    }
+
+    public async Task<bool> UpdateAsync(Guid id, UpdateInvoiceRequest req, CancellationToken ct = default)
+    {
+        if (_user.TenantId is null) return false;
+        var invoice = await _db.Invoices
+            .FirstOrDefaultAsync(i => i.Id == id && i.TenantId == _user.TenantId, ct);
+        if (invoice is null) return false;
+        if (invoice.PaymentStatus == InvoicePaymentStatus.Cancelled)
+            throw AppException.BusinessRule("Cannot edit a cancelled invoice.");
+        invoice.InvoiceDate = req.InvoiceDate;
+        invoice.ParentNameSnapshot = req.ParentName.Trim();
+        invoice.PhoneSnapshot = req.Phone.Trim();
+        invoice.Notes = string.IsNullOrWhiteSpace(req.Notes) ? null : req.Notes.Trim();
+        await _db.SaveChangesAsync(ct);
+        return true;
     }
 
     public async Task<bool> DeleteAsync(Guid id, CancellationToken ct = default)
