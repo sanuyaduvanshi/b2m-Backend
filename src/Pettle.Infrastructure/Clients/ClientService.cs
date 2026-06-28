@@ -68,7 +68,8 @@ public class ClientService : IClientService
                 p.Status,
                 p.OnboardingDate,
                 null,
-                p.Tags.Select(t => t.ClientTag!.Name).ToList()
+                p.Tags.Select(t => t.ClientTag!.Name).ToList(),
+                p.Pets.Where(pet => pet.Breed != null).Select(pet => pet.Breed!).Distinct().ToList()
             )).ToListAsync(ct);
 
         return new PagedResult<PetParentListItem>(items, total, page, size);

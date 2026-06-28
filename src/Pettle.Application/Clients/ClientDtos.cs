@@ -15,7 +15,8 @@ public record PetParentListItem(
     ClientStatus Status,
     DateOnly? OnboardingDate,
     DateOnly? LatestBookingDate,
-    IReadOnlyList<string> Tags
+    IReadOnlyList<string> Tags,
+    IReadOnlyList<string> PetBreeds
 );
 
 public record PetParentDetail(
