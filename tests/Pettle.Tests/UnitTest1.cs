@@ -1,10 +1,1 @@
-namespace Pettle.Tests;
-
-public class UnitTest1
-{
-    [Fact]
-    public void Test1()
-    {
-
-    }
-}
+// Placeholder removed — see Invoices/ and Inventory/ folders for actual tests.
