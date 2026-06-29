@@ -111,11 +111,23 @@ public record CreateSalePayment(
     string? TransactionId = null
 );
 
+public record UpdateInvoiceLine(
+    string ItemName,
+    decimal Quantity,
+    decimal UnitAmount,
+    decimal DiscountPercent,
+    decimal TaxPercent
+);
+
 public record UpdateInvoiceRequest(
     DateOnly InvoiceDate,
     string ParentName,
     string Phone,
-    string? Notes
+    string? PetName,
+    string? Notes,
+    decimal FlatDiscountPercent,
+    decimal AdditionalCharges,
+    IReadOnlyList<UpdateInvoiceLine> Lines
 );
 
 public record CreateSaleRequest(

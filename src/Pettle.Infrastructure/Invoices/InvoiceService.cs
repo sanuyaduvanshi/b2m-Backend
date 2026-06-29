@@ -327,10 +327,74 @@ public class InvoiceService : IInvoiceService
         if (invoice is null) return false;
         if (invoice.PaymentStatus == InvoicePaymentStatus.Cancelled)
             throw AppException.BusinessRule("Cannot edit a cancelled invoice.");
+        if (req.Lines is null || req.Lines.Count == 0)
+            throw AppException.Validation("Empty invoice",
+                new Dictionary<string, string[]> { ["lines"] = new[] { "Add at least one line item." } });
+
+        // Header
         invoice.InvoiceDate = req.InvoiceDate;
         invoice.ParentNameSnapshot = req.ParentName.Trim();
         invoice.PhoneSnapshot = req.Phone.Trim();
+        invoice.PetNameSnapshot = string.IsNullOrWhiteSpace(req.PetName) ? null : req.PetName.Trim();
         invoice.Notes = string.IsNullOrWhiteSpace(req.Notes) ? null : req.Notes.Trim();
+
+        // Replace lines
+        await _db.InvoiceLineItems
+            .Where(l => l.InvoiceId == id && l.TenantId == _user.TenantId.Value)
+            .ExecuteDeleteAsync(ct);
+
+        decimal sumGross = 0, sumLineDiscount = 0, sumTaxable = 0, sumTax = 0;
+        foreach (var line in req.Lines)
+        {
+            if (line.Quantity <= 0)
+                throw AppException.Validation("Invalid quantity",
+                    new Dictionary<string, string[]> { ["lines"] = new[] { $"Quantity must be > 0 for '{line.ItemName}'." } });
+
+            var gross = line.Quantity * line.UnitAmount;
+            var disc = gross * (line.DiscountPercent / 100m);
+            var net = gross - disc;
+            var taxable = line.TaxPercent > 0 ? net / (1 + line.TaxPercent / 100m) : net;
+            var taxAmt = net - taxable;
+
+            _db.InvoiceLineItems.Add(new InvoiceLineItem
+            {
+                InvoiceId = id,
+                TenantId = _user.TenantId.Value,
+                BillItemName = line.ItemName.Trim(),
+                Quantity = line.Quantity,
+                UnitAmount = line.UnitAmount,
+                Discount = R(disc),
+                Subtotal = R(taxable),
+                CgstAmount = R(taxAmt / 2m),
+                SgstAmount = R(taxAmt / 2m),
+                Total = R(net),
+            });
+
+            sumGross += gross;
+            sumLineDiscount += disc;
+            sumTaxable += taxable;
+            sumTax += taxAmt;
+        }
+
+        // Bill-level flat discount
+        var flatDiscAmt = sumTaxable * (req.FlatDiscountPercent / 100m);
+        var finalTaxable = sumTaxable - flatDiscAmt;
+        var finalTax = sumTaxable > 0 ? sumTax * (finalTaxable / sumTaxable) : 0m;
+        var rawTotal = finalTaxable + finalTax + req.AdditionalCharges;
+        var rounded = Math.Round(rawTotal, MidpointRounding.AwayFromZero);
+
+        invoice.BaseAmount = R(sumTaxable);
+        invoice.DiscountAmount = R(sumLineDiscount + flatDiscAmt);
+        invoice.AdditionalAmount = R(req.AdditionalCharges);
+        invoice.CgstAmount = R(finalTax / 2m);
+        invoice.SgstAmount = R(finalTax / 2m);
+        invoice.IgstAmount = 0;
+        invoice.Revenue = R(rounded);
+        invoice.Due = Math.Max(0, R(rounded) - invoice.Paid);
+        invoice.PaymentStatus = invoice.Due == 0 && invoice.Paid > 0
+            ? InvoicePaymentStatus.Paid
+            : invoice.Paid > 0 ? InvoicePaymentStatus.PartiallyPaid : InvoicePaymentStatus.Pending;
+
         await _db.SaveChangesAsync(ct);
         return true;
     }
