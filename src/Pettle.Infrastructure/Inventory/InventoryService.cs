@@ -15,7 +15,7 @@ public class InventoryService : IInventoryService
 
     public InventoryService(PettleDbContext db, ICurrentUser user) { _db = db; _user = user; }
 
-    public async Task<PagedResult<SkuListItem>> ListSkusAsync(string? search, bool? lowStock, bool? inAppStore, int page, int pageSize, CancellationToken ct = default)
+    public async Task<PagedResult<SkuListItem>> ListSkusAsync(string? search, bool? lowStock, bool? inAppStore, Guid? categoryId, int page, int pageSize, CancellationToken ct = default)
     {
         if (_user.TenantId is null) return Empty<SkuListItem>(page, pageSize);
         var q = _db.Skus.AsNoTracking().Include(s => s.Category).Include(s => s.Brand).Where(s => s.TenantId == _user.TenantId);
@@ -26,6 +26,7 @@ public class InventoryService : IInventoryService
         }
         if (lowStock == true) q = q.Where(x => x.ReorderLevel > 0 && x.StockOnHand <= x.ReorderLevel);
         if (inAppStore == true) q = q.Where(x => x.IsListedInApp);
+        if (categoryId.HasValue) q = q.Where(x => x.CategoryId == categoryId.Value);
 
         var total = await q.CountAsync(ct);
         var p = Math.Max(page, 1); var sz = Math.Clamp(pageSize, 1, 200);
