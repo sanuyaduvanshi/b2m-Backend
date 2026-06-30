@@ -140,6 +140,11 @@ public class InventoryController : ControllerBase
     public async Task<IActionResult> SkuMovements(Guid id, [FromQuery] int page = 1, [FromQuery] int pageSize = 30, CancellationToken ct = default)
         => Ok(await _svc.ListMovementsAsync(id, page, pageSize, ct));
 
+    [HttpGet("skus/{id:guid}/batches")]
+    [HasPermission(Modules.Inventory, Actions.View)]
+    public async Task<IActionResult> SkuBatches(Guid id, CancellationToken ct)
+        => Ok(await _svc.ListBatchesAsync(id, ct));
+
     [HttpGet("brands")]
     [HasPermission(Modules.Inventory, Actions.View)]
     public async Task<IActionResult> Brands(CancellationToken ct)

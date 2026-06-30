@@ -378,15 +378,32 @@ public class InventoryService : IInventoryService
                 if (sku is not null)
                 {
                     sku.StockOnHand += (int)delta;
-                    // On inward receipt, refresh the SKU's cost price to the latest landed cost from this bill.
                     if (delta > 0 && line.LandingCost > 0)
                         sku.CostPrice = line.LandingCost;
+
                     _db.StockMovements.Add(new StockMovement
                     {
                         SkuId = sku.Id, Reason = StockMovementReason.PoReceipt,
                         QuantityChange = (int)delta, StockAfter = sku.StockOnHand,
                         RelatedPurchaseOrderId = po.Id, Note = $"PO {po.PoNumber} receipt"
                     });
+
+                    if (delta > 0)
+                    {
+                        _db.SkuBatches.Add(new SkuBatch
+                        {
+                            TenantId = _user.TenantId.Value,
+                            SkuId = sku.Id,
+                            BatchNumber = line.BatchNumber,
+                            ExpiryDate = line.ExpiryDate,
+                            QtyRemaining = delta,
+                            LandingCost = line.LandingCost > 0 ? line.LandingCost : sku.CostPrice,
+                            PurchaseOrderId = po.Id,
+                            Source = "PoReceipt",
+                            ReceivedAt = DateTimeOffset.UtcNow,
+                        });
+                        sku.NearestExpiry = await GetNearestExpiryAsync(sku.Id, _user.TenantId.Value, ct);
+                    }
                 }
             }
         }
@@ -624,7 +641,38 @@ public class InventoryService : IInventoryService
                 ManualAdjustmentType.Damage          => -Math.Abs(line.Quantity),
                 _                                    =>  line.Quantity, // Adjustment: honour sign
             };
+
+            if (delta > 0)
+            {
+                _db.SkuBatches.Add(new SkuBatch
+                {
+                    TenantId = _user.TenantId.Value,
+                    SkuId = sku.Id,
+                    QtyRemaining = delta,
+                    LandingCost = sku.CostPrice,
+                    Source = req.AdjustmentType == ManualAdjustmentType.Procurement ? "Procurement" : "Adjustment",
+                    ReceivedAt = DateTimeOffset.UtcNow,
+                });
+            }
+            else if (delta < 0)
+            {
+                // FEFO best-effort deduction (adjustment can override, so we don't throw on shortfall)
+                decimal deductQty = Math.Abs(delta);
+                var batches = await _db.SkuBatches
+                    .Where(b => b.SkuId == sku.Id && b.TenantId == _user.TenantId && b.QtyRemaining > 0)
+                    .OrderBy(b => b.ExpiryDate == null).ThenBy(b => b.ExpiryDate).ThenBy(b => b.ReceivedAt)
+                    .ToListAsync(ct);
+                foreach (var batch in batches)
+                {
+                    if (deductQty <= 0) break;
+                    var take = Math.Min(batch.QtyRemaining, deductQty);
+                    batch.QtyRemaining -= take;
+                    deductQty -= take;
+                }
+            }
+
             sku.StockOnHand = Math.Max(0, sku.StockOnHand + delta);
+            sku.NearestExpiry = await GetNearestExpiryAsync(sku.Id, _user.TenantId.Value, ct);
 
             _db.StockMovements.Add(new StockMovement
             {
@@ -662,6 +710,26 @@ public class InventoryService : IInventoryService
 
         return new PagedResult<StockMovementDto>(items, total, page, pageSize);
     }
+
+    public async Task<IReadOnlyList<SkuBatchDto>> ListBatchesAsync(Guid skuId, CancellationToken ct = default)
+    {
+        if (_user.TenantId is null) return Array.Empty<SkuBatchDto>();
+        var batches = await _db.SkuBatches
+            .Where(b => b.SkuId == skuId && b.TenantId == _user.TenantId)
+            .OrderBy(b => b.ExpiryDate == null)
+            .ThenBy(b => b.ExpiryDate)
+            .ThenBy(b => b.ReceivedAt)
+            .ToListAsync(ct);
+        return batches.Select(b => new SkuBatchDto(
+            b.Id, b.BatchNumber, b.ExpiryDate, b.QtyRemaining, b.LandingCost, b.Source, b.ReceivedAt)).ToList();
+    }
+
+    private async Task<DateOnly?> GetNearestExpiryAsync(Guid skuId, Guid tenantId, CancellationToken ct)
+        => await _db.SkuBatches
+            .Where(b => b.SkuId == skuId && b.TenantId == tenantId && b.QtyRemaining > 0 && b.ExpiryDate != null)
+            .OrderBy(b => b.ExpiryDate)
+            .Select(b => b.ExpiryDate)
+            .FirstOrDefaultAsync(ct);
 
     private async Task<string> NextPoNumberAsync(CancellationToken ct)
     {

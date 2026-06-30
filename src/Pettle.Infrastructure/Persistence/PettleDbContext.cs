@@ -73,6 +73,7 @@ public class PettleDbContext : IdentityDbContext<ApplicationUser, ApplicationRol
     public DbSet<PurchaseOrder> PurchaseOrders => Set<PurchaseOrder>();
     public DbSet<PurchaseOrderLine> PurchaseOrderLines => Set<PurchaseOrderLine>();
     public DbSet<StockMovement> StockMovements => Set<StockMovement>();
+    public DbSet<SkuBatch> SkuBatches => Set<SkuBatch>();
 
     // Kennels
     public DbSet<KennelGroup> KennelGroups => Set<KennelGroup>();
@@ -423,6 +424,12 @@ public class PettleDbContext : IdentityDbContext<ApplicationUser, ApplicationRol
         {
             b.HasIndex(x => new { x.TenantId, x.Type });
             b.HasQueryFilter(x => !x.IsDeleted);
+        });
+
+        builder.Entity<SkuBatch>(b =>
+        {
+            b.HasIndex(x => new { x.TenantId, x.SkuId });
+            b.HasIndex(x => new { x.TenantId, x.SkuId, x.ExpiryDate });
         });
     }
 

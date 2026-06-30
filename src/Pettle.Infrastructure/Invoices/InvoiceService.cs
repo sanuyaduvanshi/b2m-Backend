@@ -192,7 +192,11 @@ public class InvoiceService : IInvoiceService
             if (sku.StockOnHand < qty)
                 throw AppException.Conflict($"Not enough stock for '{sku.Name}' — {sku.StockOnHand} on hand, {qty} requested.");
 
+            // FEFO: deduct from earliest-expiry batches first
+            await DeductFefoAsync(sku.Id, _user.TenantId!.Value, qty, ct);
             sku.StockOnHand -= qty;
+            sku.NearestExpiry = await GetNearestExpiryAsync(sku.Id, _user.TenantId!.Value, ct);
+
             _db.StockMovements.Add(new StockMovement
             {
                 SkuId = sku.Id,
@@ -427,6 +431,16 @@ public class InvoiceService : IInvoiceService
                     {
                         var qty = (int)Math.Round(line.Quantity);
                         sku.StockOnHand += qty;
+                        _db.SkuBatches.Add(new SkuBatch
+                        {
+                            TenantId = sku.TenantId,
+                            SkuId = sku.Id,
+                            QtyRemaining = qty,
+                            LandingCost = sku.CostPrice,
+                            Source = "Return",
+                            ReceivedAt = DateTimeOffset.UtcNow,
+                        });
+                        sku.NearestExpiry = await GetNearestExpiryAsync(sku.Id, sku.TenantId, ct);
                         _db.StockMovements.Add(new StockMovement
                         {
                             SkuId = sku.Id,
@@ -489,7 +503,21 @@ public class InvoiceService : IInvoiceService
                 foreach (var line in invoice.Lines.Where(l => !string.IsNullOrEmpty(l.SkuName)))
                 {
                     var sku = skus.FirstOrDefault(s => s.Name == line.SkuName);
-                    if (sku != null) sku.StockOnHand += (int)Math.Round(line.Quantity);
+                    if (sku != null)
+                    {
+                        var qty = (int)Math.Round(line.Quantity);
+                        sku.StockOnHand += qty;
+                        _db.SkuBatches.Add(new SkuBatch
+                        {
+                            TenantId = sku.TenantId,
+                            SkuId = sku.Id,
+                            QtyRemaining = qty,
+                            LandingCost = sku.CostPrice,
+                            Source = "Return",
+                            ReceivedAt = DateTimeOffset.UtcNow,
+                        });
+                        sku.NearestExpiry = await GetNearestExpiryAsync(sku.Id, sku.TenantId, ct);
+                    }
                 }
             }
         }
@@ -518,4 +546,30 @@ public class InvoiceService : IInvoiceService
         await _db.SaveChangesAsync(ct);
         return true;
     }
+
+    private async Task DeductFefoAsync(Guid skuId, Guid tenantId, int qty, CancellationToken ct)
+    {
+        var batches = await _db.SkuBatches
+            .Where(b => b.SkuId == skuId && b.TenantId == tenantId && b.QtyRemaining > 0)
+            .OrderBy(b => b.ExpiryDate == null)
+            .ThenBy(b => b.ExpiryDate)
+            .ThenBy(b => b.ReceivedAt)
+            .ToListAsync(ct);
+
+        decimal remaining = qty;
+        foreach (var batch in batches)
+        {
+            if (remaining <= 0) break;
+            var take = Math.Min(batch.QtyRemaining, remaining);
+            batch.QtyRemaining -= take;
+            remaining -= take;
+        }
+    }
+
+    private async Task<DateOnly?> GetNearestExpiryAsync(Guid skuId, Guid tenantId, CancellationToken ct)
+        => await _db.SkuBatches
+            .Where(b => b.SkuId == skuId && b.TenantId == tenantId && b.QtyRemaining > 0 && b.ExpiryDate != null)
+            .OrderBy(b => b.ExpiryDate)
+            .Select(b => b.ExpiryDate)
+            .FirstOrDefaultAsync(ct);
 }

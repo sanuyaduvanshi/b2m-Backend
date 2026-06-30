@@ -103,3 +103,13 @@ public record StockMovementDto(
     string? Note
 );
 
+public record SkuBatchDto(
+    Guid Id,
+    string? BatchNumber,
+    DateOnly? ExpiryDate,
+    decimal QtyRemaining,
+    decimal LandingCost,
+    string Source,
+    DateTimeOffset ReceivedAt
+);
+
