@@ -63,7 +63,7 @@ public class InvoiceService : IInvoiceService
         return new InvoiceDetail(
             i.Id, i.InvoiceNumber, i.InvoiceType, i.InvoiceDate, i.PetParentId,
             i.ParentNameSnapshot, i.PhoneSnapshot, i.PetNameSnapshot,
-            i.BaseAmount, i.AddOnAmount, i.DiscountAmount,
+            i.BaseAmount, i.AddOnAmount, i.AdditionalAmount, i.DiscountAmount,
             i.IgstAmount, i.CgstAmount, i.SgstAmount,
             i.Revenue, i.Paid, i.Due, i.PaymentStatus,
             i.Lines.Select(l => new InvoiceLineDto(l.Id, l.BillItemName, l.Category, l.Description, l.Quantity, l.UnitAmount, l.Discount, l.Subtotal, l.Total)).ToList(),

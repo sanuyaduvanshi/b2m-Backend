@@ -135,10 +135,18 @@ public class InventoryController : ControllerBase
     public async Task<IActionResult> CreateAdjustment([FromBody] CreateStockAdjustmentRequest req, CancellationToken ct)
         => await _svc.CreateStockAdjustmentAsync(req, ct) ? NoContent() : BadRequest();
 
+    [HttpGet("skus/{id:guid}")]
+    [HasPermission(Modules.Inventory, Actions.View)]
+    public async Task<IActionResult> GetSku(Guid id, CancellationToken ct)
+    {
+        var r = await _svc.GetSkuAsync(id, ct);
+        return r is null ? NotFound() : Ok(r);
+    }
+
     [HttpGet("skus/{id:guid}/movements")]
     [HasPermission(Modules.Inventory, Actions.View)]
-    public async Task<IActionResult> SkuMovements(Guid id, [FromQuery] int page = 1, [FromQuery] int pageSize = 30, CancellationToken ct = default)
-        => Ok(await _svc.ListMovementsAsync(id, page, pageSize, ct));
+    public async Task<IActionResult> SkuMovements(Guid id, [FromQuery] string? reason, [FromQuery] int page = 1, [FromQuery] int pageSize = 30, CancellationToken ct = default)
+        => Ok(await _svc.ListMovementsAsync(id, reason, page, pageSize, ct));
 
     [HttpGet("skus/{id:guid}/batches")]
     [HasPermission(Modules.Inventory, Actions.View)]

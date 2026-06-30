@@ -56,6 +56,7 @@ public record InvoiceDetail(
     string? PetNameSnapshot,
     decimal BaseAmount,
     decimal AddOnAmount,
+    decimal AdditionalAmount,
     decimal DiscountAmount,
     decimal IgstAmount,
     decimal CgstAmount,

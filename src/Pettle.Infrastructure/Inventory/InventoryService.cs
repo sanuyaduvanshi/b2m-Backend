@@ -691,7 +691,7 @@ public class InventoryService : IInventoryService
         return true;
     }
 
-    public async Task<PagedResult<StockMovementDto>> ListMovementsAsync(Guid skuId, int page, int pageSize, CancellationToken ct = default)
+    public async Task<PagedResult<StockMovementDto>> ListMovementsAsync(Guid skuId, string? reason, int page, int pageSize, CancellationToken ct = default)
     {
         if (_user.TenantId is null) return Empty<StockMovementDto>(page, pageSize);
         page = Math.Max(page, 1); pageSize = Math.Clamp(pageSize, 1, 200);
@@ -699,10 +699,15 @@ public class InventoryService : IInventoryService
         var q = _db.StockMovements
             .Include(m => m.Sku)
             .Where(m => m.TenantId == _user.TenantId && m.SkuId == skuId)
-            .OrderByDescending(m => m.CreatedAt);
+            .AsQueryable();
 
-        var total = await q.CountAsync(ct);
-        var items = await q.Skip((page - 1) * pageSize).Take(pageSize)
+        if (!string.IsNullOrWhiteSpace(reason) &&
+            Enum.TryParse<StockMovementReason>(reason, ignoreCase: true, out var reasonEnum))
+            q = q.Where(m => m.Reason == reasonEnum);
+
+        var ordered = q.OrderByDescending(m => m.CreatedAt);
+        var total = await ordered.CountAsync(ct);
+        var items = await ordered.Skip((page - 1) * pageSize).Take(pageSize)
             .Select(m => new StockMovementDto(
                 m.Id, m.Sku!.Name, m.Sku.Code, m.Reason.ToString(),
                 m.QuantityChange, m.StockAfter, m.CreatedAt, m.Note))

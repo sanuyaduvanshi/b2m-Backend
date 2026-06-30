@@ -35,6 +35,6 @@ public interface IInventoryService
     Task<bool> DeletePoAsync(Guid id, CancellationToken ct = default);
 
     Task<bool> CreateStockAdjustmentAsync(CreateStockAdjustmentRequest req, CancellationToken ct = default);
-    Task<PagedResult<StockMovementDto>> ListMovementsAsync(Guid skuId, int page, int pageSize, CancellationToken ct = default);
+    Task<PagedResult<StockMovementDto>> ListMovementsAsync(Guid skuId, string? reason, int page, int pageSize, CancellationToken ct = default);
     Task<IReadOnlyList<SkuBatchDto>> ListBatchesAsync(Guid skuId, CancellationToken ct = default);
 }
