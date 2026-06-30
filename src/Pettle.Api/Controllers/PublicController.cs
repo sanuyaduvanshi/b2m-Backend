@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Pettle.Domain.ClientEnquiries;
 using Pettle.Infrastructure.Persistence;
 
 namespace Pettle.Api.Controllers;
@@ -10,6 +11,45 @@ public class PublicController : ControllerBase
 {
     private readonly PettleDbContext _db;
     public PublicController(PettleDbContext db) => _db = db;
+
+    public record PublicEnquiryRequest(
+        string ParentName,
+        string Phone,
+        string? Email,
+        string? PetName,
+        string? ServiceInterest,
+        string? Message
+    );
+
+    [HttpPost("enquiry")]
+    public async Task<IActionResult> SubmitEnquiry([FromBody] PublicEnquiryRequest req, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(req.ParentName) || string.IsNullOrWhiteSpace(req.Phone))
+            return BadRequest(new { message = "Name and phone are required." });
+
+        var tenant = await _db.Tenants.FirstOrDefaultAsync(t => t.IsActive, ct);
+        if (tenant is null) return StatusCode(503, new { message = "Service unavailable." });
+
+        var msg = req.Message?.Trim();
+        if (!string.IsNullOrWhiteSpace(req.ServiceInterest))
+            msg = string.IsNullOrWhiteSpace(msg)
+                ? $"Service interest: {req.ServiceInterest}"
+                : $"Service interest: {req.ServiceInterest}\n{msg}";
+
+        _db.ClientEnquiries.Add(new ClientEnquiry
+        {
+            TenantId = tenant.Id,
+            Source = EnquirySource.Website,
+            Status = EnquiryStatus.Pending,
+            ParentName = req.ParentName.Trim(),
+            Phone = req.Phone.Trim(),
+            Email = req.Email?.Trim(),
+            PetName = req.PetName?.Trim(),
+            Message = msg,
+        });
+        await _db.SaveChangesAsync(ct);
+        return Ok(new { message = "Thank you! We'll get back to you within 24 hours." });
+    }
 
     /// <summary>
     /// Returns the tenant brand to display on unauthenticated screens (login, password reset).
