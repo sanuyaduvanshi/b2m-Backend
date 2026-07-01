@@ -463,8 +463,9 @@ public class InventoryService : IInventoryService
     public async Task<bool> DeletePoAsync(Guid id, bool force = false, CancellationToken ct = default)
     {
         if (_user.TenantId is null) return false;
+
+        // Load PO without navigation properties — avoids EF tracking conflict with ExecuteDeleteAsync later
         var po = await _db.PurchaseOrders
-            .Include(p => p.Lines)
             .FirstOrDefaultAsync(p => p.Id == id && p.TenantId == _user.TenantId, ct);
         if (po is null) return false;
 
@@ -473,26 +474,27 @@ public class InventoryService : IInventoryService
             if (!force)
                 throw AppException.Conflict($"Cannot delete {po.PoNumber} — stock has already been received against it.");
 
-            // Reverse received stock for each linked SKU
-            var skuIds = po.Lines
-                .Where(l => l.SkuId.HasValue && l.ReceivedQuantity > 0)
-                .Select(l => l.SkuId!.Value)
-                .Distinct()
-                .ToList();
+            // Project only what we need — no tracked entities to conflict with ExecuteDeleteAsync
+            var receivedLines = await _db.PurchaseOrderLines
+                .Where(l => l.PurchaseOrderId == po.Id && l.SkuId.HasValue && l.ReceivedQuantity > 0)
+                .Select(l => new { SkuId = l.SkuId!.Value, l.ReceivedQuantity })
+                .ToListAsync(ct);
 
-            if (skuIds.Count > 0)
+            if (receivedLines.Count > 0)
             {
+                var skuIds = receivedLines.Select(l => l.SkuId).Distinct().ToList();
                 var skus = await _db.Skus.Where(s => skuIds.Contains(s.Id)).ToListAsync(ct);
                 var skuMap = skus.ToDictionary(s => s.Id);
-                foreach (var line in po.Lines.Where(l => l.SkuId.HasValue && l.ReceivedQuantity > 0))
+                foreach (var line in receivedLines)
                 {
-                    if (skuMap.TryGetValue(line.SkuId!.Value, out var sku))
+                    if (skuMap.TryGetValue(line.SkuId, out var sku))
                         sku.StockOnHand = Math.Max(0, sku.StockOnHand - (int)Math.Round(line.ReceivedQuantity));
                 }
+                await _db.SaveChangesAsync(ct); // persist stock reversal before deleting lines
             }
         }
 
-        // Hard-delete lines first (soft-delete interceptor won't cascade)
+        // Hard-delete lines (soft-delete interceptor won't cascade to children)
         await _db.PurchaseOrderLines
             .Where(l => l.PurchaseOrderId == po.Id)
             .ExecuteDeleteAsync(ct);
