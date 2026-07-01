@@ -91,6 +91,16 @@ public class BookingService : TenantEntity
     public string? Notes { get; set; }
     public Guid? SkuId { get; set; }
     public int SkuQuantity { get; set; } = 1;
+    public ICollection<BookingServiceAddOn> AddOns { get; set; } = new List<BookingServiceAddOn>();
+}
+
+public class BookingServiceAddOn : TenantEntity
+{
+    public Guid BookingServiceId { get; set; }
+    public BookingService? BookingService { get; set; }
+    public Guid? CatalogueItemId { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public decimal Price { get; set; }
 }
 
 public class BoardingDetail : TenantEntity

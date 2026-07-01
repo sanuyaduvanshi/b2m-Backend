@@ -56,6 +56,7 @@ public class PettleDbContext : IdentityDbContext<ApplicationUser, ApplicationRol
     public DbSet<VetDetail> VetDetails => Set<VetDetail>();
     public DbSet<DayCareDetail> DayCareDetails => Set<DayCareDetail>();
     public DbSet<BookingAddOn> BookingAddOns => Set<BookingAddOn>();
+    public DbSet<BookingServiceAddOn> BookingServiceAddOns => Set<BookingServiceAddOn>();
     public DbSet<BookingEstimateLine> BookingEstimateLines => Set<BookingEstimateLine>();
     public DbSet<BookingChangeRequest> BookingChangeRequests => Set<BookingChangeRequest>();
     public DbSet<BookingRequest> BookingRequests => Set<BookingRequest>();
@@ -185,6 +186,11 @@ public class PettleDbContext : IdentityDbContext<ApplicationUser, ApplicationRol
             b.HasIndex(x => new { x.TenantId, x.Status });
             b.HasOne(x => x.Pet).WithMany().HasForeignKey(x => x.PetId).OnDelete(DeleteBehavior.Restrict);
             b.Property(x => x.FinalAmount).HasPrecision(12, 2);
+            b.HasMany(x => x.AddOns).WithOne(x => x.BookingService!).HasForeignKey(x => x.BookingServiceId).OnDelete(DeleteBehavior.Cascade);
+        });
+        builder.Entity<BookingServiceAddOn>(b =>
+        {
+            b.Property(x => x.Price).HasPrecision(12, 2);
         });
 
         builder.Entity<BoardingDetail>(b =>

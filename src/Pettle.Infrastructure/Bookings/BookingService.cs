@@ -75,6 +75,7 @@ public class BookingServiceImpl : IBookingService
         var b = await _db.Bookings.AsNoTracking()
             .Include(x => x.PetParent)
             .Include(x => x.Services).ThenInclude(s => s.Pet)
+            .Include(x => x.Services).ThenInclude(s => s.AddOns)
             .Include(x => x.BoardingDetails)
             .Include(x => x.GroomingDetails)
             .Include(x => x.VetDetails)
@@ -113,7 +114,8 @@ public class BookingServiceImpl : IBookingService
                 s.Pet?.Name ?? s.PetNameSnapshot ?? "(walk-in)",
                 s.ServiceName, s.FinalAmount, s.Notes,
                 subByService.TryGetValue(s.Id, out var sub) ? sub : null,
-                s.SkuId, s.SkuQuantity
+                s.SkuId, s.SkuQuantity,
+                s.AddOns.Select(a => new ServiceAddOnLine(a.Id, a.Name, a.Price, a.CatalogueItemId)).ToList()
             )).ToList(),
             b.AddOns.Select(a => new BookingAddOnLine(a.Id, a.AddOnService, a.Count, a.Distance, a.Days, a.FinalAmount)).ToList(),
             b.EstimateLines.OrderBy(e => e.SortOrder).Select(e => new BookingEstimateLineDto(e.Id, e.Label, e.Quantity, e.UnitAmount, e.Amount, e.SortOrder)).ToList(),
@@ -254,7 +256,7 @@ public class BookingServiceImpl : IBookingService
             Source = req.Source,
             Notes = req.Notes,
             AdditionalInstruction = req.AdditionalInstruction,
-            TotalBillingAmount = req.Services.Sum(s => s.FinalAmount),
+            TotalBillingAmount = req.Services.Sum(s => s.FinalAmount + (s.AddOns?.Sum(a => a.Price) ?? 0m)),
             InvoiceNumber = invNum,
         };
         foreach (var line in req.Services)
@@ -272,6 +274,9 @@ public class BookingServiceImpl : IBookingService
                 SkuQuantity = line.SkuQuantity > 0 ? line.SkuQuantity : 1,
             };
             b.Services.Add(svc);
+
+            foreach (var ao in line.AddOns ?? [])
+                svc.AddOns.Add(new BookingServiceAddOn { Name = ao.Name, Price = ao.Price, CatalogueItemId = ao.CatalogueItemId });
 
             switch (line.ServiceType)
             {
@@ -316,6 +321,16 @@ public class BookingServiceImpl : IBookingService
                 Subtotal = line.FinalAmount,
                 Total = line.FinalAmount,
             });
+            foreach (var ao in line.AddOns ?? [])
+                invoice.Lines.Add(new InvoiceLineItem
+                {
+                    BillItemName = ao.Name,
+                    BillSection = line.ServiceType.ToString() + " Add-on",
+                    Quantity = 1,
+                    UnitAmount = ao.Price,
+                    Subtotal = ao.Price,
+                    Total = ao.Price,
+                });
         }
 
         _db.Bookings.Add(b);

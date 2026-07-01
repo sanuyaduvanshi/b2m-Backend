@@ -48,6 +48,8 @@ public record BookingChangeRequestDto(Guid Id, string Description, ChangeRequest
 public record CreateChangeRequestRequest(string Description);
 public record ResolveChangeRequestRequest(ChangeRequestStatus Status, string? ResolutionNote);
 
+public record ServiceAddOnLine(Guid Id, string Name, decimal Price, Guid? CatalogueItemId);
+
 public record BookingServiceLine(
     Guid Id,
     BookingServiceType ServiceType,
@@ -59,7 +61,8 @@ public record BookingServiceLine(
     string? Notes,
     BookingSubDetail? Sub,
     Guid? SkuId = null,
-    int SkuQuantity = 1
+    int SkuQuantity = 1,
+    IReadOnlyList<ServiceAddOnLine>? AddOns = null
 );
 
 public record BookingSubDetail(
@@ -97,6 +100,8 @@ public record CreateBookingRequest(
     Guid? UseSubscriptionId = null
 );
 
+public record CreateServiceAddOn(string Name, decimal Price, Guid? CatalogueItemId = null);
+
 public record CreateBookingServiceLine(
     BookingServiceType ServiceType,
     Guid? PetId,
@@ -110,7 +115,8 @@ public record CreateBookingServiceLine(
     string? Notes,
     string? PetNameOverride = null,
     Guid? SkuId = null,
-    int SkuQuantity = 1
+    int SkuQuantity = 1,
+    List<CreateServiceAddOn>? AddOns = null
 );
 
 public record BookingStateChangeRequest(BookingStatus NewStatus, string? Reason);
