@@ -390,11 +390,18 @@ public class InventoryService : IInventoryService
 
                     if (delta > 0)
                     {
+                        // Auto-generate batch number if user left it blank
+                        var lineIdx = po.Lines.ToList().IndexOf(line) + 1;
+                        var autoBatch = string.IsNullOrWhiteSpace(line.BatchNumber)
+                            ? $"{po.PoNumber}-L{lineIdx:D2}"
+                            : line.BatchNumber.Trim();
+                        line.BatchNumber = autoBatch; // persist back to PO line for visibility
+
                         _db.SkuBatches.Add(new SkuBatch
                         {
                             TenantId = _user.TenantId.Value,
                             SkuId = sku.Id,
-                            BatchNumber = line.BatchNumber,
+                            BatchNumber = autoBatch,
                             ExpiryDate = line.ExpiryDate,
                             QtyRemaining = delta,
                             LandingCost = line.LandingCost > 0 ? line.LandingCost : sku.CostPrice,

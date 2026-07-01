@@ -126,14 +126,15 @@ public class BookingsImporter
             return booking;
         }
 
-        Guid? FindPetId(Guid parentId, string? petName)
+        Guid? FindPetId(Guid? parentId, string? petName)
         {
+            if (parentId is null) return null;
             if (!string.IsNullOrWhiteSpace(petName)
                 && petsByParentAndName.TryGetValue($"{parentId}|{petName.Trim().ToLowerInvariant()}", out var id))
                 return id;
             // Fallback: no pet name (or no name match) but the parent owns exactly one pet → attach to it.
             // Handles unnamed pets / blank Pet Name cells in the export.
-            if (petsByParent.TryGetValue(parentId, out var pets) && pets.Count == 1) return pets[0];
+            if (petsByParent.TryGetValue(parentId.Value, out var pets) && pets.Count == 1) return pets[0];
             return null;
         }
 
@@ -231,7 +232,7 @@ public class BookingsImporter
         string sheetName,
         BookingServiceType type,
         Func<string, Task<Booking?>> resolveBooking,
-        Func<Guid, string?, Guid?> findPet,
+        Func<Guid?, string?, Guid?> findPet,
         Guid tenantId,
         ImportResult result,
         CancellationToken ct)

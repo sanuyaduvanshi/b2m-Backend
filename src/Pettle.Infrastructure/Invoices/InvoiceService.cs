@@ -66,7 +66,7 @@ public class InvoiceService : IInvoiceService
             i.BaseAmount, i.AddOnAmount, i.AdditionalAmount, i.DiscountAmount,
             i.IgstAmount, i.CgstAmount, i.SgstAmount,
             i.Revenue, i.Paid, i.Due, i.PaymentStatus,
-            i.Lines.Select(l => new InvoiceLineDto(l.Id, l.BillItemName, l.Category, l.Description, l.Quantity, l.UnitAmount, l.Discount, l.Subtotal, l.Total)).ToList(),
+            i.Lines.Select(l => new InvoiceLineDto(l.Id, l.BillItemName, l.Category, l.Description, l.Quantity, l.UnitAmount, l.Discount, l.Subtotal, l.Total, l.BatchNumber)).ToList(),
             i.Payments.OrderByDescending(p => p.PaymentTime).Select(p => new PaymentDto(p.Id, p.PaymentTime, p.Amount, p.Mode, p.Source, p.TransactionId, p.Type, p.Status, p.Notes)).ToList(),
             i.Notes
         );
@@ -104,8 +104,10 @@ public class InvoiceService : IInvoiceService
 
         // Retail rates are GST-inclusive: extract tax out of the net (mirrors the on-screen totals).
         decimal sumGross = 0, sumLineDiscount = 0, sumTaxable = 0, sumTax = 0;
-        foreach (var line in req.Lines)
+        var reqLineToInvoiceLine = new Dictionary<int, InvoiceLineItem>(); // index → line for FIFO batch link
+        for (int lineIdx = 0; lineIdx < req.Lines.Count; lineIdx++)
         {
+            var line = req.Lines[lineIdx];
             if (line.Quantity <= 0)
                 throw AppException.Validation("Invalid quantity",
                     new Dictionary<string, string[]> { ["lines"] = new[] { $"Quantity must be greater than zero for '{line.ItemName}'." } });
@@ -117,7 +119,7 @@ public class InvoiceService : IInvoiceService
             var taxable = net / (1 + line.TaxPercent / 100m);
             var taxAmt = net - taxable;
 
-            invoice.Lines.Add(new InvoiceLineItem
+            var invoiceLine = new InvoiceLineItem
             {
                 BillItemName = line.ItemName,
                 SkuName = line.SkuId.HasValue ? line.ItemName : null,
@@ -129,7 +131,9 @@ public class InvoiceService : IInvoiceService
                 CgstAmount = R(taxAmt / 2m),
                 SgstAmount = R(taxAmt / 2m),
                 Total = R(net),
-            });
+            };
+            invoice.Lines.Add(invoiceLine);
+            if (line.SkuId.HasValue) reqLineToInvoiceLine[lineIdx] = invoiceLine;
 
             sumGross += gross;
             sumLineDiscount += disc1 + disc2;
@@ -181,8 +185,11 @@ public class InvoiceService : IInvoiceService
         _db.Invoices.Add(invoice);
 
         // Deduct stock for product (SKU-linked) lines.
-        foreach (var line in req.Lines.Where(l => l.SkuId.HasValue))
+        for (int lineIdx = 0; lineIdx < req.Lines.Count; lineIdx++)
         {
+            var line = req.Lines[lineIdx];
+            if (!line.SkuId.HasValue) continue;
+
             var sku = await _db.Skus.FirstOrDefaultAsync(s => s.Id == line.SkuId && s.TenantId == _user.TenantId, ct);
             if (sku is null)
                 throw AppException.Validation("Unknown product",
@@ -192,8 +199,13 @@ public class InvoiceService : IInvoiceService
             if (sku.StockOnHand < qty)
                 throw AppException.Conflict($"Not enough stock for '{sku.Name}' — {sku.StockOnHand} on hand, {qty} requested.");
 
-            // FEFO: deduct from earliest-expiry batches first
-            await DeductFefoAsync(sku.Id, _user.TenantId!.Value, qty, ct);
+            // FIFO/FEFO: deduct from earliest-expiry batch first; for non-expiry items falls back to oldest-received (FIFO).
+            var firstBatch = await DeductFifoAsync(sku.Id, _user.TenantId!.Value, qty, ct);
+
+            // Link the FIFO batch number back to the invoice line for full traceability.
+            if (firstBatch is not null && reqLineToInvoiceLine.TryGetValue(lineIdx, out var invLine))
+                invLine.BatchNumber = firstBatch;
+
             sku.StockOnHand -= qty;
             sku.NearestExpiry = await GetNearestExpiryAsync(sku.Id, _user.TenantId!.Value, ct);
 
@@ -204,7 +216,7 @@ public class InvoiceService : IInvoiceService
                 QuantityChange = -qty,
                 StockAfter = sku.StockOnHand,
                 RelatedInvoiceId = invoice.Id,
-                Note = $"Sale {invoice.InvoiceNumber}",
+                Note = $"Sale {invoice.InvoiceNumber} | Batch: {firstBatch ?? "N/A"}",
             });
         }
 
@@ -547,15 +559,18 @@ public class InvoiceService : IInvoiceService
         return true;
     }
 
-    private async Task DeductFefoAsync(Guid skuId, Guid tenantId, int qty, CancellationToken ct)
+    // FIFO for non-expiry items (oldest received first); FEFO for items with expiry (nearest expiry first).
+    // Returns the batch number of the first batch consumed (for invoice line traceability).
+    private async Task<string?> DeductFifoAsync(Guid skuId, Guid tenantId, int qty, CancellationToken ct)
     {
         var batches = await _db.SkuBatches
             .Where(b => b.SkuId == skuId && b.TenantId == tenantId && b.QtyRemaining > 0)
-            .OrderBy(b => b.ExpiryDate == null)
-            .ThenBy(b => b.ExpiryDate)
-            .ThenBy(b => b.ReceivedAt)
+            .OrderBy(b => b.ExpiryDate == null)   // expiry-dated batches first (FEFO)
+            .ThenBy(b => b.ExpiryDate)             // nearest expiry first
+            .ThenBy(b => b.ReceivedAt)             // FIFO fallback: oldest received first
             .ToListAsync(ct);
 
+        string? firstBatch = null;
         decimal remaining = qty;
         foreach (var batch in batches)
         {
@@ -563,7 +578,9 @@ public class InvoiceService : IInvoiceService
             var take = Math.Min(batch.QtyRemaining, remaining);
             batch.QtyRemaining -= take;
             remaining -= take;
+            firstBatch ??= batch.BatchNumber;
         }
+        return firstBatch;
     }
 
     private async Task<DateOnly?> GetNearestExpiryAsync(Guid skuId, Guid tenantId, CancellationToken ct)

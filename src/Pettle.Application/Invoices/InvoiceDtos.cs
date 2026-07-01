@@ -30,7 +30,8 @@ public record InvoiceLineDto(
     decimal UnitAmount,
     decimal Discount,
     decimal Subtotal,
-    decimal Total
+    decimal Total,
+    string? BatchNumber = null
 );
 
 public record PaymentDto(

@@ -50,6 +50,7 @@ public class InvoiceLineItem : TenantEntity
     public string? ServiceName { get; set; }
     public string? SkuName { get; set; }
     public string? SkuLegacyId { get; set; }
+    public string? BatchNumber { get; set; }
     public string? Description { get; set; }
     public string? Category { get; set; }
     public string? SubCategory { get; set; }
