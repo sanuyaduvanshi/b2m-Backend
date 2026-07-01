@@ -32,7 +32,7 @@ public interface IInventoryService
     Task<PoDetail?> UpdatePoAsync(Guid id, CreatePoRequest req, CancellationToken ct = default);
     Task<bool> ReceivePoAsync(Guid id, ReceivePoRequest req, CancellationToken ct = default);
     Task<bool> RecordPoPaymentAsync(Guid id, RecordPoPaymentRequest req, CancellationToken ct = default);
-    Task<bool> DeletePoAsync(Guid id, CancellationToken ct = default);
+    Task<bool> DeletePoAsync(Guid id, bool force = false, CancellationToken ct = default);
 
     Task<bool> CreateStockAdjustmentAsync(CreateStockAdjustmentRequest req, CancellationToken ct = default);
     Task<PagedResult<StockMovementDto>> ListMovementsAsync(Guid skuId, string? reason, int page, int pageSize, CancellationToken ct = default);

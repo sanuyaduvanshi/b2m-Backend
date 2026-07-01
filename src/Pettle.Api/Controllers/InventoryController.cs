@@ -127,8 +127,8 @@ public class InventoryController : ControllerBase
 
     [HttpDelete("purchase-orders/{id:guid}")]
     [HasPermission(Modules.Inventory, Actions.Delete)]
-    public async Task<IActionResult> DeletePo(Guid id, CancellationToken ct)
-        => await _svc.DeletePoAsync(id, ct) ? NoContent() : NotFound();
+    public async Task<IActionResult> DeletePo(Guid id, [FromQuery] bool force = false, CancellationToken ct = default)
+        => await _svc.DeletePoAsync(id, force, ct) ? NoContent() : NotFound();
 
     [HttpPost("adjustments")]
     [HasPermission(Modules.Inventory, Actions.Edit)]
