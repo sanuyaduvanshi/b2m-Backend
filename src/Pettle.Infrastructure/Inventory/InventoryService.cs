@@ -405,6 +405,8 @@ public class InventoryService : IInventoryService
                             ExpiryDate = line.ExpiryDate,
                             QtyRemaining = delta,
                             LandingCost = line.LandingCost > 0 ? line.LandingCost : sku.CostPrice,
+                            Mrp = line.Mrp > 0 ? line.Mrp : null,
+                            SellingPrice = line.SellingPrice > 0 ? line.SellingPrice : null,
                             PurchaseOrderId = po.Id,
                             Source = "PoReceipt",
                             ReceivedAt = DateTimeOffset.UtcNow,
@@ -765,7 +767,8 @@ public class InventoryService : IInventoryService
             .ThenBy(b => b.ReceivedAt)
             .ToListAsync(ct);
         return batches.Select(b => new SkuBatchDto(
-            b.Id, b.BatchNumber, b.ExpiryDate, b.QtyRemaining, b.LandingCost, b.Source, b.ReceivedAt)).ToList();
+            b.Id, b.BatchNumber, b.ExpiryDate, b.QtyRemaining, b.LandingCost, b.Source, b.ReceivedAt,
+            b.Mrp, b.SellingPrice)).ToList();
     }
 
     private async Task<DateOnly?> GetNearestExpiryAsync(Guid skuId, Guid tenantId, CancellationToken ct)

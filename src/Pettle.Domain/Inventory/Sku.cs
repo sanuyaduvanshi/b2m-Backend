@@ -149,6 +149,10 @@ public class SkuBatch : TenantEntity
     public DateOnly? ExpiryDate { get; set; }
     public decimal QtyRemaining { get; set; }
     public decimal LandingCost { get; set; }
+    /// <summary>MRP from the PO line at time of receipt — used to populate sale MRP per batch.</summary>
+    public decimal? Mrp { get; set; }
+    /// <summary>Selling price from the PO line at time of receipt.</summary>
+    public decimal? SellingPrice { get; set; }
     public Guid? PurchaseOrderId { get; set; }
     /// <summary>Opening | PoReceipt | Adjustment | Procurement | Return</summary>
     public string Source { get; set; } = "Opening";

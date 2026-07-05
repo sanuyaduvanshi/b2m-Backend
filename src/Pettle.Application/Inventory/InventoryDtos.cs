@@ -110,6 +110,8 @@ public record SkuBatchDto(
     decimal QtyRemaining,
     decimal LandingCost,
     string Source,
-    DateTimeOffset ReceivedAt
+    DateTimeOffset ReceivedAt,
+    decimal? Mrp = null,
+    decimal? SellingPrice = null
 );
 
