@@ -72,6 +72,18 @@ public class InvoiceService : IInvoiceService
         );
     }
 
+    public async Task<byte[]?> GeneratePdfAsync(Guid id, CancellationToken ct = default)
+    {
+        if (_user.TenantId is null) return null;
+        var invoice = await GetAsync(id, ct);
+        if (invoice is null) return null;
+
+        var tenant = await _db.Tenants.AsNoTracking()
+            .FirstOrDefaultAsync(t => t.Id == _user.TenantId, ct);
+
+        return InvoicePdfRenderer.Render(invoice, tenant?.Name ?? "Invoice", tenant?.LogoUrl);
+    }
+
     public async Task<InvoiceDetail> CreateSaleAsync(CreateSaleRequest req, CancellationToken ct = default)
     {
         if (_user.TenantId is null)

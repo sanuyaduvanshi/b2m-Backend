@@ -25,6 +25,17 @@ public class InvoicesController : ControllerBase
         return r is null ? NotFound() : Ok(r);
     }
 
+    [HttpGet("{id:guid}/pdf")]
+    [HasPermission(Modules.Invoices, Actions.View)]
+    public async Task<IActionResult> GetPdf(Guid id, CancellationToken ct)
+    {
+        var detail = await _svc.GetAsync(id, ct);
+        if (detail is null) return NotFound();
+        var bytes = await _svc.GeneratePdfAsync(id, ct);
+        if (bytes is null) return NotFound();
+        return File(bytes, "application/pdf", $"Invoice-{detail.InvoiceNumber}.pdf");
+    }
+
     [HttpPost("sale")]
     [HasPermission(Modules.Invoices, Actions.Create)]
     public async Task<IActionResult> CreateSale([FromBody] CreateSaleRequest req, CancellationToken ct)

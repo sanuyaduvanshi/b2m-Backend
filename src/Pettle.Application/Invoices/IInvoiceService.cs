@@ -13,4 +13,5 @@ public interface IInvoiceService
     Task<bool> RefundAsync(Guid invoiceId, RefundRequest req, CancellationToken ct = default);
     Task<bool> UpdateAsync(Guid id, UpdateInvoiceRequest req, CancellationToken ct = default);
     Task<bool> DeleteAsync(Guid id, CancellationToken ct = default);
+    Task<byte[]?> GeneratePdfAsync(Guid id, CancellationToken ct = default);
 }

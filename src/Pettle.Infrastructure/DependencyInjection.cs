@@ -43,6 +43,7 @@ using Pettle.Infrastructure.Reminders;
 using Pettle.Infrastructure.Reports;
 using Pettle.Infrastructure.Subscriptions;
 using Pettle.Infrastructure.Tenancy;
+using QuestPDF.Infrastructure;
 
 namespace Pettle.Infrastructure;
 
@@ -50,6 +51,8 @@ public static class DependencyInjection
 {
     public static IServiceCollection AddPettleInfrastructure(this IServiceCollection services, IConfiguration config)
     {
+        QuestPDF.Settings.License = LicenseType.Community;
+
         var conn = config.GetConnectionString("Postgres")
                    ?? throw new InvalidOperationException("Missing ConnectionStrings:Postgres");
 
