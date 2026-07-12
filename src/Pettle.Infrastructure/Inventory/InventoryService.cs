@@ -499,21 +499,35 @@ public class InventoryService : IInventoryService
             if (!force)
                 throw AppException.Conflict($"Cannot delete {po.PoNumber} — stock has already been received against it.");
 
-            // Project only what we need — no tracked entities to conflict with ExecuteDeleteAsync
-            var receivedLines = await _db.PurchaseOrderLines
-                .Where(l => l.PurchaseOrderId == po.Id && l.SkuId.HasValue && l.ReceivedQuantity > 0)
-                .Select(l => new { SkuId = l.SkuId!.Value, l.ReceivedQuantity })
+            // Reverse the exact batches this PO created (tracked) rather than reducing
+            // StockOnHand by the originally-received quantity — some of that stock may already
+            // have been sold since receipt, in which case only what's still sitting in the batch
+            // (QtyRemaining) should come back off StockOnHand, and the reversal must be logged so
+            // the batch ledger and StockOnHand never silently drift apart.
+            var poBatches = await _db.SkuBatches
+                .Where(b => b.PurchaseOrderId == po.Id && b.TenantId == _user.TenantId && b.QtyRemaining > 0)
                 .ToListAsync(ct);
 
-            if (receivedLines.Count > 0)
+            if (poBatches.Count > 0)
             {
-                var skuIds = receivedLines.Select(l => l.SkuId).Distinct().ToList();
+                var skuIds = poBatches.Select(b => b.SkuId).Distinct().ToList();
                 var skus = await _db.Skus.Where(s => skuIds.Contains(s.Id)).ToListAsync(ct);
                 var skuMap = skus.ToDictionary(s => s.Id);
-                foreach (var line in receivedLines)
+                foreach (var batch in poBatches)
                 {
-                    if (skuMap.TryGetValue(line.SkuId, out var sku))
-                        sku.StockOnHand = Math.Max(0, sku.StockOnHand - (int)Math.Round(line.ReceivedQuantity));
+                    if (!skuMap.TryGetValue(batch.SkuId, out var sku)) continue;
+                    var qty = (int)Math.Round(batch.QtyRemaining);
+                    sku.StockOnHand = Math.Max(0, sku.StockOnHand - qty);
+                    _db.StockMovements.Add(new StockMovement
+                    {
+                        TenantId = _user.TenantId!.Value,
+                        SkuId = sku.Id,
+                        Reason = StockMovementReason.Adjustment,
+                        QuantityChange = -qty,
+                        StockAfter = sku.StockOnHand,
+                        Note = $"PO {po.PoNumber} force-deleted — batch {batch.BatchNumber ?? batch.Id.ToString()} reversed",
+                    });
+                    batch.QtyRemaining = 0;
                 }
                 await _db.SaveChangesAsync(ct); // persist stock reversal before deleting lines
             }
