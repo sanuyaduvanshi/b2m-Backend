@@ -384,6 +384,9 @@ public class BookingServiceImpl : IBookingService
                 if (sku is null) continue;
                 var qty = line.SkuQuantity > 0 ? line.SkuQuantity : 1;
 
+                if (sku.StockOnHand < qty)
+                    throw AppException.Conflict($"Not enough stock for '{sku.Name}' — {sku.StockOnHand} on hand, {qty} requested.");
+
                 // FIFO: deduct from the oldest-received batch first, same as POS sales, so the
                 // SKU's batch table stays consistent with what StockOnHand shows.
                 await FifoBatchDeductor.DeductAsync(_db, sku.Id, _user.TenantId!.Value, qty, ct);
