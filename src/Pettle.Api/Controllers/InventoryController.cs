@@ -37,8 +37,8 @@ public class InventoryController : ControllerBase
 
     [HttpGet("skus")]
     [HasPermission(Modules.Inventory, Actions.View)]
-    public async Task<IActionResult> Skus([FromQuery] string? search, [FromQuery] bool? lowStock, [FromQuery] bool? inAppStore, [FromQuery] Guid? categoryId, [FromQuery] int page = 1, [FromQuery] int pageSize = 50, CancellationToken ct = default)
-        => Ok(await _svc.ListSkusAsync(search, lowStock, inAppStore, categoryId, page, pageSize, ct));
+    public async Task<IActionResult> Skus([FromQuery] string? search, [FromQuery] bool? lowStock, [FromQuery] bool? inAppStore, [FromQuery] Guid? categoryId, [FromQuery] int page = 1, [FromQuery] int pageSize = 50, [FromQuery] bool withVariants = false, CancellationToken ct = default)
+        => Ok(await _svc.ListSkusAsync(search, lowStock, inAppStore, categoryId, page, pageSize, withVariants, ct));
 
     [HttpPatch("skus/{id:guid}/listing")]
     [HasPermission(Modules.Inventory, Actions.Edit)]

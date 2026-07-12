@@ -15,7 +15,7 @@ public class InventoryService : IInventoryService
 
     public InventoryService(PettleDbContext db, ICurrentUser user) { _db = db; _user = user; }
 
-    public async Task<PagedResult<SkuListItem>> ListSkusAsync(string? search, bool? lowStock, bool? inAppStore, Guid? categoryId, int page, int pageSize, CancellationToken ct = default)
+    public async Task<PagedResult<SkuListItem>> ListSkusAsync(string? search, bool? lowStock, bool? inAppStore, Guid? categoryId, int page, int pageSize, bool withVariants = false, CancellationToken ct = default)
     {
         if (_user.TenantId is null) return Empty<SkuListItem>(page, pageSize);
         var q = _db.Skus.AsNoTracking().Include(s => s.Category).Include(s => s.Brand).Where(s => s.TenantId == _user.TenantId);
@@ -34,7 +34,23 @@ public class InventoryService : IInventoryService
             .Select(x => new SkuListItem(x.Id, x.Code, x.Name, x.Category != null ? x.Category.Name : null, x.Unit, x.SellingPrice, x.CostPrice, x.TaxPercent,
                 x.StockOnHand, x.ReorderLevel, x.NearestExpiry, x.IsActive, x.IsListedInApp, x.AppImageUrl,
                 x.Description, x.CategoryId, x.MrpPrice, x.HsnSacCode, x.TrackExpiry,
-                x.BrandId, x.Brand != null ? x.Brand.Name : null)).ToListAsync(ct);
+                x.BrandId, x.Brand != null ? x.Brand.Name : null, null)).ToListAsync(ct);
+
+        if (withVariants && items.Count > 0)
+        {
+            var ids = items.Select(i => i.Id).ToList();
+            var variantsBySku = await _db.SkuBatches.AsNoTracking()
+                .Where(b => ids.Contains(b.SkuId) && b.TenantId == _user.TenantId && b.QtyRemaining > 0 && b.Mrp != null && b.Mrp > 0)
+                .GroupBy(b => new { b.SkuId, b.Mrp })
+                .Select(g => new { g.Key.SkuId, Mrp = g.Key.Mrp!.Value, Qty = g.Sum(b => b.QtyRemaining) })
+                .ToListAsync(ct);
+            var bySku = variantsBySku.GroupBy(v => v.SkuId)
+                .ToDictionary(g => g.Key, g => g.Select(v => new SkuPriceVariantDto(v.Mrp, v.Qty)).ToList());
+            items = items.Select(i => bySku.TryGetValue(i.Id, out var variants) && variants.Count > 1
+                ? i with { PriceVariants = variants }
+                : i).ToList();
+        }
+
         return new PagedResult<SkuListItem>(items, total, p, sz);
     }
 
@@ -46,7 +62,7 @@ public class InventoryService : IInventoryService
             .Select(x => new SkuListItem(x.Id, x.Code, x.Name, x.Category != null ? x.Category.Name : null, x.Unit, x.SellingPrice, x.CostPrice, x.TaxPercent,
                 x.StockOnHand, x.ReorderLevel, x.NearestExpiry, x.IsActive, x.IsListedInApp, x.AppImageUrl,
                 x.Description, x.CategoryId, x.MrpPrice, x.HsnSacCode, x.TrackExpiry,
-                x.BrandId, x.Brand != null ? x.Brand.Name : null))
+                x.BrandId, x.Brand != null ? x.Brand.Name : null, null))
             .FirstOrDefaultAsync(ct);
     }
 

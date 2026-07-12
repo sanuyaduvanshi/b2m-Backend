@@ -10,8 +10,12 @@ public record SkuListItem(
     bool IsListedInApp, string? AppImageUrl,
     string? Description = null, Guid? CategoryId = null, decimal MrpPrice = 0,
     string? HsnSacCode = null, bool TrackExpiry = false,
-    Guid? BrandId = null, string? BrandName = null
+    Guid? BrandId = null, string? BrandName = null,
+    IReadOnlyList<SkuPriceVariantDto>? PriceVariants = null
 );
+
+/// <summary>One distinct MRP a SKU currently has stock at (aggregated across its batches), with how much is available at that price.</summary>
+public record SkuPriceVariantDto(decimal Mrp, decimal QtyAvailable);
 
 public record CreateOrUpdateSkuRequest(
     string Code, string Name, string? Description, Guid? CategoryId, string Unit,
