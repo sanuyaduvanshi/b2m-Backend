@@ -84,6 +84,7 @@ public record BookingListQuery(
     string? Search = null,
     DateOnly? FromDate = null,
     DateOnly? ToDate = null,
+    Guid? PetParentId = null,
     int Page = 1,
     int PageSize = 50
 );

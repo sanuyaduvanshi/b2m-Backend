@@ -52,6 +52,7 @@ public class BookingServiceImpl : IBookingService
 
         if (query.FromDate is { } f) q = q.Where(b => b.BookingDate >= f);
         if (query.ToDate is { } t) q = q.Where(b => b.BookingDate <= t);
+        if (query.PetParentId is { } pid) q = q.Where(b => b.PetParentId == pid);
 
         var total = await q.CountAsync(ct);
         var page = Math.Max(query.Page, 1);
