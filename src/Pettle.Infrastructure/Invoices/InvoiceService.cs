@@ -6,6 +6,7 @@ using Pettle.Application.Invoices;
 using Pettle.Domain.Bookings;
 using Pettle.Domain.Inventory;
 using Pettle.Domain.Invoices;
+using Pettle.Infrastructure.Inventory;
 using Pettle.Infrastructure.Persistence;
 
 namespace Pettle.Infrastructure.Invoices;
@@ -211,8 +212,8 @@ public class InvoiceService : IInvoiceService
             if (sku.StockOnHand < qty)
                 throw AppException.Conflict($"Not enough stock for '{sku.Name}' — {sku.StockOnHand} on hand, {qty} requested.");
 
-            // FIFO/FEFO: deduct from earliest-expiry batch first; for non-expiry items falls back to oldest-received (FIFO).
-            var firstBatch = await DeductFifoAsync(sku.Id, _user.TenantId!.Value, qty, ct);
+            // FIFO: deduct from the oldest-received batch first.
+            var firstBatch = await FifoBatchDeductor.DeductAsync(_db, sku.Id, _user.TenantId!.Value, qty, ct);
 
             // Link the FIFO batch number back to the invoice line for full traceability.
             if (firstBatch is not null && reqLineToInvoiceLine.TryGetValue(lineIdx, out var invLine))
@@ -569,30 +570,6 @@ public class InvoiceService : IInvoiceService
 
         await _db.SaveChangesAsync(ct);
         return true;
-    }
-
-    // FIFO for non-expiry items (oldest received first); FEFO for items with expiry (nearest expiry first).
-    // Returns the batch number of the first batch consumed (for invoice line traceability).
-    private async Task<string?> DeductFifoAsync(Guid skuId, Guid tenantId, int qty, CancellationToken ct)
-    {
-        var batches = await _db.SkuBatches
-            .Where(b => b.SkuId == skuId && b.TenantId == tenantId && b.QtyRemaining > 0)
-            .OrderBy(b => b.ExpiryDate == null)   // expiry-dated batches first (FEFO)
-            .ThenBy(b => b.ExpiryDate)             // nearest expiry first
-            .ThenBy(b => b.ReceivedAt)             // FIFO fallback: oldest received first
-            .ToListAsync(ct);
-
-        string? firstBatch = null;
-        decimal remaining = qty;
-        foreach (var batch in batches)
-        {
-            if (remaining <= 0) break;
-            var take = Math.Min(batch.QtyRemaining, remaining);
-            batch.QtyRemaining -= take;
-            remaining -= take;
-            firstBatch ??= batch.BatchNumber;
-        }
-        return firstBatch;
     }
 
     private async Task<DateOnly?> GetNearestExpiryAsync(Guid skuId, Guid tenantId, CancellationToken ct)

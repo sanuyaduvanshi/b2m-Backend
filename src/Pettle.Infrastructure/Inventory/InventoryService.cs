@@ -697,19 +697,8 @@ public class InventoryService : IInventoryService
             }
             else if (delta < 0)
             {
-                // FEFO best-effort deduction (adjustment can override, so we don't throw on shortfall)
-                decimal deductQty = Math.Abs(delta);
-                var batches = await _db.SkuBatches
-                    .Where(b => b.SkuId == sku.Id && b.TenantId == _user.TenantId && b.QtyRemaining > 0)
-                    .OrderBy(b => b.ExpiryDate == null).ThenBy(b => b.ExpiryDate).ThenBy(b => b.ReceivedAt)
-                    .ToListAsync(ct);
-                foreach (var batch in batches)
-                {
-                    if (deductQty <= 0) break;
-                    var take = Math.Min(batch.QtyRemaining, deductQty);
-                    batch.QtyRemaining -= take;
-                    deductQty -= take;
-                }
+                // FIFO best-effort deduction (adjustment can override, so we don't throw on shortfall)
+                await FifoBatchDeductor.DeductAsync(_db, sku.Id, _user.TenantId.Value, Math.Abs(delta), ct);
             }
 
             sku.StockOnHand = Math.Max(0, sku.StockOnHand + delta);
@@ -762,9 +751,7 @@ public class InventoryService : IInventoryService
         if (_user.TenantId is null) return Array.Empty<SkuBatchDto>();
         var batches = await _db.SkuBatches
             .Where(b => b.SkuId == skuId && b.TenantId == _user.TenantId)
-            .OrderBy(b => b.ExpiryDate == null)
-            .ThenBy(b => b.ExpiryDate)
-            .ThenBy(b => b.ReceivedAt)
+            .OrderBy(b => b.ReceivedAt)
             .ToListAsync(ct);
         return batches.Select(b => new SkuBatchDto(
             b.Id, b.BatchNumber, b.ExpiryDate, b.QtyRemaining, b.LandingCost, b.Source, b.ReceivedAt,

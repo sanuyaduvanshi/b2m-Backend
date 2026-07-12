@@ -7,6 +7,7 @@ using Pettle.Domain.Bookings;
 using Pettle.Domain.Inventory;
 using Pettle.Domain.Invoices;
 using Pettle.Domain.Subscriptions;
+using Pettle.Infrastructure.Inventory;
 using Pettle.Infrastructure.Persistence;
 
 namespace Pettle.Infrastructure.Bookings;
@@ -382,6 +383,11 @@ public class BookingServiceImpl : IBookingService
                 var sku = skus.FirstOrDefault(s => s.Id == line.SkuId!.Value);
                 if (sku is null) continue;
                 var qty = line.SkuQuantity > 0 ? line.SkuQuantity : 1;
+
+                // FIFO: deduct from the oldest-received batch first, same as POS sales, so the
+                // SKU's batch table stays consistent with what StockOnHand shows.
+                await FifoBatchDeductor.DeductAsync(_db, sku.Id, _user.TenantId!.Value, qty, ct);
+
                 sku.StockOnHand = Math.Max(0, sku.StockOnHand - qty);
                 _db.Set<StockMovement>().Add(new StockMovement
                 {
