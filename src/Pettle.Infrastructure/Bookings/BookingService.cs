@@ -45,8 +45,10 @@ public class BookingServiceImpl : IBookingService
         if (!string.IsNullOrWhiteSpace(query.Search))
         {
             var s = query.Search.Trim().ToLower();
-            q = q.Where(b => b.PetParent!.Name.ToLower().Contains(s)
-                || b.PetParent!.Phone.Contains(s)
+            q = q.Where(b => (b.PetParent != null && b.PetParent.Name.ToLower().Contains(s))
+                || (b.PetParent != null && b.PetParent.Phone.Contains(s))
+                || (b.GuestName != null && b.GuestName.ToLower().Contains(s))
+                || (b.GuestPhone != null && b.GuestPhone.Contains(s))
                 || (b.InvoiceNumber != null && b.InvoiceNumber.ToLower().Contains(s)));
         }
 
@@ -62,7 +64,8 @@ public class BookingServiceImpl : IBookingService
             .Skip((page - 1) * size).Take(size)
             .Select(b => new BookingListItem(
                 b.Id, b.LegacyBookingId, b.BookingDate,
-                b.PetParent!.Name, b.PetParent!.Phone,
+                b.PetParent != null ? b.PetParent.Name : (b.GuestName ?? "Walk-in"),
+                b.PetParent != null ? b.PetParent.Phone : (b.GuestPhone ?? ""),
                 string.Join(", ", b.Services.Select(s => s.ServiceType.ToString()).Distinct()),
                 b.PaymentStatus, b.TotalBillingAmount, b.InvoiceNumber, b.Source,
                 b.Services.OrderByDescending(s => (int)s.Status).Select(s => s.Status).FirstOrDefault()
