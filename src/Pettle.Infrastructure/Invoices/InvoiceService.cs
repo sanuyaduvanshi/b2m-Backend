@@ -258,7 +258,7 @@ public class InvoiceService : IInvoiceService
         if (invoice is null) return null;
 
         if (invoice.PaymentStatus == InvoicePaymentStatus.Cancelled || invoice.PaymentStatus == InvoicePaymentStatus.Refunded)
-            throw AppException.BusinessRule($"Cannot record a payment on a {invoice.PaymentStatus} invoice.");
+            throw AppException.BusinessRule($"Cannot record a payment on an invoice that's already {invoice.PaymentStatus.Humanize().ToLower()}.");
         if (req.Amount > invoice.Due + 0.01m)
             throw AppException.Validation("Payment exceeds amount due",
                 new Dictionary<string, string[]> { ["amount"] = new[] { $"Payment ₹{req.Amount:F2} exceeds amount due ₹{invoice.Due:F2}." } });

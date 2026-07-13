@@ -191,7 +191,7 @@ public class CalendarService : ICalendarService
         var svc = await _db.BookingServices.FirstOrDefaultAsync(s => s.Id == bookingServiceId && s.TenantId == tid, ct);
         if (svc is null) return null;
         if (svc.Status is BookingStatus.Cancelled or BookingStatus.Rejected or BookingStatus.CheckedOut or BookingStatus.NoShow)
-            throw AppException.BusinessRule($"Cannot reschedule a {svc.Status} service.");
+            throw AppException.BusinessRule($"Cannot reschedule a service that's already {svc.Status.Humanize().ToLower()}.");
 
         switch (svc.ServiceType)
         {
@@ -274,7 +274,7 @@ public class CalendarService : ICalendarService
         var entries = await set.Where(e => EF.Property<Guid>(e, "BookingServiceId") == svc.Id
                                            && EF.Property<Guid>(e, "TenantId") == tid).ToListAsync(ct);
         var detail = entries.FirstOrDefault()
-                     ?? throw AppException.BusinessRule($"{svc.ServiceType} detail missing for this service.");
+                     ?? throw AppException.BusinessRule($"This {svc.ServiceType.Humanize().ToLower()} booking is missing its scheduling details — please contact support.");
 
         var (curDate, curStart, curEnd, staffId) = read(detail);
         var newDate = req.NewStartDate;

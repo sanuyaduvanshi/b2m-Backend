@@ -106,7 +106,7 @@ public class ClientEnquiryService : IClientEnquiryService
         var e = await _db.ClientEnquiries.FirstOrDefaultAsync(x => x.Id == id && x.TenantId == _user.TenantId, ct);
         if (e is null) return null;
         if (e.Status != EnquiryStatus.Pending)
-            throw AppException.BusinessRule($"Only pending enquiries can be edited (current: {e.Status}).");
+            throw AppException.BusinessRule($"This enquiry has already been {e.Status.Humanize().ToLower()} and can no longer be edited.");
 
         e.ParentName = req.ParentName.Trim();
         e.Phone = NormalizePhone(req.Phone);

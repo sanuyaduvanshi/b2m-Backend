@@ -119,7 +119,7 @@ public class MessageService : IMessageService
                 ?? throw AppException.Validation("Template not found",
                     new Dictionary<string, string[]> { ["templateId"] = new[] { "Template not found." } });
             if (template.Channel != req.Channel)
-                throw AppException.BusinessRule($"Template channel ({template.Channel}) does not match send channel ({req.Channel}).");
+                throw AppException.BusinessRule($"This template is for {template.Channel.Humanize()}, but you're trying to send it over {req.Channel.Humanize()}.");
         }
 
         // Resolve {{variables}} server-side so the persisted body matches what was actually "sent".

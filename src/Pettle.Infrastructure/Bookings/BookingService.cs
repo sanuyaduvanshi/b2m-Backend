@@ -416,7 +416,7 @@ public class BookingServiceImpl : IBookingService
         if (s is null) return false;
 
         if (!BookingStateChangeValidator.IsAllowed(s.Status, req.NewStatus))
-            throw AppException.BusinessRule($"Cannot transition booking from {s.Status} to {req.NewStatus}.");
+            throw AppException.BusinessRule($"Can't move this booking from \"{s.Status.Humanize()}\" to \"{req.NewStatus.Humanize()}\".");
 
         s.Status = req.NewStatus;
         if (!string.IsNullOrWhiteSpace(req.Reason)) s.Notes = (s.Notes is null ? "" : s.Notes + " | ") + $"Status->{req.NewStatus}: {req.Reason}";

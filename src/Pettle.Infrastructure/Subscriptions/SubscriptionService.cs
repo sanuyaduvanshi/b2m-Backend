@@ -164,7 +164,7 @@ public class SubscriptionService : ISubscriptionService
         if (s.Status == IssuedSubscriptionStatus.Frozen)
             throw AppException.BusinessRule("Subscription is already frozen.");
         if (s.Status == IssuedSubscriptionStatus.Expired || s.Status == IssuedSubscriptionStatus.Cancelled)
-            throw AppException.BusinessRule($"Cannot freeze a {s.Status} subscription.");
+            throw AppException.BusinessRule($"Cannot freeze a subscription that's already {s.Status.Humanize().ToLower()}.");
         s.Status = IssuedSubscriptionStatus.Frozen;
         s.FrozenAt = DateTimeOffset.UtcNow;
         await _db.SaveChangesAsync(ct);

@@ -105,7 +105,7 @@ public class BookingRequestService : IBookingRequestService
         var r = await _db.BookingRequests.FirstOrDefaultAsync(x => x.Id == id && x.TenantId == _user.TenantId, ct);
         if (r is null) return false;
         if (r.Status != BookingRequestStatus.Requested)
-            throw AppException.BusinessRule($"Only Requested entries can be approved (current: {r.Status}).");
+            throw AppException.BusinessRule($"This request has already been {r.Status.Humanize().ToLower()} and can't be approved again.");
         r.Status = BookingRequestStatus.Accepted;
         await _db.SaveChangesAsync(ct);
         return true;
