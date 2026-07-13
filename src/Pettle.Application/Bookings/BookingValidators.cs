@@ -16,6 +16,8 @@ public class CreateBookingValidator : AbstractValidator<CreateBookingRequest>
         RuleFor(x => x.Source).IsInEnum().WithMessage("Unknown booking source.");
         RuleFor(x => x.Notes).MaximumLength(2000);
         RuleFor(x => x.AdditionalInstruction).MaximumLength(2000);
+        RuleFor(x => x.GuestName).MaximumLength(160);
+        RuleFor(x => x.GuestPhone).ValidPhoneFormat().When(x => !string.IsNullOrWhiteSpace(x.GuestPhone));
         RuleFor(x => x.Services).NotEmpty().WithMessage("At least one service is required.")
             .Must(s => s.Count <= 20).WithMessage("Maximum 20 services per booking.");
         RuleForEach(x => x.Services).SetValidator(new CreateBookingServiceLineValidator());

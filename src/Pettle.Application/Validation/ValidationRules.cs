@@ -8,8 +8,8 @@ namespace Pettle.Application.Validation;
 /// </summary>
 public static class CommonRules
 {
-    // +91XXXXXXXXXX, or +<1-3 digit country><7-14 digits>, or bare 7-14 digits (legacy data)
-    public const string PhonePattern = @"^\+?\d{7,16}$";
+    // Indian mobile number: exactly 10 digits, with an optional +91/91 country code prefix.
+    public const string PhonePattern = @"^(\+?91)?\d{10}$";
 
     public const string HexColorPattern = @"^#?([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$";
 
@@ -19,7 +19,7 @@ public static class CommonRules
     public const string IndianPostalPattern = @"^\d{6}$";
 
     public static IRuleBuilderOptions<T, string?> ValidPhoneFormat<T>(this IRuleBuilder<T, string?> rb)
-        => rb.Matches(PhonePattern).WithMessage("Enter a valid phone number (digits, optional + and country code).");
+        => rb.Matches(PhonePattern).WithMessage("Enter a valid 10-digit phone number.");
 
     public static IRuleBuilderOptions<T, string?> ValidEmailFormat<T>(this IRuleBuilder<T, string?> rb)
         => rb.EmailAddress().WithMessage("Enter a valid email.");
