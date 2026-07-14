@@ -10,6 +10,18 @@ public static class InvoicePdfRenderer
 {
     private static readonly string Rupee = "₹";
 
+    private static readonly byte[]? LogoBytes = LoadLogo();
+
+    private static byte[]? LoadLogo()
+    {
+        var assembly = typeof(InvoicePdfRenderer).Assembly;
+        using var stream = assembly.GetManifestResourceStream("Pettle.Infrastructure.Assets.logo.png");
+        if (stream is null) return null;
+        using var ms = new MemoryStream();
+        stream.CopyTo(ms);
+        return ms.ToArray();
+    }
+
     public static byte[] Render(InvoiceDetail inv, string tenantName, string? logoUrl)
     {
         var doc = Document.Create(container =>
@@ -24,6 +36,11 @@ public static class InvoicePdfRenderer
                 {
                     col.Item().Row(row =>
                     {
+                        if (LogoBytes is not null)
+                        {
+                            row.ConstantItem(48).Height(48).Image(LogoBytes).FitArea();
+                            row.ConstantItem(10);
+                        }
                         row.RelativeItem().Column(c =>
                         {
                             c.Item().Text(tenantName).FontSize(18).Bold();

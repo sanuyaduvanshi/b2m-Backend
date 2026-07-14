@@ -11,6 +11,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <EmbeddedResource Include="Assets\logo.png" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\Pettle.Domain\Pettle.Domain.csproj" />
     <ProjectReference Include="..\Pettle.Application\Pettle.Application.csproj" />
   </ItemGroup>
