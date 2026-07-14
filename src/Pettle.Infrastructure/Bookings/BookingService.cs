@@ -400,6 +400,17 @@ public class BookingServiceImpl : IBookingService
             }
         }
 
+        // Keep the booking's own payment status in sync with the invoice — this was previously
+        // left at its Pending default even when a subscription fully or partially paid the
+        // invoice at creation time, so paid/partially-paid bookings still showed "Pending" in
+        // the bookings list.
+        b.PaymentStatus = invoice.PaymentStatus switch
+        {
+            InvoicePaymentStatus.Paid => BookingPaymentStatus.Paid,
+            InvoicePaymentStatus.PartiallyPaid => BookingPaymentStatus.PartiallyPaid,
+            _ => BookingPaymentStatus.Pending,
+        };
+
         // Deduct inventory for service lines that have an associated SKU
         var skuIds = req.Services
             .Where(l => l.SkuId.HasValue)
