@@ -340,11 +340,16 @@ public class BookingServiceImpl : IBookingService
 
         // SUB-4/5: Auto-debit from subscription if client has an active subscription — but only
         // for the portion of this booking the package actually covers. Each booked service line
-        // is matched by name against the package's included items; a matched item's Discount/
-        // DiscountType determines how much of that line is covered (100% Percentage = fully free,
-        // 50% = half covered, FlatAmount = up to that ₹ amount). Anything unmatched (a new/extra
-        // service not in the package) is left as Due on the invoice for separate payment — the
-        // whole point being a subscription should never silently make out-of-plan services free.
+        // is matched against the package's included items, preferring an exact ServiceName match;
+        // when nothing matches by name (most packages have one broad "Boarding"/"Grooming" style
+        // entry rather than one row per exact catalogue service name), fall back to the package's
+        // first item as long as the package's own Type matches the line's ServiceType — e.g. a
+        // "Boarding" package covers any Boarding-vertical service line, not just one named exactly
+        // "Boarding". A matched item's Discount/DiscountType determines how much of that line is
+        // covered (100% Percentage = fully free, 50% = half covered, FlatAmount = up to that ₹
+        // amount). Anything still unmatched (a new/extra service outside the package's vertical) is
+        // left as Due on the invoice for separate payment — the whole point being a subscription
+        // should never silently make out-of-plan services free.
         if (req.UseSubscriptionId.HasValue && req.PetParentId.HasValue)
         {
             var sub = await _db.IssuedSubscriptions
@@ -359,6 +364,8 @@ public class BookingServiceImpl : IBookingService
                 {
                     var match = sub.Package.Services
                         .FirstOrDefault(s => string.Equals(s.ServiceName, line.ServiceName, StringComparison.OrdinalIgnoreCase));
+                    if (match is null && string.Equals(sub.Package.Type.ToString(), line.ServiceType.ToString(), StringComparison.OrdinalIgnoreCase))
+                        match = sub.Package.Services.FirstOrDefault();
                     if (match is null) continue;
                     var portion = match.DiscountType == DiscountType.Percentage
                         ? line.FinalAmount * (match.Discount / 100m)
