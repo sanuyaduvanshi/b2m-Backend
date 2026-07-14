@@ -24,7 +24,13 @@ public class SubscriptionService : ISubscriptionService
             .Where(p => p.TenantId == _user.TenantId)
             .OrderBy(p => p.Name)
             .ToListAsync(ct);
-        return packages.Select(p => ToListItem(p)).ToList();
+
+        var skuIds = packages.SelectMany(p => p.Services).Where(s => s.SkuId.HasValue).Select(s => s.SkuId!.Value).Distinct().ToList();
+        var skuNames = skuIds.Count == 0 ? new Dictionary<Guid, string>() : await _db.Skus.AsNoTracking()
+            .Where(s => skuIds.Contains(s.Id) && s.TenantId == _user.TenantId)
+            .ToDictionaryAsync(s => s.Id, s => s.Name, ct);
+
+        return packages.Select(p => ToListItem(p, skuNames)).ToList();
     }
 
     public async Task<PackageListItem> CreatePackageAsync(CreateOrUpdatePackageRequest req, CancellationToken ct = default)
@@ -32,6 +38,7 @@ public class SubscriptionService : ISubscriptionService
         var p = new SubscriptionPackage
         {
             Name = req.Name, Description = req.Description, ValidityDays = req.ValidityDays,
+            Type = Enum.TryParse<SubscriptionPackageType>(req.Type, true, out var pt) ? pt : SubscriptionPackageType.Boarding,
             Price = req.Price, TaxPercent = req.TaxPercent, IsTaxInclusive = req.IsTaxInclusive, IsActive = req.IsActive
         };
         if (req.Services != null)
@@ -39,7 +46,7 @@ public class SubscriptionService : ISubscriptionService
                 p.Services.Add(MapService(s));
         _db.SubscriptionPackages.Add(p);
         await _db.SaveChangesAsync(ct);
-        return ToListItem(p);
+        return await ToListItemWithSkuNamesAsync(p, ct);
     }
 
     public async Task<PackageListItem?> UpdatePackageAsync(Guid id, CreateOrUpdatePackageRequest req, CancellationToken ct = default)
@@ -50,6 +57,7 @@ public class SubscriptionService : ISubscriptionService
             .FirstOrDefaultAsync(x => x.Id == id && x.TenantId == _user.TenantId, ct);
         if (p is null) return null;
         p.Name = req.Name; p.Description = req.Description; p.ValidityDays = req.ValidityDays;
+        p.Type = Enum.TryParse<SubscriptionPackageType>(req.Type, true, out var pt) ? pt : SubscriptionPackageType.Boarding;
         p.Price = req.Price; p.TaxPercent = req.TaxPercent; p.IsTaxInclusive = req.IsTaxInclusive; p.IsActive = req.IsActive;
         // ExecuteDelete bypasses change tracker — then add new via DbSet (not nav prop)
         await _db.SubscriptionPackageServices.Where(s => s.PackageId == id).ExecuteDeleteAsync(ct);
@@ -64,7 +72,7 @@ public class SubscriptionService : ISubscriptionService
         // Reload with services for response
         var updated = await _db.SubscriptionPackages.Include(x => x.Services)
             .FirstAsync(x => x.Id == id, ct);
-        return ToListItem(updated);
+        return await ToListItemWithSkuNamesAsync(updated, ct);
     }
 
     private static SubscriptionPackageService MapService(PackageServiceItem s) => new()
@@ -79,10 +87,21 @@ public class SubscriptionService : ISubscriptionService
         SkuId = s.SkuId,
     };
 
-    private static PackageListItem ToListItem(SubscriptionPackage p) => new(
+    private async Task<PackageListItem> ToListItemWithSkuNamesAsync(SubscriptionPackage p, CancellationToken ct)
+    {
+        var skuIds = p.Services.Where(s => s.SkuId.HasValue).Select(s => s.SkuId!.Value).Distinct().ToList();
+        var skuNames = skuIds.Count == 0 ? new Dictionary<Guid, string>() : await _db.Skus.AsNoTracking()
+            .Where(s => skuIds.Contains(s.Id) && s.TenantId == _user.TenantId)
+            .ToDictionaryAsync(s => s.Id, s => s.Name, ct);
+        return ToListItem(p, skuNames);
+    }
+
+    private static PackageListItem ToListItem(SubscriptionPackage p, IReadOnlyDictionary<Guid, string> skuNames) => new(
         p.Id, p.Name, p.ValidityDays, p.Price, p.TaxPercent, p.IsTaxInclusive, p.IsActive,
         p.Services.Select(s => new PackageServiceItem(s.ServiceName, s.Discount, s.DiscountType.ToString(),
-            s.DaysOrSessions, s.BoardingType, s.SkuCategory, s.SkuSubCategory, s.SkuId)).ToList());
+            s.DaysOrSessions, s.BoardingType, s.SkuCategory, s.SkuSubCategory, s.SkuId,
+            s.SkuId.HasValue && skuNames.TryGetValue(s.SkuId.Value, out var n) ? n : null)).ToList(),
+        p.Type.ToString());
 
     public async Task<bool> DeletePackageAsync(Guid id, CancellationToken ct = default)
     {

@@ -8,7 +8,8 @@ public record TenantProfileDto(Guid Id, string Name, string Slug, string? LogoUr
 public record UpdateTenantProfileRequest(string Name, string? LogoUrl, string? PrimaryColor, string? SecondaryColor, string? AccentColor,
     string? Currency, string? Locale, string? TimeZone, int IdleSessionMinutes);
 
-public record ServiceItemListItem(Guid Id, string Name, string Vertical, string? CategoryName, decimal BasePrice, decimal? TaxPercent, bool IsActive, int VariantCount);
+public record ServiceItemListItem(Guid Id, string Name, string Vertical, string? CategoryName, decimal BasePrice, decimal? TaxPercent, bool IsActive, int VariantCount,
+    IReadOnlyList<ServiceVariantDto>? Variants = null);
 public record ServiceVariantDto(Guid Id, string Name, decimal Price, string? SizeClass, string? Notes);
 public record ServiceVariantInput(string Name, decimal Price, string? SizeClass, string? Notes);
 public record ServiceItemDetail(Guid Id, string Name, string? Description, string Vertical, Guid? CategoryId, string? CategoryName,

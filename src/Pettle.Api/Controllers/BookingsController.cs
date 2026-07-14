@@ -43,6 +43,11 @@ public class BookingsController : ControllerBase
     public async Task<IActionResult> Cancel(Guid id, [FromBody] CancelRequest req, CancellationToken ct)
         => await _svc.CancelAsync(id, req.Reason, ct) ? NoContent() : NotFound();
 
+    [HttpPut("{id:guid}/discount")]
+    [HasPermission(Modules.BookingRecords, Actions.Edit)]
+    public async Task<IActionResult> ApplyDiscount(Guid id, [FromBody] ApplyDiscountRequest req, CancellationToken ct)
+        => await _svc.ApplyDiscountAsync(id, req.DiscountPercent, ct) ? NoContent() : NotFound();
+
     [HttpPut("{id:guid}/estimate")]
     [HasPermission(Modules.BookingRecords, Actions.Edit)]
     public async Task<IActionResult> SaveEstimate(Guid id, [FromBody] SaveEstimateRequest req, CancellationToken ct)
@@ -69,3 +74,4 @@ public class BookingsController : ControllerBase
 }
 
 public record CancelRequest(string? Reason);
+public record ApplyDiscountRequest(decimal DiscountPercent);

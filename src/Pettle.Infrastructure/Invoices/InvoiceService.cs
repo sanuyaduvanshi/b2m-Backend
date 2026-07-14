@@ -69,7 +69,8 @@ public class InvoiceService : IInvoiceService
             i.Revenue, i.Paid, i.Due, i.PaymentStatus,
             i.Lines.Select(l => new InvoiceLineDto(l.Id, l.BillItemName, l.Category, l.Description, l.Quantity, l.UnitAmount, l.Discount, l.Subtotal, l.Total, l.BatchNumber)).ToList(),
             i.Payments.OrderByDescending(p => p.PaymentTime).Select(p => new PaymentDto(p.Id, p.PaymentTime, p.Amount, p.Mode, p.Source, p.TransactionId, p.Type, p.Status, p.Notes)).ToList(),
-            i.Notes
+            i.Notes,
+            i.AdditionalChargesReason
         );
     }
 
@@ -165,13 +166,40 @@ public class InvoiceService : IInvoiceService
         invoice.BaseAmount = R(sumTaxable);
         invoice.DiscountAmount = R(sumLineDiscount + flatDiscountAmount);
         invoice.AdditionalAmount = R(req.AdditionalCharges);
+        invoice.AdditionalChargesReason = req.AdditionalCharges > 0 ? req.AdditionalChargesReason : null;
         invoice.CgstAmount = R(finalTax / 2m);
         invoice.SgstAmount = R(finalTax / 2m);
         invoice.IgstAmount = 0;
         invoice.Revenue = R(rounded);
 
+        // Credit-note redemption — applied like a payment (Mode=Credit), tied back to the
+        // credit note by its invoice number for traceability.
+        Invoice? redeemedCreditNote = null;
+        decimal creditRedeemed = 0;
+        if (req.RedeemCreditNoteId is { } cnId && req.RedeemCreditNoteAmount > 0)
+        {
+            redeemedCreditNote = await _db.Invoices.IgnoreQueryFilters()
+                .FirstOrDefaultAsync(i => i.Id == cnId && i.TenantId == _user.TenantId && i.InvoiceType == InvoiceType.CreditNote && !i.IsDeleted, ct);
+            if (redeemedCreditNote is null)
+                throw AppException.Validation("Invalid credit note",
+                    new Dictionary<string, string[]> { ["redeemCreditNoteId"] = new[] { "Credit note not found." } });
+            if (req.RedeemCreditNoteAmount > redeemedCreditNote.RemainingCreditAmount + 0.01m)
+                throw AppException.Validation("Credit note amount too high",
+                    new Dictionary<string, string[]> { ["redeemCreditNoteAmount"] = new[] { $"Only ₹{redeemedCreditNote.RemainingCreditAmount:F2} remains on credit note {redeemedCreditNote.InvoiceNumber}." } });
+            creditRedeemed = R(req.RedeemCreditNoteAmount);
+            invoice.Payments.Add(new Payment
+            {
+                PaymentTime = DateTimeOffset.UtcNow,
+                Amount = creditRedeemed,
+                Mode = PaymentMode.Credit,
+                Source = PaymentSource.WalkIn,
+                TransactionId = redeemedCreditNote.InvoiceNumber,
+                Notes = $"Redeemed from credit note {redeemedCreditNote.InvoiceNumber}",
+            });
+        }
+
         // Payments
-        decimal paid = 0;
+        decimal paid = creditRedeemed;
         foreach (var p in req.Payments ?? Array.Empty<CreateSalePayment>())
         {
             if (p.Amount <= 0) continue;
@@ -232,6 +260,9 @@ public class InvoiceService : IInvoiceService
                 Note = $"Sale {invoice.InvoiceNumber} | Batch: {firstBatch ?? "N/A"}",
             });
         }
+
+        if (redeemedCreditNote is not null)
+            redeemedCreditNote.RemainingCreditAmount = Math.Max(0, redeemedCreditNote.RemainingCreditAmount - creditRedeemed);
 
         await _db.SaveChangesAsync(ct);
         return (await GetAsync(invoice.Id, ct))!;
@@ -415,6 +446,7 @@ public class InvoiceService : IInvoiceService
         invoice.BaseAmount = R(sumTaxable);
         invoice.DiscountAmount = R(sumLineDiscount + flatDiscAmt);
         invoice.AdditionalAmount = R(req.AdditionalCharges);
+        invoice.AdditionalChargesReason = req.AdditionalCharges > 0 ? req.AdditionalChargesReason : null;
         invoice.CgstAmount = R(finalTax / 2m);
         invoice.SgstAmount = R(finalTax / 2m);
         invoice.IgstAmount = 0;
@@ -505,12 +537,21 @@ public class InvoiceService : IInvoiceService
             throw AppException.Validation("Refund exceeds amount paid",
                 new Dictionary<string, string[]> { ["amount"] = new[] { $"Refund ₹{req.Amount:F2} exceeds amount paid ₹{invoice.Paid:F2}." } });
 
-        // 1. Update original invoice balance
-        invoice.Paid = Math.Max(0, invoice.Paid - req.Amount);
-        invoice.Due = Math.Max(0, invoice.Revenue - invoice.Paid);
-        invoice.PaymentStatus = InvoicePaymentStatus.Refunded;
-        invoice.Notes = (invoice.Notes is null ? "" : invoice.Notes + " | ") + $"Refund ₹{req.Amount:F2}: {req.Reason}";
-        await SyncBookingStatusAsync(invoice, ct);
+        // 1. Cash refund (not a credit note) reduces the original invoice's balance — money left
+        // the business. A credit note leaves the original invoice's Paid/Due untouched: it stays
+        // settled, and the credit note tracks a separate redeemable liability instead.
+        if (!req.AsCreditNote)
+        {
+            invoice.Paid = Math.Max(0, invoice.Paid - req.Amount);
+            invoice.Due = Math.Max(0, invoice.Revenue - invoice.Paid);
+            invoice.PaymentStatus = InvoicePaymentStatus.Refunded;
+            invoice.Notes = (invoice.Notes is null ? "" : invoice.Notes + " | ") + $"Refund ₹{req.Amount:F2}: {req.Reason}";
+            await SyncBookingStatusAsync(invoice, ct);
+        }
+        else
+        {
+            invoice.Notes = (invoice.Notes is null ? "" : invoice.Notes + " | ") + $"Return ₹{req.Amount:F2} (credit note issued): {req.Reason}";
+        }
 
         // 2. Return stock to inventory for Sale invoices (INV-5)
         if (req.ReturnToStock && invoice.InvoiceType == InvoiceType.Sale && invoice.Lines.Count > 0)
@@ -547,29 +588,46 @@ public class InvoiceService : IInvoiceService
             }
         }
 
-        // 3. Generate Credit Note (INV-7)
-        var year = DateTime.UtcNow.Year;
-        var cnCount = await _db.Invoices.IgnoreQueryFilters()
-            .CountAsync(i => i.TenantId == _user.TenantId && i.InvoiceType == InvoiceType.CreditNote && i.CreatedAt.Year == year, ct);
-        var creditNote = new Invoice
+        // 3. Generate Credit Note (INV-7) — only for a Return, not a plain cash Refund
+        if (req.AsCreditNote)
         {
-            TenantId = _user.TenantId.Value,
-            InvoiceNumber = $"CN-{year}-{(cnCount + 1).ToString().PadLeft(4, '0')}",
-            InvoiceType = InvoiceType.CreditNote,
-            InvoiceDate = DateOnly.FromDateTime(DateTime.UtcNow),
-            PetParentId = invoice.PetParentId,
-            ParentNameSnapshot = invoice.ParentNameSnapshot,
-            PhoneSnapshot = invoice.PhoneSnapshot,
-            Notes = $"Credit note for {invoice.InvoiceNumber} — {req.Reason}",
-            PaymentStatus = InvoicePaymentStatus.Paid,
-            Revenue = req.Amount,
-            Paid = req.Amount,
-            Due = 0,
-        };
-        _db.Invoices.Add(creditNote);
+            var year = DateTime.UtcNow.Year;
+            var cnCount = await _db.Invoices.IgnoreQueryFilters()
+                .CountAsync(i => i.TenantId == _user.TenantId && i.InvoiceType == InvoiceType.CreditNote && i.CreatedAt.Year == year, ct);
+            var creditNote = new Invoice
+            {
+                TenantId = _user.TenantId.Value,
+                InvoiceNumber = $"CN-{year}-{(cnCount + 1).ToString().PadLeft(4, '0')}",
+                InvoiceType = InvoiceType.CreditNote,
+                InvoiceDate = DateOnly.FromDateTime(DateTime.UtcNow),
+                PetParentId = invoice.PetParentId,
+                ParentNameSnapshot = invoice.ParentNameSnapshot,
+                PhoneSnapshot = invoice.PhoneSnapshot,
+                Notes = $"Credit note for {invoice.InvoiceNumber} — {req.Reason}",
+                PaymentStatus = InvoicePaymentStatus.Paid,
+                Revenue = req.Amount,
+                Paid = req.Amount,
+                Due = 0,
+                RemainingCreditAmount = req.Amount,
+            };
+            _db.Invoices.Add(creditNote);
+        }
 
         await _db.SaveChangesAsync(ct);
         return true;
+    }
+
+    public async Task<CreditNoteLookup?> LookupCreditNoteAsync(string code, CancellationToken ct = default)
+    {
+        if (_user.TenantId is null || string.IsNullOrWhiteSpace(code)) return null;
+        var trimmed = code.Trim();
+        var cn = await _db.Invoices.IgnoreQueryFilters().AsNoTracking()
+            .FirstOrDefaultAsync(i => i.TenantId == _user.TenantId && i.InvoiceType == InvoiceType.CreditNote
+                && !i.IsDeleted && i.InvoiceNumber == trimmed, ct);
+        if (cn is null) return null;
+        if (cn.RemainingCreditAmount <= 0)
+            throw AppException.BusinessRule("This credit note has already been fully redeemed.");
+        return new CreditNoteLookup(cn.Id, cn.InvoiceNumber, cn.RemainingCreditAmount, cn.PetParentId, cn.ParentNameSnapshot);
     }
 
     private async Task<DateOnly?> GetNearestExpiryAsync(Guid skuId, Guid tenantId, CancellationToken ct)

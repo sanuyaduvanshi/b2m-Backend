@@ -7,6 +7,7 @@ public class SubscriptionPackage : SoftDeletableTenantEntity
 {
     public string Name { get; set; } = string.Empty;
     public string? Description { get; set; }
+    public SubscriptionPackageType Type { get; set; } = SubscriptionPackageType.Boarding;
     public int ValidityDays { get; set; }
     public decimal Price { get; set; }
     public bool IsTaxInclusive { get; set; }
@@ -30,6 +31,9 @@ public class SubscriptionPackageService : TenantEntity
 }
 
 public enum DiscountType { Percentage = 0, FlatAmount = 1 }
+// Boarding = 0 so existing packages (created before this field existed) default to Boarding —
+// the most reasonable fallback for legacy data, and matches SubscriptionPackage.Type's own default.
+public enum SubscriptionPackageType { Boarding = 0, Vet = 1, Grooming = 2 }
 
 public class IssuedSubscription : SoftDeletableTenantEntity
 {

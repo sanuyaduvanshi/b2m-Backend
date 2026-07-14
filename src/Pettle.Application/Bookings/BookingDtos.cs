@@ -28,6 +28,8 @@ public record BookingDetail(
     BookingSource Source,
     BookingPaymentStatus PaymentStatus,
     decimal TotalBillingAmount,
+    decimal GrossBillingAmount,
+    decimal DiscountPercent,
     string? InvoiceNumber,
     Guid? InvoiceId,
     decimal InvoicePaid,

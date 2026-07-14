@@ -68,7 +68,8 @@ public record InvoiceDetail(
     InvoicePaymentStatus PaymentStatus,
     IReadOnlyList<InvoiceLineDto> Lines,
     IReadOnlyList<PaymentDto> Payments,
-    string? Notes = null
+    string? Notes = null,
+    string? AdditionalChargesReason = null
 );
 
 public record InvoiceListQuery(
@@ -93,7 +94,14 @@ public record RecordPaymentRequest(
     PaymentRecordStatus Status = PaymentRecordStatus.Success
 );
 
-public record RefundRequest(decimal Amount, string Reason, bool ReturnToStock = false);
+/// <summary>AsCreditNote=false ("Refund"): cash leaves the business — subtracts from Paid/Due,
+/// no credit note. AsCreditNote=true ("Return"): the customer gets store credit instead of cash —
+/// a Credit Note is issued for Amount and the original invoice's Paid/Due are untouched (it stays
+/// settled; the credit note is the new liability). ReturnToStock is independent of either — it's
+/// about whether the physical goods come back to inventory.</summary>
+public record RefundRequest(decimal Amount, string Reason, bool ReturnToStock = false, bool AsCreditNote = false);
+
+public record CreditNoteLookup(Guid Id, string InvoiceNumber, decimal RemainingCreditAmount, Guid? PetParentId, string ParentName);
 
 // --- POS / counter sale ---
 
@@ -129,7 +137,8 @@ public record UpdateInvoiceRequest(
     string? Notes,
     decimal FlatDiscountPercent,
     decimal AdditionalCharges,
-    IReadOnlyList<UpdateInvoiceLine> Lines
+    IReadOnlyList<UpdateInvoiceLine> Lines,
+    string? AdditionalChargesReason = null
 );
 
 public record CreateSaleRequest(
@@ -143,5 +152,8 @@ public record CreateSaleRequest(
     decimal AdditionalCharges,    // freight/packing etc. (₹)
     string? Notes,
     IReadOnlyList<CreateSaleLine> Lines,
-    IReadOnlyList<CreateSalePayment> Payments
+    IReadOnlyList<CreateSalePayment> Payments,
+    string? AdditionalChargesReason = null,
+    Guid? RedeemCreditNoteId = null,
+    decimal RedeemCreditNoteAmount = 0
 );

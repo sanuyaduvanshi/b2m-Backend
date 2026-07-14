@@ -111,7 +111,7 @@ public class BookingServiceImpl : IBookingService
             b.PetParent?.Name ?? b.GuestName ?? "Walk-in",
             b.PetParent?.Phone ?? b.GuestPhone ?? "",
             b.PetParent?.Email,
-            b.Source, b.PaymentStatus, b.TotalBillingAmount, b.InvoiceNumber,
+            b.Source, b.PaymentStatus, b.TotalBillingAmount, b.GrossBillingAmount, b.DiscountPercent, b.InvoiceNumber,
             inv?.Id, inv?.Paid ?? 0m, inv?.Due ?? 0m,
             b.Notes, b.AdditionalInstruction,
             b.Services.Select(s => new BookingServiceLine(
@@ -226,11 +226,7 @@ public class BookingServiceImpl : IBookingService
                         new Dictionary<string, string[]> { ["services"] = new[] { $"{invalidPets.Count} pet(s) do not belong to this parent." } });
             }
         }
-        else if (string.IsNullOrWhiteSpace(req.GuestName))
-        {
-            throw AppException.Validation("Guest name required",
-                new Dictionary<string, string[]> { ["guestName"] = new[] { "Please enter the walk-in customer's name." } });
-        }
+        var guestName = isGuest && string.IsNullOrWhiteSpace(req.GuestName) ? "Walk-in Customer" : req.GuestName;
 
         // Kennel ownership for boarding lines
         var kennelIds = req.Services.Where(s => s.KennelId.HasValue).Select(s => s.KennelId!.Value).Distinct().ToList();
@@ -255,13 +251,14 @@ public class BookingServiceImpl : IBookingService
         var b = new Booking
         {
             PetParentId = req.PetParentId,
-            GuestName = req.GuestName,
+            GuestName = guestName,
             GuestPhone = req.GuestPhone,
             BookingDate = req.BookingDate,
             Source = req.Source,
             Notes = req.Notes,
             AdditionalInstruction = req.AdditionalInstruction,
             TotalBillingAmount = req.Services.Sum(s => s.FinalAmount + (s.AddOns?.Sum(a => a.Price) ?? 0m)),
+            GrossBillingAmount = req.Services.Sum(s => s.FinalAmount + (s.AddOns?.Sum(a => a.Price) ?? 0m)),
             InvoiceNumber = invNum,
         };
         foreach (var line in req.Services)
@@ -434,6 +431,39 @@ public class BookingServiceImpl : IBookingService
         if (b is null) return false;
         foreach (var s in b.Services) s.Status = BookingStatus.Cancelled;
         if (!string.IsNullOrWhiteSpace(reason)) b.Notes = (b.Notes is null ? "" : b.Notes + " | ") + $"Cancelled: {reason}";
+        await _db.SaveChangesAsync(ct);
+        return true;
+    }
+
+    public async Task<bool> ApplyDiscountAsync(Guid bookingId, decimal discountPercent, CancellationToken ct = default)
+    {
+        if (_user.TenantId is null) return false;
+        var tid = _user.TenantId.Value;
+        var b = await _db.Bookings.FirstOrDefaultAsync(x => x.Id == bookingId && x.TenantId == tid, ct);
+        if (b is null) return false;
+        if (discountPercent < 0 || discountPercent > 100)
+            throw AppException.Validation("Invalid discount",
+                new Dictionary<string, string[]> { ["discountPercent"] = new[] { "Discount must be between 0 and 100%." } });
+
+        // Older bookings created before GrossBillingAmount existed default to 0 — treat the
+        // current TotalBillingAmount as the gross basis the first time a discount is applied.
+        if (b.GrossBillingAmount <= 0) b.GrossBillingAmount = b.TotalBillingAmount;
+
+        b.DiscountPercent = discountPercent;
+        b.TotalBillingAmount = Math.Round(b.GrossBillingAmount * (1 - discountPercent / 100m), 2, MidpointRounding.AwayFromZero);
+
+        var invoice = await _db.Invoices.FirstOrDefaultAsync(i => i.BookingId == bookingId && i.TenantId == tid, ct);
+        if (invoice is not null)
+        {
+            invoice.DiscountAmount = Math.Round(b.GrossBillingAmount - b.TotalBillingAmount, 2, MidpointRounding.AwayFromZero);
+            invoice.BaseAmount = b.GrossBillingAmount;
+            invoice.Revenue = b.TotalBillingAmount;
+            invoice.Due = Math.Max(0, b.TotalBillingAmount - invoice.Paid);
+            invoice.PaymentStatus = invoice.Due == 0 && invoice.Paid > 0
+                ? InvoicePaymentStatus.Paid
+                : invoice.Paid > 0 ? InvoicePaymentStatus.PartiallyPaid : InvoicePaymentStatus.Pending;
+        }
+
         await _db.SaveChangesAsync(ct);
         return true;
     }

@@ -9,6 +9,7 @@ public interface IBookingService
     Task<BookingDetail> CreateAsync(CreateBookingRequest req, CancellationToken ct = default);
     Task<bool> ChangeStatusAsync(Guid bookingServiceId, BookingStateChangeRequest req, CancellationToken ct = default);
     Task<bool> CancelAsync(Guid id, string? reason, CancellationToken ct = default);
+    Task<bool> ApplyDiscountAsync(Guid bookingId, decimal discountPercent, CancellationToken ct = default);
 
     Task<IReadOnlyList<BookingEstimateLineDto>?> SaveEstimateAsync(Guid bookingId, SaveEstimateRequest req, CancellationToken ct = default);
     Task<BookingChangeRequestDto?> AddChangeRequestAsync(Guid bookingId, CreateChangeRequestRequest req, CancellationToken ct = default);

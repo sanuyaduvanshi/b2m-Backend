@@ -15,6 +15,9 @@ public class Booking : SoftDeletableTenantEntity
     public BookingSource Source { get; set; } = BookingSource.WalkIn;
     public BookingPaymentStatus PaymentStatus { get; set; } = BookingPaymentStatus.Pending;
     public decimal TotalBillingAmount { get; set; }
+    /// <summary>Sum of service line prices before discount — set once at creation, used to recompute TotalBillingAmount whenever DiscountPercent changes.</summary>
+    public decimal GrossBillingAmount { get; set; }
+    public decimal DiscountPercent { get; set; }
     public string? InvoiceNumber { get; set; }
     public string? PhoneSnapshot { get; set; }
     public string? EmailSnapshot { get; set; }

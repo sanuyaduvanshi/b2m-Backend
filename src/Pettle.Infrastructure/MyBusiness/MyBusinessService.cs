@@ -50,10 +50,11 @@ public class MyBusinessService : IMyBusinessService
     public async Task<IReadOnlyList<ServiceItemListItem>> ListServicesAsync(CancellationToken ct = default)
     {
         if (_user.TenantId is null) return Array.Empty<ServiceItemListItem>();
-        return await _db.ServiceItems.AsNoTracking().Include(s => s.Category)
+        return await _db.ServiceItems.AsNoTracking().Include(s => s.Category).Include(s => s.Variants)
             .Where(s => s.TenantId == _user.TenantId)
             .OrderBy(s => s.Vertical).ThenBy(s => s.Name)
-            .Select(s => new ServiceItemListItem(s.Id, s.Name, s.Vertical, s.Category!.Name, s.BasePrice, s.TaxPercent, s.IsActive, s.Variants.Count))
+            .Select(s => new ServiceItemListItem(s.Id, s.Name, s.Vertical, s.Category!.Name, s.BasePrice, s.TaxPercent, s.IsActive, s.Variants.Count,
+                s.Variants.Select(v => new ServiceVariantDto(v.Id, v.Name, v.Price, v.SizeClass, v.Notes)).ToList()))
             .ToListAsync(ct);
     }
 

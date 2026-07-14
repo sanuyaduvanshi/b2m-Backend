@@ -19,15 +19,16 @@ public record IssuedSubscriptionDetail(
 
 public record PackageServiceItem(
     string ServiceName, decimal Discount, string DiscountType,
-    int? DaysOrSessions, string? BoardingType, string? SkuCategory, string? SkuSubCategory, Guid? SkuId);
+    int? DaysOrSessions, string? BoardingType, string? SkuCategory, string? SkuSubCategory, Guid? SkuId,
+    string? SkuName = null);
 
 public record PackageListItem(
     Guid Id, string Name, int ValidityDays, decimal Price, decimal TaxPercent, bool IsTaxInclusive, bool IsActive,
-    IReadOnlyList<PackageServiceItem>? Services = null);
+    IReadOnlyList<PackageServiceItem>? Services = null, string Type = "Boarding");
 
 public record CreateOrUpdatePackageRequest(
     string Name, string? Description, int ValidityDays, decimal Price, decimal TaxPercent, bool IsTaxInclusive, bool IsActive,
-    List<PackageServiceItem>? Services = null);
+    List<PackageServiceItem>? Services = null, string Type = "Boarding");
 
 public record ActiveSubscriptionSummary(
     Guid Id, string PackageName, decimal PackagePrice, decimal BalanceUsed, decimal RemainingBalance,

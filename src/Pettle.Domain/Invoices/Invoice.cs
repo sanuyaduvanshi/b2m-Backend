@@ -22,6 +22,7 @@ public class Invoice : SoftDeletableTenantEntity
     public decimal AddOnAmount { get; set; }
     public decimal DiscountAmount { get; set; }
     public decimal AdditionalAmount { get; set; }
+    public string? AdditionalChargesReason { get; set; }
     public decimal AdditionalDiscountAmount { get; set; }
     public decimal IgstAmount { get; set; }
     public decimal CgstAmount { get; set; }
@@ -32,6 +33,10 @@ public class Invoice : SoftDeletableTenantEntity
 
     public InvoicePaymentStatus PaymentStatus { get; set; } = InvoicePaymentStatus.Pending;
     public string? Notes { get; set; }
+    /// <summary>Only meaningful when InvoiceType == CreditNote: how much of this credit note's
+    /// value is still unredeemed. Set to the full amount at issue time, decremented as it's
+    /// applied toward future sales via a Credit-mode Payment.</summary>
+    public decimal RemainingCreditAmount { get; set; }
 
     public ICollection<InvoiceLineItem> Lines { get; set; } = new List<InvoiceLineItem>();
     public ICollection<Payment> Payments { get; set; } = new List<Payment>();

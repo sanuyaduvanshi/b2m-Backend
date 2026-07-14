@@ -17,6 +17,14 @@ public class InvoicesController : ControllerBase
     public async Task<IActionResult> List([FromQuery] InvoiceListQuery query, CancellationToken ct)
         => Ok(await _svc.ListAsync(query, ct));
 
+    [HttpGet("credit-notes/lookup")]
+    [HasPermission(Modules.Invoices, Actions.View)]
+    public async Task<IActionResult> LookupCreditNote([FromQuery] string code, CancellationToken ct)
+    {
+        var r = await _svc.LookupCreditNoteAsync(code, ct);
+        return r is null ? NotFound() : Ok(r);
+    }
+
     [HttpGet("{id:guid}")]
     [HasPermission(Modules.Invoices, Actions.View)]
     public async Task<IActionResult> Get(Guid id, CancellationToken ct)
