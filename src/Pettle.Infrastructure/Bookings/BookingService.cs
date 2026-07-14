@@ -338,32 +338,58 @@ public class BookingServiceImpl : IBookingService
         _db.Bookings.Add(b);
         _db.Invoices.Add(invoice);
 
-        // SUB-4/5: Auto-debit from subscription if client has an active subscription
+        // SUB-4/5: Auto-debit from subscription if client has an active subscription — but only
+        // for the portion of this booking the package actually covers. Each booked service line
+        // is matched by name against the package's included items; a matched item's Discount/
+        // DiscountType determines how much of that line is covered (100% Percentage = fully free,
+        // 50% = half covered, FlatAmount = up to that ₹ amount). Anything unmatched (a new/extra
+        // service not in the package) is left as Due on the invoice for separate payment — the
+        // whole point being a subscription should never silently make out-of-plan services free.
         if (req.UseSubscriptionId.HasValue && req.PetParentId.HasValue)
         {
             var sub = await _db.IssuedSubscriptions
+                .Include(s => s.Package).ThenInclude(p => p!.Services)
                 .FirstOrDefaultAsync(s => s.Id == req.UseSubscriptionId.Value
                     && s.TenantId == _user.TenantId && s.PetParentId == req.PetParentId.Value
                     && s.Status == IssuedSubscriptionStatus.Active, ct);
-            if (sub != null)
+            if (sub?.Package != null)
             {
-                sub.BalanceUsed += invoice.Revenue;
-                if (sub.RemainingSessions > 0) sub.RemainingSessions--;
-                // Auto-pay the booking invoice from subscription balance
-                invoice.Paid = invoice.Revenue;
-                invoice.Due = 0;
-                invoice.PaymentStatus = InvoicePaymentStatus.Paid;
-                _db.Payments.Add(new Payment
+                decimal coveredAmount = 0;
+                foreach (var line in req.Services)
                 {
-                    InvoiceId = invoice.Id,
-                    PaymentTime = DateTimeOffset.UtcNow,
-                    Amount = invoice.Revenue,
-                    Mode = PaymentMode.Other,
-                    Source = PaymentSource.WalkIn,
-                    Type = PaymentType.Balance,
-                    Status = PaymentRecordStatus.Success,
-                    Notes = $"Auto-debited from subscription: {sub.Id}",
-                });
+                    var match = sub.Package.Services
+                        .FirstOrDefault(s => string.Equals(s.ServiceName, line.ServiceName, StringComparison.OrdinalIgnoreCase));
+                    if (match is null) continue;
+                    var portion = match.DiscountType == DiscountType.Percentage
+                        ? line.FinalAmount * (match.Discount / 100m)
+                        : Math.Min(match.Discount, line.FinalAmount);
+                    coveredAmount += Math.Clamp(portion, 0, line.FinalAmount);
+                }
+                coveredAmount = Math.Round(Math.Min(coveredAmount, invoice.Revenue), 2, MidpointRounding.AwayFromZero);
+
+                if (coveredAmount > 0)
+                {
+                    sub.BalanceUsed += coveredAmount;
+                    if (sub.RemainingSessions > 0) sub.RemainingSessions--;
+                    invoice.Paid = coveredAmount;
+                    invoice.Due = Math.Max(0, invoice.Revenue - coveredAmount);
+                    invoice.PaymentStatus = invoice.Due <= 0.01m
+                        ? InvoicePaymentStatus.Paid
+                        : InvoicePaymentStatus.PartiallyPaid;
+                    _db.Payments.Add(new Payment
+                    {
+                        InvoiceId = invoice.Id,
+                        PaymentTime = DateTimeOffset.UtcNow,
+                        Amount = coveredAmount,
+                        Mode = PaymentMode.Other,
+                        Source = PaymentSource.WalkIn,
+                        Type = PaymentType.Balance,
+                        Status = PaymentRecordStatus.Success,
+                        Notes = coveredAmount + 0.01m >= invoice.Revenue
+                            ? $"Auto-debited from subscription: {sub.Id}"
+                            : $"Auto-debited from subscription: {sub.Id} (covered ₹{coveredAmount:F2} of ₹{invoice.Revenue:F2} — rest is outside the package)",
+                    });
+                }
             }
         }
 
