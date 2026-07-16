@@ -377,6 +377,10 @@ public class InvoiceService : IInvoiceService
             InvoicePaymentStatus.Refunded      => BookingPaymentStatus.Refunded,
             _                                  => BookingPaymentStatus.Pending,
         };
+        // The booking list/detail views show Booking.TotalBillingAmount as a cached snapshot of
+        // the invoice total rather than joining live — keep it in sync whenever the invoice's
+        // total changes (editing lines/discount/additional charges), not just its payment state.
+        booking.TotalBillingAmount = invoice.Revenue;
     }
 
     public async Task<bool> UpdateAsync(Guid id, UpdateInvoiceRequest req, CancellationToken ct = default)
@@ -456,6 +460,7 @@ public class InvoiceService : IInvoiceService
             ? InvoicePaymentStatus.Paid
             : invoice.Paid > 0 ? InvoicePaymentStatus.PartiallyPaid : InvoicePaymentStatus.Pending;
 
+        await SyncBookingStatusAsync(invoice, ct);
         await _db.SaveChangesAsync(ct);
         return true;
     }
