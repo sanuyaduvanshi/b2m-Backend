@@ -29,9 +29,16 @@ public class ExpenseService : IExpenseService
 
         var total = await q.CountAsync(ct);
         var p = Math.Max(page, 1); var sz = Math.Clamp(pageSize, 1, 200);
-        var items = await q.OrderByDescending(e => e.Time).Skip((p - 1) * sz).Take(sz)
-            .Select(e => new ExpenseListItem(e.Id, e.Time, e.Description, e.Category!.Name, e.PaymentMode, e.Amount, e.AmountIncTax, e.CategoryId, e.Notes, e.ReceiptUrl))
+        var rows = await q.OrderByDescending(e => e.Time).Skip((p - 1) * sz).Take(sz)
+            .Select(e => new { e.Id, e.Time, e.Description, CategoryName = e.Category!.Name, e.PaymentMode, e.Amount, e.AmountIncTax, e.CategoryId, e.Notes, e.ReceiptUrl, e.RelatedPurchaseOrderId })
             .ToListAsync(ct);
+
+        var poIds = rows.Where(r => r.RelatedPurchaseOrderId.HasValue).Select(r => r.RelatedPurchaseOrderId!.Value).Distinct().ToList();
+        var poNumbers = poIds.Count == 0 ? new Dictionary<Guid, string>()
+            : await _db.PurchaseOrders.Where(po => poIds.Contains(po.Id)).ToDictionaryAsync(po => po.Id, po => po.PoNumber, ct);
+
+        var items = rows.Select(r => new ExpenseListItem(r.Id, r.Time, r.Description, r.CategoryName, r.PaymentMode, r.Amount, r.AmountIncTax, r.CategoryId, r.Notes, r.ReceiptUrl,
+            r.RelatedPurchaseOrderId, r.RelatedPurchaseOrderId.HasValue && poNumbers.TryGetValue(r.RelatedPurchaseOrderId.Value, out var no) ? no : null)).ToList();
         return new PagedResult<ExpenseListItem>(items, total, p, sz);
     }
 
@@ -60,6 +67,8 @@ public class ExpenseService : IExpenseService
         if (_user.TenantId is null) return null;
         var e = await _db.Expenses.FirstOrDefaultAsync(x => x.Id == id && x.TenantId == _user.TenantId, ct);
         if (e is null) return null;
+        if (e.RelatedPurchaseOrderId.HasValue)
+            throw AppException.Conflict("This expense was auto-generated from a Purchase Order payment — edit the payment on the Purchase Order instead.");
         e.Time = req.Time; e.Description = req.Description; e.CategoryId = req.CategoryId;
         e.PaymentMode = req.PaymentMode; e.Amount = req.Amount; e.AmountIncTax = req.AmountIncTax;
         e.Notes = req.Notes; e.ReceiptUrl = req.ReceiptUrl;
@@ -72,6 +81,8 @@ public class ExpenseService : IExpenseService
         if (_user.TenantId is null) return false;
         var e = await _db.Expenses.FirstOrDefaultAsync(x => x.Id == id && x.TenantId == _user.TenantId, ct);
         if (e is null) return false;
+        if (e.RelatedPurchaseOrderId.HasValue)
+            throw AppException.Conflict("This expense was auto-generated from a Purchase Order payment — delete/reverse the payment on the Purchase Order instead.");
         _db.Expenses.Remove(e);
         await _db.SaveChangesAsync(ct);
         return true;

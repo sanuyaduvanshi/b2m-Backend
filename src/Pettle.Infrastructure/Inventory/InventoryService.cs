@@ -3,6 +3,7 @@ using Pettle.Application.Clients;
 using Pettle.Application.Common;
 using Pettle.Application.Common.Errors;
 using Pettle.Application.Inventory;
+using Pettle.Domain.Expenses;
 using Pettle.Domain.Inventory;
 using Pettle.Infrastructure.Persistence;
 
@@ -481,8 +482,43 @@ public class InventoryService : IInventoryService
         po.PaymentStatus = po.Due == 0 ? PoPaymentStatus.Paid : PoPaymentStatus.PartiallyPaid;
         if (!string.IsNullOrWhiteSpace(req.Notes))
             po.Notes = (po.Notes is null ? "" : po.Notes + " | ") + $"Paid ₹{req.Amount:F2} via {req.Mode}: {req.Notes}";
+
+        // Cash-basis expense recognition: money only actually leaves the business when a PO
+        // payment is made (not when the PO/bill is merely created), so each payment against a
+        // PO books its own Expense entry here — mirroring how Vendor Bill Payments show up in
+        // the Expenses/cash-flow report in standard accounting software (Zoho, QuickBooks etc).
+        var vendorName = await _db.Vendors.Where(v => v.Id == po.VendorId).Select(v => v.Name).FirstOrDefaultAsync(ct);
+        var purchaseCategoryId = await GetOrCreatePurchaseExpenseCategoryAsync(ct);
+        _db.Expenses.Add(new Expense
+        {
+            Time = DateTimeOffset.UtcNow,
+            Description = $"Purchase — PO {po.PoNumber}" + (vendorName is null ? "" : $" ({vendorName})"),
+            CategoryId = purchaseCategoryId,
+            PaymentMode = req.Mode,
+            Amount = req.Amount,
+            AmountIncTax = req.Amount,
+            RelatedPurchaseOrderId = po.Id,
+            Notes = req.Notes,
+        });
+
         await _db.SaveChangesAsync(ct);
         return true;
+    }
+
+    /// <summary>Finds (or creates on first use) the tenant's "Purchases" expense category that
+    /// auto-generated PO-payment expenses are filed under.</summary>
+    private async Task<Guid> GetOrCreatePurchaseExpenseCategoryAsync(CancellationToken ct)
+    {
+        var existing = await _db.ExpenseCategories
+            .Where(c => c.TenantId == _user.TenantId && c.Name == "Purchases")
+            .Select(c => c.Id)
+            .FirstOrDefaultAsync(ct);
+        if (existing != Guid.Empty) return existing;
+
+        var cat = new ExpenseCategory { TenantId = _user.TenantId!.Value, Name = "Purchases" };
+        _db.ExpenseCategories.Add(cat);
+        await _db.SaveChangesAsync(ct);
+        return cat.Id;
     }
 
     public async Task<bool> DeletePoAsync(Guid id, bool force = false, CancellationToken ct = default)
@@ -536,6 +572,12 @@ public class InventoryService : IInventoryService
         // Hard-delete lines (soft-delete interceptor won't cascade to children)
         await _db.PurchaseOrderLines
             .Where(l => l.PurchaseOrderId == po.Id)
+            .ExecuteDeleteAsync(ct);
+
+        // Remove the payment-expense entries this PO auto-generated so the Expenses list
+        // doesn't keep a dangling reference to a PO that no longer exists.
+        await _db.Expenses
+            .Where(e => e.RelatedPurchaseOrderId == po.Id && e.TenantId == _user.TenantId)
             .ExecuteDeleteAsync(ct);
 
         _db.PurchaseOrders.Remove(po);
