@@ -517,11 +517,18 @@ public class InvoiceService : IInvoiceService
             }
         }
 
-        // Reset booking payment status to Pending if this was a booking invoice
+        // Booking.InvoiceNumber/TotalBillingAmount/PaymentStatus are a cached snapshot of the
+        // invoice (the booking views don't join the invoice live) — clear them so a deleted
+        // invoice doesn't keep showing up against the booking as if it still existed.
         if (invoice.BookingId is { } bookingId)
         {
             var booking = await _db.Bookings.FirstOrDefaultAsync(b => b.Id == bookingId && b.TenantId == _user.TenantId, ct);
-            if (booking is not null) booking.PaymentStatus = BookingPaymentStatus.Pending;
+            if (booking is not null)
+            {
+                booking.PaymentStatus = BookingPaymentStatus.Pending;
+                booking.InvoiceNumber = null;
+                if (booking.GrossBillingAmount > 0) booking.TotalBillingAmount = booking.GrossBillingAmount;
+            }
         }
 
         _db.Invoices.Remove(invoice); // soft-delete interceptor sets IsDeleted = true
