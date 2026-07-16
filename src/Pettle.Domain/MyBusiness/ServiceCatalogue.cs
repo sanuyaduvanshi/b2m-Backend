@@ -24,6 +24,7 @@ public class ServiceItem : SoftDeletableTenantEntity
     public bool IsActive { get; set; } = true;
     public ICollection<ServiceVariant> Variants { get; set; } = new List<ServiceVariant>();
     public ICollection<ServiceAddOn> AddOns { get; set; } = new List<ServiceAddOn>();
+    public ICollection<ServiceDaySlab> DaySlabs { get; set; } = new List<ServiceDaySlab>();
 }
 
 public class ServiceVariant : TenantEntity
@@ -34,6 +35,19 @@ public class ServiceVariant : TenantEntity
     public decimal Price { get; set; }
     public string? SizeClass { get; set; }
     public string? Notes { get; set; }
+}
+
+/// <summary>A per-day rate that applies to a whole boarding stay when its length falls within
+/// [MinDays, MaxDays] (MaxDays null = unbounded, i.e. this slab and up). Lets a business charge
+/// a different nightly rate for longer stays instead of a flat BasePrice x nights. Optional — a
+/// service with no slabs keeps the plain BasePrice x nights behavior.</summary>
+public class ServiceDaySlab : TenantEntity
+{
+    public Guid ServiceItemId { get; set; }
+    public ServiceItem? ServiceItem { get; set; }
+    public int MinDays { get; set; }
+    public int? MaxDays { get; set; }
+    public decimal PricePerDay { get; set; }
 }
 
 public class ServiceAddOn : TenantEntity

@@ -50,22 +50,24 @@ public class MyBusinessService : IMyBusinessService
     public async Task<IReadOnlyList<ServiceItemListItem>> ListServicesAsync(CancellationToken ct = default)
     {
         if (_user.TenantId is null) return Array.Empty<ServiceItemListItem>();
-        return await _db.ServiceItems.AsNoTracking().Include(s => s.Category).Include(s => s.Variants)
+        return await _db.ServiceItems.AsNoTracking().Include(s => s.Category).Include(s => s.Variants).Include(s => s.DaySlabs)
             .Where(s => s.TenantId == _user.TenantId)
             .OrderBy(s => s.Vertical).ThenBy(s => s.Name)
             .Select(s => new ServiceItemListItem(s.Id, s.Name, s.Vertical, s.Category!.Name, s.BasePrice, s.TaxPercent, s.IsActive, s.Variants.Count,
-                s.Variants.Select(v => new ServiceVariantDto(v.Id, v.Name, v.Price, v.SizeClass, v.Notes)).ToList()))
+                s.Variants.Select(v => new ServiceVariantDto(v.Id, v.Name, v.Price, v.SizeClass, v.Notes)).ToList(),
+                s.DaySlabs.Select(d => new ServiceDaySlabDto(d.Id, d.MinDays, d.MaxDays, d.PricePerDay)).ToList()))
             .ToListAsync(ct);
     }
 
     public async Task<ServiceItemDetail?> GetServiceAsync(Guid id, CancellationToken ct = default)
     {
         if (_user.TenantId is null) return null;
-        return await _db.ServiceItems.AsNoTracking().Include(s => s.Category).Include(s => s.Variants)
+        return await _db.ServiceItems.AsNoTracking().Include(s => s.Category).Include(s => s.Variants).Include(s => s.DaySlabs)
             .Where(s => s.Id == id && s.TenantId == _user.TenantId)
             .Select(s => new ServiceItemDetail(s.Id, s.Name, s.Description, s.Vertical, s.CategoryId, s.Category!.Name,
                 s.BasePrice, s.TaxPercent, s.TaxId, s.DurationMinutes, s.IsActive,
-                s.Variants.OrderBy(v => v.Name).Select(v => new ServiceVariantDto(v.Id, v.Name, v.Price, v.SizeClass, v.Notes)).ToList()))
+                s.Variants.OrderBy(v => v.Name).Select(v => new ServiceVariantDto(v.Id, v.Name, v.Price, v.SizeClass, v.Notes)).ToList(),
+                s.DaySlabs.OrderBy(d => d.MinDays).Select(d => new ServiceDaySlabDto(d.Id, d.MinDays, d.MaxDays, d.PricePerDay)).ToList()))
             .FirstOrDefaultAsync(ct);
     }
 
@@ -88,6 +90,8 @@ public class MyBusinessService : IMyBusinessService
         };
         foreach (var v in req.Variants ?? Array.Empty<ServiceVariantInput>())
             s.Variants.Add(new ServiceVariant { TenantId = s.TenantId, Name = v.Name, Price = v.Price, SizeClass = v.SizeClass, Notes = v.Notes });
+        foreach (var d in req.DaySlabs ?? Array.Empty<ServiceDaySlabInput>())
+            s.DaySlabs.Add(new ServiceDaySlab { TenantId = s.TenantId, MinDays = d.MinDays, MaxDays = d.MaxDays, PricePerDay = d.PricePerDay });
         _db.ServiceItems.Add(s);
         await _db.SaveChangesAsync(ct);
         return new ServiceItemListItem(s.Id, s.Name, s.Vertical, null, s.BasePrice, s.TaxPercent, s.IsActive, s.Variants.Count);
@@ -96,7 +100,7 @@ public class MyBusinessService : IMyBusinessService
     public async Task<ServiceItemListItem?> UpdateServiceAsync(Guid id, CreateOrUpdateServiceRequest req, CancellationToken ct = default)
     {
         if (_user.TenantId is null) return null;
-        var s = await _db.ServiceItems.Include(x => x.Variants).FirstOrDefaultAsync(x => x.Id == id && x.TenantId == _user.TenantId, ct);
+        var s = await _db.ServiceItems.Include(x => x.Variants).Include(x => x.DaySlabs).FirstOrDefaultAsync(x => x.Id == id && x.TenantId == _user.TenantId, ct);
         if (s is null) return null;
         await ValidateCategoryAsync(req.CategoryId, ct);
         s.Name = req.Name; s.Description = req.Description; s.Vertical = req.Vertical;
@@ -111,6 +115,14 @@ public class MyBusinessService : IMyBusinessService
             foreach (var v in req.Variants)
                 s.Variants.Add(new ServiceVariant { TenantId = s.TenantId, Name = v.Name, Price = v.Price, SizeClass = v.SizeClass, Notes = v.Notes });
         }
+        // Replace-all day slabs when the caller sends a slab list; leave untouched when null.
+        if (req.DaySlabs is not null)
+        {
+            _db.ServiceDaySlabs.RemoveRange(s.DaySlabs);
+            s.DaySlabs.Clear();
+            foreach (var d in req.DaySlabs)
+                s.DaySlabs.Add(new ServiceDaySlab { TenantId = s.TenantId, MinDays = d.MinDays, MaxDays = d.MaxDays, PricePerDay = d.PricePerDay });
+        }
         await _db.SaveChangesAsync(ct);
         return new ServiceItemListItem(s.Id, s.Name, s.Vertical, null, s.BasePrice, s.TaxPercent, s.IsActive, s.Variants.Count);
     }
@@ -118,9 +130,10 @@ public class MyBusinessService : IMyBusinessService
     public async Task<bool> DeleteServiceAsync(Guid id, CancellationToken ct = default)
     {
         if (_user.TenantId is null) return false;
-        var s = await _db.ServiceItems.Include(x => x.Variants).FirstOrDefaultAsync(x => x.Id == id && x.TenantId == _user.TenantId, ct);
+        var s = await _db.ServiceItems.Include(x => x.Variants).Include(x => x.DaySlabs).FirstOrDefaultAsync(x => x.Id == id && x.TenantId == _user.TenantId, ct);
         if (s is null) return false;
         _db.ServiceVariants.RemoveRange(s.Variants);
+        _db.ServiceDaySlabs.RemoveRange(s.DaySlabs);
         _db.ServiceItems.Remove(s);
         await _db.SaveChangesAsync(ct);
         return true;

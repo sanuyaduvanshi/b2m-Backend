@@ -9,13 +9,19 @@ public record UpdateTenantProfileRequest(string Name, string? LogoUrl, string? P
     string? Currency, string? Locale, string? TimeZone, int IdleSessionMinutes);
 
 public record ServiceItemListItem(Guid Id, string Name, string Vertical, string? CategoryName, decimal BasePrice, decimal? TaxPercent, bool IsActive, int VariantCount,
-    IReadOnlyList<ServiceVariantDto>? Variants = null);
+    IReadOnlyList<ServiceVariantDto>? Variants = null, IReadOnlyList<ServiceDaySlabDto>? DaySlabs = null);
 public record ServiceVariantDto(Guid Id, string Name, decimal Price, string? SizeClass, string? Notes);
 public record ServiceVariantInput(string Name, decimal Price, string? SizeClass, string? Notes);
+/// <summary>Per-day rate for boarding stays whose length falls in [MinDays, MaxDays] (MaxDays
+/// null = this slab and up). The whole stay is billed at this slab's PricePerDay x nights.</summary>
+public record ServiceDaySlabDto(Guid Id, int MinDays, int? MaxDays, decimal PricePerDay);
+public record ServiceDaySlabInput(int MinDays, int? MaxDays, decimal PricePerDay);
 public record ServiceItemDetail(Guid Id, string Name, string? Description, string Vertical, Guid? CategoryId, string? CategoryName,
-    decimal BasePrice, decimal? TaxPercent, Guid? TaxId, int? DurationMinutes, bool IsActive, IReadOnlyList<ServiceVariantDto> Variants);
+    decimal BasePrice, decimal? TaxPercent, Guid? TaxId, int? DurationMinutes, bool IsActive, IReadOnlyList<ServiceVariantDto> Variants,
+    IReadOnlyList<ServiceDaySlabDto> DaySlabs);
 public record CreateOrUpdateServiceRequest(string Name, string? Description, string Vertical, Guid? CategoryId, decimal BasePrice,
-    decimal? TaxPercent, Guid? TaxId, int? DurationMinutes, bool IsActive, IReadOnlyList<ServiceVariantInput>? Variants = null);
+    decimal? TaxPercent, Guid? TaxId, int? DurationMinutes, bool IsActive, IReadOnlyList<ServiceVariantInput>? Variants = null,
+    IReadOnlyList<ServiceDaySlabInput>? DaySlabs = null);
 
 public record ServiceCategoryDto(Guid Id, string Name, string? Description, bool IsActive, int ItemCount);
 public record CreateServiceCategoryRequest(string Name, string? Description);

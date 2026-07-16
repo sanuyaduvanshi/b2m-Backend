@@ -113,6 +113,7 @@ public class PettleDbContext : IdentityDbContext<ApplicationUser, ApplicationRol
     public DbSet<ServiceItem> ServiceItems => Set<ServiceItem>();
     public DbSet<ServiceVariant> ServiceVariants => Set<ServiceVariant>();
     public DbSet<ServiceAddOn> ServiceAddOns => Set<ServiceAddOn>();
+    public DbSet<ServiceDaySlab> ServiceDaySlabs => Set<ServiceDaySlab>();
     public DbSet<AddOnService> AddOnServices => Set<AddOnService>();
     public DbSet<VetCatalogueItem> VetCatalogueItems => Set<VetCatalogueItem>();
     public DbSet<Staff> Staffs => Set<Staff>();
@@ -393,6 +394,7 @@ public class PettleDbContext : IdentityDbContext<ApplicationUser, ApplicationRol
         {
             b.HasMany(x => x.Variants).WithOne(x => x.ServiceItem!).HasForeignKey(x => x.ServiceItemId).OnDelete(DeleteBehavior.Cascade);
             b.HasMany(x => x.AddOns).WithOne(x => x.ServiceItem!).HasForeignKey(x => x.ServiceItemId).OnDelete(DeleteBehavior.Cascade);
+            b.HasMany(x => x.DaySlabs).WithOne(x => x.ServiceItem!).HasForeignKey(x => x.ServiceItemId).OnDelete(DeleteBehavior.Cascade);
             b.HasOne(x => x.Tax).WithMany().HasForeignKey(x => x.TaxId).OnDelete(DeleteBehavior.SetNull);
             b.HasQueryFilter(x => !x.IsDeleted);
             b.Property(x => x.BasePrice).HasPrecision(12, 2);
@@ -401,6 +403,7 @@ public class PettleDbContext : IdentityDbContext<ApplicationUser, ApplicationRol
 
         builder.Entity<ServiceVariant>(b => b.Property(x => x.Price).HasPrecision(12, 2));
         builder.Entity<ServiceAddOn>(b => b.Property(x => x.Price).HasPrecision(12, 2));
+        builder.Entity<ServiceDaySlab>(b => b.Property(x => x.PricePerDay).HasPrecision(12, 2));
 
         builder.Entity<Staff>(b =>
         {
