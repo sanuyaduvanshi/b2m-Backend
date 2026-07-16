@@ -66,8 +66,8 @@ public class CreateOrUpdateServiceValidator : AbstractValidator<CreateOrUpdateSe
         RuleForEach(x => x.DaySlabs).ChildRules(v =>
         {
             v.RuleFor(z => z.MinDays).GreaterThanOrEqualTo(1).WithMessage("Min days must be at least 1.");
-            v.RuleFor(z => z.MaxDays!.Value).GreaterThanOrEqualTo(z => z.MinDays)
-                .WithMessage("Max days must be greater than or equal to min days.").When(z => z.MaxDays.HasValue);
+            v.RuleFor(z => z).Must(z => !z.MaxDays.HasValue || z.MaxDays.Value >= z.MinDays)
+                .WithMessage("Max days must be greater than or equal to min days.").WithName("MaxDays");
             v.RuleFor(z => z.PricePerDay).NonNegativeAmount();
         }).When(x => x.DaySlabs is not null);
     }
