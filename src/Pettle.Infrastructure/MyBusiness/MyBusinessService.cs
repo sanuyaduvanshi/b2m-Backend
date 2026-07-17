@@ -100,7 +100,7 @@ public class MyBusinessService : IMyBusinessService
     public async Task<ServiceItemListItem?> UpdateServiceAsync(Guid id, CreateOrUpdateServiceRequest req, CancellationToken ct = default)
     {
         if (_user.TenantId is null) return null;
-        var s = await _db.ServiceItems.Include(x => x.Variants).Include(x => x.DaySlabs).FirstOrDefaultAsync(x => x.Id == id && x.TenantId == _user.TenantId, ct);
+        var s = await _db.ServiceItems.FirstOrDefaultAsync(x => x.Id == id && x.TenantId == _user.TenantId, ct);
         if (s is null) return null;
         await ValidateCategoryAsync(req.CategoryId, ct);
         s.Name = req.Name; s.Description = req.Description; s.Vertical = req.Vertical;
@@ -108,23 +108,27 @@ public class MyBusinessService : IMyBusinessService
         s.TaxId = req.TaxId; s.DurationMinutes = req.DurationMinutes; s.IsActive = req.IsActive;
 
         // Replace-all variants when the caller sends a variant list; leave untouched when null.
+        // ExecuteDelete (not RemoveRange+nav-mutation) — adding brand-new children into an
+        // already-tracked collection makes EF mistake their client-generated Guid ids for
+        // existing rows and emit UPDATE instead of INSERT, throwing a concurrency exception.
+        int variantCount = -1;
         if (req.Variants is not null)
         {
-            _db.ServiceVariants.RemoveRange(s.Variants);
-            s.Variants.Clear();
+            await _db.ServiceVariants.Where(v => v.ServiceItemId == id).ExecuteDeleteAsync(ct);
             foreach (var v in req.Variants)
-                s.Variants.Add(new ServiceVariant { TenantId = s.TenantId, Name = v.Name, Price = v.Price, SizeClass = v.SizeClass, Notes = v.Notes });
+                _db.ServiceVariants.Add(new ServiceVariant { ServiceItemId = id, TenantId = s.TenantId, Name = v.Name, Price = v.Price, SizeClass = v.SizeClass, Notes = v.Notes });
+            variantCount = req.Variants.Count;
         }
         // Replace-all day slabs when the caller sends a slab list; leave untouched when null.
         if (req.DaySlabs is not null)
         {
-            _db.ServiceDaySlabs.RemoveRange(s.DaySlabs);
-            s.DaySlabs.Clear();
+            await _db.ServiceDaySlabs.Where(d => d.ServiceItemId == id).ExecuteDeleteAsync(ct);
             foreach (var d in req.DaySlabs)
-                s.DaySlabs.Add(new ServiceDaySlab { TenantId = s.TenantId, MinDays = d.MinDays, MaxDays = d.MaxDays, PricePerDay = d.PricePerDay });
+                _db.ServiceDaySlabs.Add(new ServiceDaySlab { ServiceItemId = id, TenantId = s.TenantId, MinDays = d.MinDays, MaxDays = d.MaxDays, PricePerDay = d.PricePerDay });
         }
         await _db.SaveChangesAsync(ct);
-        return new ServiceItemListItem(s.Id, s.Name, s.Vertical, null, s.BasePrice, s.TaxPercent, s.IsActive, s.Variants.Count);
+        if (variantCount < 0) variantCount = await _db.ServiceVariants.CountAsync(v => v.ServiceItemId == id, ct);
+        return new ServiceItemListItem(s.Id, s.Name, s.Vertical, null, s.BasePrice, s.TaxPercent, s.IsActive, variantCount);
     }
 
     public async Task<bool> DeleteServiceAsync(Guid id, CancellationToken ct = default)
