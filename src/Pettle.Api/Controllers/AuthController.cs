@@ -22,14 +22,14 @@ public class AuthController : ControllerBase
     public async Task<IActionResult> Login([FromBody] LoginRequest req, CancellationToken ct)
     {
         var r = await _auth.LoginAsync(req.Email, req.Password, ct);
-        return r.Success ? Ok(r) : Unauthorized(new { error = r.Error });
+        return r.Success ? Ok(r) : Unauthorized(new { error = r.Error, message = r.Error });
     }
 
     [HttpPost("refresh")]
     public async Task<IActionResult> Refresh([FromBody] RefreshRequest req, CancellationToken ct)
     {
         var r = await _auth.RefreshAsync(req.RefreshToken, ct);
-        return r.Success ? Ok(r) : Unauthorized(new { error = r.Error });
+        return r.Success ? Ok(r) : Unauthorized(new { error = r.Error, message = r.Error });
     }
 
     [Authorize]

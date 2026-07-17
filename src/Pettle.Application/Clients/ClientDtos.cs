@@ -62,8 +62,10 @@ public record CreatePetParentRequest(
     string? Email,
     string? AlternatePhone,
     string? AddressLine1,
+    string? AddressLine2,
     string? City,
     string? State,
+    string? Country,
     string? PostalCode,
     DateOnly? OnboardingDate,
     bool TermsAccepted

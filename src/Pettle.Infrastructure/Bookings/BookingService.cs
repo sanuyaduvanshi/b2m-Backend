@@ -23,7 +23,7 @@ public class BookingServiceImpl : IBookingService
     {
         if (_user.TenantId is null) return new PagedResult<BookingListItem>(Array.Empty<BookingListItem>(), 0, 1, query.PageSize);
 
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var today = BusinessClock.TodayIst();
         var q = _db.Bookings.AsNoTracking()
             .Include(b => b.PetParent)
             .Include(b => b.Services)
@@ -38,7 +38,7 @@ public class BookingServiceImpl : IBookingService
             "active" => q.Where(b => b.Services.Any(s => s.Status == BookingStatus.CheckedIn || s.Status == BookingStatus.Active)),
             "past" => q.Where(b => b.BookingDate < today),
             "noshow" => q.Where(b => b.Services.Any(s => s.Status == BookingStatus.NoShow)),
-            "cancelled" => q.Where(b => b.Services.All(s => s.Status == BookingStatus.Cancelled)),
+            "cancelled" => q.Where(b => b.Services.Any() && b.Services.All(s => s.Status == BookingStatus.Cancelled)),
             _ => q.Where(b => b.BookingDate >= today && b.Services.Any(s => s.Status == BookingStatus.Upcoming || s.Status == BookingStatus.Accepted))
         };
 
@@ -71,7 +71,18 @@ public class BookingServiceImpl : IBookingService
                 b.PetParent != null ? b.PetParent.Phone : (b.GuestPhone ?? ""),
                 string.Join(", ", b.Services.Select(s => s.ServiceType.ToString()).Distinct()),
                 b.PaymentStatus, b.TotalBillingAmount, b.InvoiceNumber, b.Source,
-                b.Services.OrderByDescending(s => (int)s.Status).Select(s => s.Status).FirstOrDefault()
+                b.Services.Any()
+                    ? b.Services.OrderBy(s =>
+                        s.Status == BookingStatus.Active ? 0 :
+                        s.Status == BookingStatus.CheckedIn ? 1 :
+                        s.Status == BookingStatus.Upcoming ? 2 :
+                        s.Status == BookingStatus.Accepted ? 3 :
+                        s.Status == BookingStatus.NoShow ? 4 :
+                        s.Status == BookingStatus.CheckedOut ? 5 :
+                        s.Status == BookingStatus.Cancelled ? 6 :
+                        s.Status == BookingStatus.Rejected ? 7 : 8)
+                      .Select(s => (BookingStatus?)s.Status).FirstOrDefault()
+                    : null
             )).ToListAsync(ct);
 
         return new PagedResult<BookingListItem>(items, total, page, size);

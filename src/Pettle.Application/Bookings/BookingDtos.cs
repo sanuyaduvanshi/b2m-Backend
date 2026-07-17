@@ -14,7 +14,7 @@ public record BookingListItem(
     decimal TotalBillingAmount,
     string? InvoiceNumber,
     BookingSource Source,
-    BookingStatus AggregateStatus
+    BookingStatus? AggregateStatus
 );
 
 public record BookingDetail(

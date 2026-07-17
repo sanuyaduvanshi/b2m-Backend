@@ -72,6 +72,15 @@ public class ClientService : IClientService
                 p.Pets.Where(pet => pet.Breed != null).Select(pet => pet.Breed!).Distinct().ToList()
             )).ToListAsync(ct);
 
+        var ids = items.Select(i => i.Id).ToList();
+        var latestByParent = await _db.Bookings.AsNoTracking()
+            .Where(b => b.TenantId == _user.TenantId && b.PetParentId != null && ids.Contains(b.PetParentId.Value))
+            .GroupBy(b => b.PetParentId!.Value)
+            .Select(g => new { ParentId = g.Key, Latest = g.Max(b => b.BookingDate) })
+            .ToDictionaryAsync(x => x.ParentId, x => x.Latest, ct);
+
+        items = items.Select(i => i with { LatestBookingDate = latestByParent.GetValueOrDefault(i.Id) }).ToList();
+
         return new PagedResult<PetParentListItem>(items, total, page, size);
     }
 
@@ -100,10 +109,12 @@ public class ClientService : IClientService
             Email = req.Email,
             AlternatePhone = req.AlternatePhone,
             AddressLine1 = req.AddressLine1,
+            AddressLine2 = req.AddressLine2,
             City = req.City,
             State = req.State,
+            Country = req.Country,
             PostalCode = req.PostalCode,
-            OnboardingDate = req.OnboardingDate ?? DateOnly.FromDateTime(DateTime.UtcNow),
+            OnboardingDate = req.OnboardingDate ?? BusinessClock.TodayIst(),
             TermsAccepted = req.TermsAccepted
         };
         _db.PetParents.Add(parent);

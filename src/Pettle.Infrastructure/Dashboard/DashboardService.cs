@@ -23,7 +23,7 @@ public class DashboardService : IDashboardService
                 Array.Empty<RevenueDay>(),
                 Array.Empty<RecentBookingTile>());
 
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var today = BusinessClock.TodayIst();
         var tid = _user.TenantId.Value;
 
         // ---------- KPIs ----------
@@ -88,10 +88,18 @@ public class DashboardService : IDashboardService
                 b.PetParent!.Phone,
                 string.Join(", ", b.Services.Select(s => s.ServiceType.ToString()).Distinct()),
                 b.TotalBillingAmount,
-                b.Services
-                    .OrderByDescending(s => (int)s.Status)
-                    .Select(s => s.Status.ToString())
-                    .FirstOrDefault() ?? "Upcoming"
+                b.Services.Any()
+                    ? b.Services.OrderBy(s =>
+                        s.Status == BookingStatus.Active ? 0 :
+                        s.Status == BookingStatus.CheckedIn ? 1 :
+                        s.Status == BookingStatus.Upcoming ? 2 :
+                        s.Status == BookingStatus.Accepted ? 3 :
+                        s.Status == BookingStatus.NoShow ? 4 :
+                        s.Status == BookingStatus.CheckedOut ? 5 :
+                        s.Status == BookingStatus.Cancelled ? 6 :
+                        s.Status == BookingStatus.Rejected ? 7 : 8)
+                      .Select(s => s.Status.ToString()).FirstOrDefault()!
+                    : "—"
             ))
             .ToListAsync(ct);
 
