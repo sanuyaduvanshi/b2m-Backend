@@ -173,9 +173,9 @@ public class MyBusinessController : ControllerBase
         => await _svc.ChangeUserRoleAsync(userId, req, ct) ? NoContent() : NotFound();
 
     [HttpPost("access/{userId:guid}/reset-password")] [HasPermission(Modules.MyBusiness, Actions.Edit)]
-    public async Task<IActionResult> ResetPassword(Guid userId, CancellationToken ct)
+    public async Task<IActionResult> ResetPassword(Guid userId, [FromBody] ResetPasswordRequest req, CancellationToken ct)
     {
-        var r = await _svc.ResetPasswordAsync(userId, ct);
+        var r = await _svc.ResetPasswordAsync(userId, req, ct);
         return r is null ? NotFound() : Ok(r);
     }
 

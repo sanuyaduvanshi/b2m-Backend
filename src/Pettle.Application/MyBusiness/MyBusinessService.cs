@@ -53,6 +53,9 @@ public record InviteUserRequest(string Email, string DisplayName, string? PhoneN
 public record InviteUserResponse(Guid UserId, string Email, string TemporaryPassword);
 public record UpdateUserRoleRequest(Guid RoleId, Guid? BranchId);
 public record ResetPasswordResponse(Guid UserId, string Email, string TemporaryPassword);
+/// <summary>NewPassword is optional — when omitted, a random temporary password is generated
+/// (same as the invite flow); when provided, the admin's chosen password is used instead.</summary>
+public record ResetPasswordRequest(string? NewPassword);
 
 /// <summary>Wraps any JSON-serializable settings payload for a tenant setting group.</summary>
 public record TenantSettingDto(string Key, System.Text.Json.JsonElement Value, DateTimeOffset UpdatedAt);
@@ -110,7 +113,7 @@ public interface IMyBusinessService
     Task<InviteUserResponse> InviteUserAsync(InviteUserRequest req, CancellationToken ct = default);
     Task<bool> SetUserActiveAsync(Guid userId, bool isActive, CancellationToken ct = default);
     Task<bool> ChangeUserRoleAsync(Guid userId, UpdateUserRoleRequest req, CancellationToken ct = default);
-    Task<ResetPasswordResponse?> ResetPasswordAsync(Guid userId, CancellationToken ct = default);
+    Task<ResetPasswordResponse?> ResetPasswordAsync(Guid userId, ResetPasswordRequest req, CancellationToken ct = default);
 
     Task<TenantSettingDto> GetSettingAsync(string key, CancellationToken ct = default);
     Task<TenantSettingDto> SetSettingAsync(string key, System.Text.Json.JsonElement value, CancellationToken ct = default);

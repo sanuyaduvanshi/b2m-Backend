@@ -534,9 +534,10 @@ public class MyBusinessService : IMyBusinessService
         return true;
     }
 
-    /// <summary>Admin-initiated reset — generates a fresh temporary password for the user (shown
-    /// once to the admin, same as the invite flow) without requiring the old one.</summary>
-    public async Task<ResetPasswordResponse?> ResetPasswordAsync(Guid userId, CancellationToken ct = default)
+    /// <summary>Admin-initiated reset — either sets the admin's chosen password (req.NewPassword)
+    /// or generates a fresh random temporary one (shown once, same as the invite flow), without
+    /// requiring the user's old password.</summary>
+    public async Task<ResetPasswordResponse?> ResetPasswordAsync(Guid userId, ResetPasswordRequest req, CancellationToken ct = default)
     {
         if (_user.TenantId is null) return null;
         var tid = _user.TenantId.Value;
@@ -545,14 +546,14 @@ public class MyBusinessService : IMyBusinessService
         var user = await _userManager.FindByIdAsync(userId.ToString());
         if (user is null) return null;
 
-        var tempPwd = GenerateTempPassword();
+        var newPwd = string.IsNullOrWhiteSpace(req.NewPassword) ? GenerateTempPassword() : req.NewPassword.Trim();
         var token = await _userManager.GeneratePasswordResetTokenAsync(user);
-        var result = await _userManager.ResetPasswordAsync(user, token, tempPwd);
+        var result = await _userManager.ResetPasswordAsync(user, token, newPwd);
         if (!result.Succeeded)
             throw AppException.Validation("Could not reset password",
-                new Dictionary<string, string[]> { ["_"] = result.Errors.Select(e => e.Description).ToArray() });
+                new Dictionary<string, string[]> { ["newPassword"] = result.Errors.Select(e => e.Description).ToArray() });
 
-        return new ResetPasswordResponse(user.Id, user.Email!, tempPwd);
+        return new ResetPasswordResponse(user.Id, user.Email!, newPwd);
     }
 
     // ----- Tenant Settings (key→JSON) -----

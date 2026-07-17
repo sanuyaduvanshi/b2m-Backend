@@ -16,5 +16,6 @@ public class ImportUser : ICurrentUser
     public Guid? BranchId { get; set; }
     public IReadOnlySet<string> Permissions { get; } = new HashSet<string>();
     public bool IsAuthenticated => true;
+    public bool RestrictToOwnRecords => false;
     public bool Has(string permission) => true; // bypass for the importer
 }
