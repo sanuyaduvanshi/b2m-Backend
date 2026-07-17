@@ -5,13 +5,19 @@ public record DateRange(DateOnly From, DateOnly To);
 public record RevenuePoint(DateOnly Date, decimal Amount);
 public record BookingsBreakdown(string ServiceType, int Count, decimal Revenue);
 
-public record RevenueReport(decimal Total, decimal Paid, decimal Due, IReadOnlyList<RevenuePoint> Daily, IReadOnlyDictionary<string, decimal> ByPaymentMode);
+public record ExpenseSlice(string Label, decimal Amount);
+
+public record RevenueReport(
+    decimal Total, decimal Paid, decimal Due,
+    IReadOnlyList<RevenuePoint> Daily,
+    IReadOnlyDictionary<string, decimal> ByPaymentMode,
+    IReadOnlyList<ExpenseSlice> ByType,
+    IReadOnlyList<ExpenseSlice> ByStatus);
 public record BookingsReport(int Total, int Completed, int Cancelled, int NoShow, IReadOnlyList<BookingsBreakdown> ByServiceType);
 public record ClientsReport(int Active, int Archived, int NewInRange, IReadOnlyList<TopClient> TopClients);
 public record TopClient(Guid Id, string Name, string Phone, int Bookings, decimal Spend);
-public record InventoryReport(int TotalSkus, int LowStock, int ExpiringSoon, decimal InventoryValue);
+public record InventoryReport(int TotalSkus, int LowStock, int ExpiringSoon, decimal InventoryValue, IReadOnlyList<ExpenseSlice> ByCategory);
 
-public record ExpenseSlice(string Label, decimal Amount);
 public record ExpensesReport(decimal Total, int Count, IReadOnlyList<ExpenseSlice> ByCategory, IReadOnlyList<ExpenseSlice> ByMode);
 
 /// <summary>Money in (payments collected) vs money out (expenses) for the range.</summary>
@@ -24,6 +30,9 @@ public record ReportsOverview(
     int InvoicesInRange
 );
 
+/// <summary>One calendar month's revenue/expenses/net — the Reports Overview trend chart.</summary>
+public record MonthlyPoint(string Month, decimal Revenue, decimal Expenses, decimal Net);
+
 public interface IReportsService
 {
     Task<ReportsOverview> OverviewAsync(DateRange range, CancellationToken ct = default);
@@ -33,4 +42,5 @@ public interface IReportsService
     Task<InventoryReport> InventoryAsync(CancellationToken ct = default);
     Task<ExpensesReport> ExpensesAsync(DateRange range, CancellationToken ct = default);
     Task<ProfitReport> ProfitAsync(DateRange range, CancellationToken ct = default);
+    Task<IReadOnlyList<MonthlyPoint>> MonthlyAsync(DateRange range, CancellationToken ct = default);
 }

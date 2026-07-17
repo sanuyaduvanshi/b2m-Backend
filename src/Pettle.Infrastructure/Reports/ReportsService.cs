@@ -33,14 +33,21 @@ public class ReportsService : IReportsService
 
     public async Task<RevenueReport> RevenueAsync(DateRange range, CancellationToken ct = default)
     {
-        if (_user.TenantId is null) return new RevenueReport(0, 0, 0, Array.Empty<RevenuePoint>(), new Dictionary<string, decimal>());
+        if (_user.TenantId is null) return new RevenueReport(0, 0, 0, Array.Empty<RevenuePoint>(), new Dictionary<string, decimal>(), Array.Empty<ExpenseSlice>(), Array.Empty<ExpenseSlice>());
         var tid = _user.TenantId.Value;
         var (from, to) = RangeAsUtc(range);
 
         var invoices = await _db.Invoices.AsNoTracking()
             .Where(i => i.TenantId == tid && i.InvoiceDate >= range.From && i.InvoiceDate <= range.To)
-            .Select(i => new { i.Revenue, i.Paid, i.Due })
+            .Select(i => new { i.Revenue, i.Paid, i.Due, i.InvoiceType, i.PaymentStatus })
             .ToListAsync(ct);
+
+        var byType = invoices.GroupBy(i => i.InvoiceType.ToString())
+            .Select(g => new ExpenseSlice(g.Key, g.Sum(x => x.Revenue)))
+            .OrderByDescending(s => s.Amount).ToList();
+        var byStatus = invoices.GroupBy(i => i.PaymentStatus.ToString())
+            .Select(g => new ExpenseSlice(g.Key, g.Count()))
+            .OrderByDescending(s => s.Amount).ToList();
 
         // Pull raw rows then group in-memory: DateOnly.FromDateTime() doesn't translate to PostgreSQL.
         var rawPayments = await _db.Payments.AsNoTracking()
@@ -63,7 +70,40 @@ public class ReportsService : IReportsService
             invoices.Sum(i => i.Paid),
             invoices.Sum(i => i.Due),
             daily,
-            byMode);
+            byMode,
+            byType,
+            byStatus);
+    }
+
+    public async Task<IReadOnlyList<MonthlyPoint>> MonthlyAsync(DateRange range, CancellationToken ct = default)
+    {
+        if (_user.TenantId is null) return Array.Empty<MonthlyPoint>();
+        var tid = _user.TenantId.Value;
+        var (from, to) = RangeAsUtc(range);
+
+        var rawPayments = await _db.Payments.AsNoTracking()
+            .Where(p => p.TenantId == tid && p.PaymentTime >= from && p.PaymentTime <= to)
+            .Select(p => new { p.PaymentTime, p.Amount })
+            .ToListAsync(ct);
+        var rawExpenses = await _db.Expenses.AsNoTracking()
+            .Where(e => e.TenantId == tid && e.Time >= from && e.Time <= to)
+            .Select(e => new { e.Time, e.AmountIncTax })
+            .ToListAsync(ct);
+
+        var revenueByMonth = rawPayments
+            .GroupBy(p => p.PaymentTime.UtcDateTime.ToString("yyyy-MM"))
+            .ToDictionary(g => g.Key, g => g.Sum(x => x.Amount));
+        var expensesByMonth = rawExpenses
+            .GroupBy(e => e.Time.UtcDateTime.ToString("yyyy-MM"))
+            .ToDictionary(g => g.Key, g => g.Sum(x => x.AmountIncTax));
+
+        var months = revenueByMonth.Keys.Union(expensesByMonth.Keys).OrderBy(m => m).ToList();
+        return months.Select(m =>
+        {
+            var rev = revenueByMonth.GetValueOrDefault(m, 0m);
+            var exp = expensesByMonth.GetValueOrDefault(m, 0m);
+            return new MonthlyPoint(m, rev, exp, rev - exp);
+        }).ToList();
     }
 
     public async Task<BookingsReport> BookingsAsync(DateRange range, CancellationToken ct = default)
@@ -150,15 +190,24 @@ public class ReportsService : IReportsService
 
     public async Task<InventoryReport> InventoryAsync(CancellationToken ct = default)
     {
-        if (_user.TenantId is null) return new InventoryReport(0, 0, 0, 0);
+        if (_user.TenantId is null) return new InventoryReport(0, 0, 0, 0, Array.Empty<ExpenseSlice>());
         var tid = _user.TenantId.Value;
-        var soon = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(30);
+        var soon = BusinessClock.TodayIst().AddDays(30);
 
         var total = await _db.Skus.CountAsync(s => s.TenantId == tid, ct);
         var low = await _db.Skus.CountAsync(s => s.TenantId == tid && s.IsActive && s.ReorderLevel > 0 && s.StockOnHand <= s.ReorderLevel, ct);
         var expiring = await _db.Skus.CountAsync(s => s.TenantId == tid && s.TrackExpiry && s.NearestExpiry != null && s.NearestExpiry <= soon, ct);
         var value = await _db.Skus.Where(s => s.TenantId == tid).SumAsync(s => (decimal?)(s.StockOnHand * s.CostPrice), ct) ?? 0m;
 
-        return new InventoryReport(total, low, expiring, value);
+        var rawSkus = await _db.Skus.AsNoTracking()
+            .Where(s => s.TenantId == tid)
+            .Select(s => new { CategoryName = s.Category != null ? s.Category.Name : null, s.StockOnHand, s.CostPrice })
+            .ToListAsync(ct);
+        var byCategory = rawSkus
+            .GroupBy(s => string.IsNullOrWhiteSpace(s.CategoryName) ? "Uncategorised" : s.CategoryName!)
+            .Select(g => new ExpenseSlice(g.Key, g.Sum(x => x.StockOnHand * x.CostPrice)))
+            .OrderByDescending(s => s.Amount).ToList();
+
+        return new InventoryReport(total, low, expiring, value, byCategory);
     }
 }

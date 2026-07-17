@@ -45,4 +45,8 @@ public class ReportsController : ControllerBase
     [HttpGet("profit")] [HasPermission(Modules.Reports, Actions.View)]
     public async Task<IActionResult> Profit([FromQuery] DateOnly? from, [FromQuery] DateOnly? to, CancellationToken ct)
         => Ok(await _svc.ProfitAsync(ResolveRange(from, to), ct));
+
+    [HttpGet("monthly")] [HasPermission(Modules.Reports, Actions.View)]
+    public async Task<IActionResult> Monthly([FromQuery] DateOnly? from, [FromQuery] DateOnly? to, CancellationToken ct)
+        => Ok(await _svc.MonthlyAsync(ResolveRange(from, to), ct));
 }
