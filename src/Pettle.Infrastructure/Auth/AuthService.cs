@@ -106,7 +106,8 @@ public class AuthService : IAuthService
             new("display_name", user.DisplayName),
             new("tenant_id", context.TenantId.ToString()),
             new("branch_id", context.BranchId.ToString()),
-            new("role", context.RoleName)
+            new("role", context.RoleName),
+            new("restrict_own", role.RestrictToOwnRecords.ToString())
         };
         foreach (var p in perms) claims.Add(new Claim("perm", p));
 

@@ -26,6 +26,7 @@ public class CurrentUser : ICurrentUser
     public Guid? BranchId => GuidClaim("branch_id");
     public IReadOnlySet<string> Permissions => _permissions.Value;
     public bool IsAuthenticated => User?.Identity?.IsAuthenticated ?? false;
+    public bool RestrictToOwnRecords => bool.TryParse(User?.FindFirstValue("restrict_own"), out var v) && v;
     public bool Has(string permission) => Permissions.Contains(permission);
 
     private Guid? GuidClaim(string type)

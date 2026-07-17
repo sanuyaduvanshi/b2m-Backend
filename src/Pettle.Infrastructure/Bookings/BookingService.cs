@@ -29,6 +29,9 @@ public class BookingServiceImpl : IBookingService
             .Include(b => b.Services)
             .Where(b => b.TenantId == _user.TenantId);
 
+        // Receptionist-type roles only see bookings they personally created, not the whole tenant.
+        if (_user.RestrictToOwnRecords) q = q.Where(b => b.CreatedById == _user.UserId);
+
         q = query.Tab switch
         {
             "all" => q,

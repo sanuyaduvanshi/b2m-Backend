@@ -44,7 +44,11 @@ public static class Seeder
         foreach (var name in SystemRoles.All)
         {
             if (rolesByName.ContainsKey(name)) continue;
-            var role = new Role { TenantId = tenant.Id, Name = name, IsSystemRole = true, Description = $"System role: {name}" };
+            var role = new Role
+            {
+                TenantId = tenant.Id, Name = name, IsSystemRole = true, Description = $"System role: {name}",
+                RestrictToOwnRecords = name == SystemRoles.Receptionist
+            };
             db.AppRoles.Add(role);
             rolesByName[name] = role;
         }
@@ -146,6 +150,16 @@ public static class Seeder
             (Modules.DailyTasks, new[] { Actions.View, Actions.Edit }),
             (Modules.Reminders, new[] { Actions.View })
         });
+        var receptionist = AllowFor(all, new[]
+        {
+            (Modules.Dashboard, new[] { Actions.View }),
+            (Modules.BookingRequests, new[] { Actions.View, Actions.Create, Actions.Edit }),
+            (Modules.BookingRecords, new[] { Actions.View, Actions.Create, Actions.Edit }),
+            (Modules.ClientDatabase, new[] { Actions.View, Actions.Create, Actions.Edit }),
+            (Modules.Kennels, new[] { Actions.View }),
+            (Modules.MyBusiness, new[] { Actions.View }),
+            (Modules.Invoices, new[] { Actions.View, Actions.Create, Actions.Edit })
+        });
         var accountant = AllowFor(all, new[]
         {
             (Modules.Dashboard, new[] { Actions.View }),
@@ -161,6 +175,7 @@ public static class Seeder
             [SystemRoles.BusinessOwner] = all,
             [SystemRoles.BranchManager] = all.Where(p => !p.StartsWith($"{Modules.AccessManagement}.")).ToHashSet(),
             [SystemRoles.FrontDesk] = frontDesk,
+            [SystemRoles.Receptionist] = receptionist,
             [SystemRoles.Groomer] = groomer,
             [SystemRoles.BoardingStaff] = boarding,
             [SystemRoles.Veterinarian] = vet,

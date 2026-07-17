@@ -48,6 +48,7 @@ public static class SystemRoles
     public const string BusinessOwner = "BusinessOwner";
     public const string BranchManager = "BranchManager";
     public const string FrontDesk = "FrontDesk";
+    public const string Receptionist = "Receptionist";
     public const string Groomer = "Groomer";
     public const string BoardingStaff = "BoardingStaff";
     public const string Veterinarian = "Veterinarian";
@@ -56,7 +57,7 @@ public static class SystemRoles
 
     public static readonly IReadOnlyList<string> All = new[]
     {
-        SystemAdmin, BusinessOwner, BranchManager, FrontDesk,
+        SystemAdmin, BusinessOwner, BranchManager, FrontDesk, Receptionist,
         Groomer, BoardingStaff, Veterinarian, Accountant, ReadOnly
     };
 }

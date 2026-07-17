@@ -8,6 +8,9 @@ public class Role : Entity
     public string Name { get; set; } = string.Empty;
     public string? Description { get; set; }
     public bool IsSystemRole { get; set; }
+    /// <summary>When true, users holding this role only see records they personally created
+    /// (bookings, clients, invoices, etc.) instead of the whole tenant's data.</summary>
+    public bool RestrictToOwnRecords { get; set; }
     public ICollection<RolePermission> RolePermissions { get; set; } = new List<RolePermission>();
 }
 

@@ -172,6 +172,13 @@ public class MyBusinessController : ControllerBase
     public async Task<IActionResult> ChangeRole(Guid userId, [FromBody] UpdateUserRoleRequest req, CancellationToken ct)
         => await _svc.ChangeUserRoleAsync(userId, req, ct) ? NoContent() : NotFound();
 
+    [HttpPost("access/{userId:guid}/reset-password")] [HasPermission(Modules.MyBusiness, Actions.Edit)]
+    public async Task<IActionResult> ResetPassword(Guid userId, CancellationToken ct)
+    {
+        var r = await _svc.ResetPasswordAsync(userId, ct);
+        return r is null ? NotFound() : Ok(r);
+    }
+
     // ---- Settings (per-group key→JSON store) ----
     [HttpGet("settings/{key:regex(" + MyBusinessSettingsEndpoints.AllowedKeyRegex + ")}")]
     [HasPermission(Modules.MyBusiness, Actions.View)]

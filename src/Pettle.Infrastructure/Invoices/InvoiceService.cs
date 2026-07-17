@@ -23,6 +23,8 @@ public class InvoiceService : IInvoiceService
         if (_user.TenantId is null) return new PagedResult<InvoiceListItem>(Array.Empty<InvoiceListItem>(), 0, 1, query.PageSize);
 
         var q = _db.Invoices.AsNoTracking().Where(i => i.TenantId == _user.TenantId);
+        // Receptionist-type roles only see invoices/payments they personally created.
+        if (_user.RestrictToOwnRecords) q = q.Where(i => i.CreatedById == _user.UserId);
         if (query.Type.HasValue) q = q.Where(i => i.InvoiceType == query.Type.Value);
         if (query.Status.HasValue) q = q.Where(i => i.PaymentStatus == query.Status.Value);
         if (query.Mode.HasValue) q = q.Where(i => i.Payments.Any(p => p.Mode == query.Mode.Value));
