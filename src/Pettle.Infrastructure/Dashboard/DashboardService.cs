@@ -25,28 +25,39 @@ public class DashboardService : IDashboardService
 
         var today = BusinessClock.TodayIst();
         var tid = _user.TenantId.Value;
+        // Receptionist-type roles only see business activity they personally created — same
+        // restriction already applied to the Bookings/Invoices list pages, mirrored here so the
+        // dashboard summary doesn't leak tenant-wide figures to a role that can't see the underlying records.
+        var restrictOwn = _user.RestrictToOwnRecords;
+        var uid = _user.UserId;
 
         // ---------- KPIs ----------
-        var upcoming = await _db.BookingServices.CountAsync(s => s.TenantId == tid && s.Status == BookingStatus.Upcoming, ct);
-        var active = await _db.BookingServices.CountAsync(s => s.TenantId == tid && (s.Status == BookingStatus.CheckedIn || s.Status == BookingStatus.Active), ct);
+        var upcoming = await _db.BookingServices.CountAsync(s => s.TenantId == tid && s.Status == BookingStatus.Upcoming
+            && (!restrictOwn || s.CreatedById == uid), ct);
+        var active = await _db.BookingServices.CountAsync(s => s.TenantId == tid && (s.Status == BookingStatus.CheckedIn || s.Status == BookingStatus.Active)
+            && (!restrictOwn || s.CreatedById == uid), ct);
 
         var checkInDue = await _db.BoardingDetails
             .CountAsync(d => d.TenantId == tid && d.CheckInDate == today
-                && d.BookingService!.Status == BookingStatus.Upcoming, ct);
+                && d.BookingService!.Status == BookingStatus.Upcoming
+                && (!restrictOwn || d.BookingService.CreatedById == uid), ct);
 
         var checkOutDue = await _db.BoardingDetails
             .CountAsync(d => d.TenantId == tid && d.CheckOutDate == today
-                && (d.BookingService!.Status == BookingStatus.CheckedIn || d.BookingService.Status == BookingStatus.Active), ct);
+                && (d.BookingService!.Status == BookingStatus.CheckedIn || d.BookingService.Status == BookingStatus.Active)
+                && (!restrictOwn || d.BookingService.CreatedById == uid), ct);
 
         var todayStart = today.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
         var todayEnd = today.ToDateTime(TimeOnly.MaxValue, DateTimeKind.Utc);
         var revenueToday = await _db.Payments
-            .Where(p => p.TenantId == tid && p.PaymentTime >= todayStart && p.PaymentTime <= todayEnd)
+            .Where(p => p.TenantId == tid && p.PaymentTime >= todayStart && p.PaymentTime <= todayEnd
+                && (!restrictOwn || p.CreatedById == uid))
             .SumAsync(p => (decimal?)p.Amount, ct) ?? 0m;
 
         var pendingReminders = await _db.Reminders.CountAsync(r => r.TenantId == tid && r.Status == ReminderStatus.Pending && r.DueDate <= today, ct);
         var lowStock = await _db.Skus.CountAsync(s => s.TenantId == tid && s.IsActive && s.StockOnHand <= s.ReorderLevel, ct);
-        var outstanding = await _db.Invoices.CountAsync(i => i.TenantId == tid && i.PaymentStatus != InvoicePaymentStatus.Paid && i.Due > 0, ct);
+        var outstanding = await _db.Invoices.CountAsync(i => i.TenantId == tid && i.PaymentStatus != InvoicePaymentStatus.Paid && i.Due > 0
+            && (!restrictOwn || i.CreatedById == uid), ct);
 
         // ---------- Top reminders ----------
         var top = await _db.Reminders.AsNoTracking()
@@ -76,7 +87,7 @@ public class DashboardService : IDashboardService
 
         // ---------- Recent bookings (last 5 by date, then created) ----------
         var recent = await _db.Bookings.AsNoTracking()
-            .Where(b => b.TenantId == tid)
+            .Where(b => b.TenantId == tid && (!restrictOwn || b.CreatedById == uid))
             .OrderByDescending(b => b.BookingDate)
             .ThenByDescending(b => b.CreatedAt)
             .Take(5)

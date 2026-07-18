@@ -157,7 +157,6 @@ public static class Seeder
             (Modules.BookingRecords, new[] { Actions.View, Actions.Create, Actions.Edit }),
             (Modules.ClientDatabase, new[] { Actions.View, Actions.Create, Actions.Edit }),
             (Modules.Kennels, new[] { Actions.View }),
-            (Modules.MyBusiness, new[] { Actions.View }),
             (Modules.Invoices, new[] { Actions.View, Actions.Create, Actions.Edit })
         });
         var accountant = AllowFor(all, new[]
