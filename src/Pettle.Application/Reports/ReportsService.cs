@@ -12,11 +12,13 @@ public record RevenueReport(
     IReadOnlyList<RevenuePoint> Daily,
     IReadOnlyDictionary<string, decimal> ByPaymentMode,
     IReadOnlyList<ExpenseSlice> ByType,
-    IReadOnlyList<ExpenseSlice> ByStatus);
+    IReadOnlyList<ExpenseSlice> ByStatus,
+    int Count,
+    IReadOnlyDictionary<string, int> CountByType);
 public record BookingsReport(int Total, int Completed, int Cancelled, int NoShow, IReadOnlyList<BookingsBreakdown> ByServiceType);
 public record ClientsReport(int Active, int Archived, int NewInRange, IReadOnlyList<TopClient> TopClients);
 public record TopClient(Guid Id, string Name, string Phone, int Bookings, decimal Spend);
-public record InventoryReport(int TotalSkus, int LowStock, int ExpiringSoon, decimal InventoryValue, IReadOnlyList<ExpenseSlice> ByCategory);
+public record InventoryReport(int TotalSkus, int LowStock, int ExpiringSoon, decimal InventoryValue, IReadOnlyList<ExpenseSlice> ByCategory, int OutOfStock, int ListedInApp);
 
 public record ExpensesReport(decimal Total, int Count, IReadOnlyList<ExpenseSlice> ByCategory, IReadOnlyList<ExpenseSlice> ByMode);
 
