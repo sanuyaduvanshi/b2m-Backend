@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Pettle.Api.Authorization;
 using Pettle.Application.MyBusiness;
@@ -29,7 +30,11 @@ public class MyBusinessController : ControllerBase
         return r is null ? NotFound() : Ok(r);
     }
 
-    [HttpGet("services")] [HasPermission(Modules.MyBusiness, Actions.View)]
+    // Bare [Authorize] (not gated by MyBusiness.View) - this is read-only catalogue reference
+    // data needed by anyone who can create a booking/sale (e.g. Receptionist, who has no
+    // MyBusiness module access at all), not just the My Business admin screens. The service
+    // layer still scopes to _user.TenantId, so no cross-tenant exposure.
+    [HttpGet("services")] [Authorize]
     public async Task<IActionResult> Services(CancellationToken ct) => Ok(await _svc.ListServicesAsync(ct));
 
     [HttpGet("services/{id:guid}")] [HasPermission(Modules.MyBusiness, Actions.View)]
@@ -97,7 +102,9 @@ public class MyBusinessController : ControllerBase
     public async Task<IActionResult> DeleteTax(Guid id, CancellationToken ct)
         => await _svc.DeleteTaxAsync(id, ct) ? NoContent() : NotFound();
 
-    [HttpGet("addon-services")] [HasPermission(Modules.MyBusiness, Actions.View)]
+    // Same reasoning as GET services above - needed by the booking add-on picker for any
+    // booking-creating role, not just My Business admins.
+    [HttpGet("addon-services")] [Authorize]
     public async Task<IActionResult> AddOnServices(CancellationToken ct) => Ok(await _svc.ListAddOnServicesAsync(ct));
 
     [HttpPost("addon-services")] [HasPermission(Modules.MyBusiness, Actions.Create)]
