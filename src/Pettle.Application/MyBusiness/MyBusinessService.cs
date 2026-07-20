@@ -44,14 +44,19 @@ public record CreateOrUpdateClientTagRequest(string Name, string? Color, string?
 public record AccessUserListItem(
     Guid Id, string Email, string DisplayName, string? PhoneNumber,
     bool IsActive, DateTimeOffset CreatedAt, DateTimeOffset? LastLoginAt,
-    Guid? RoleId, string? RoleName, Guid? BranchId, string? BranchName
+    Guid? RoleId, string? RoleName, Guid? BranchId, string? BranchName,
+    IReadOnlyList<UserRoleAssignment> AllRoles
 );
+/// <summary>One (Role, Branch) grant a user holds — a user can have several, switchable
+/// without logging out via POST /api/auth/switch-context.</summary>
+public record UserRoleAssignment(Guid RoleId, string RoleName, Guid BranchId, string BranchName, bool IsPrimary);
 public record AccessRoleOption(Guid Id, string Name, string? Description, bool IsSystemRole);
 public record AccessBranchOption(Guid Id, string Name);
 public record AccessLookups(IReadOnlyList<AccessRoleOption> Roles, IReadOnlyList<AccessBranchOption> Branches);
 public record InviteUserRequest(string Email, string DisplayName, string? PhoneNumber, Guid RoleId, Guid BranchId);
 public record InviteUserResponse(Guid UserId, string Email, string TemporaryPassword);
 public record UpdateUserRoleRequest(Guid RoleId, Guid? BranchId);
+public record AssignRoleRequest(Guid RoleId, Guid BranchId);
 public record ResetPasswordResponse(Guid UserId, string Email, string TemporaryPassword);
 /// <summary>NewPassword is optional — when omitted, a random temporary password is generated
 /// (same as the invite flow); when provided, the admin's chosen password is used instead.</summary>
@@ -114,6 +119,11 @@ public interface IMyBusinessService
     Task<bool> SetUserActiveAsync(Guid userId, bool isActive, CancellationToken ct = default);
     Task<bool> ChangeUserRoleAsync(Guid userId, UpdateUserRoleRequest req, CancellationToken ct = default);
     Task<ResetPasswordResponse?> ResetPasswordAsync(Guid userId, ResetPasswordRequest req, CancellationToken ct = default);
+    /// <summary>Grants an additional (Role, Branch) to a user without disturbing their existing
+    /// grants — distinct from ChangeUserRoleAsync, which replaces the primary one.</summary>
+    Task<bool> AssignRoleAsync(Guid userId, AssignRoleRequest req, CancellationToken ct = default);
+    /// <summary>Revokes one (Role, Branch) grant. Refuses to remove a user's last remaining grant.</summary>
+    Task<bool> RemoveRoleAsync(Guid userId, Guid roleId, Guid branchId, CancellationToken ct = default);
 
     Task<TenantSettingDto> GetSettingAsync(string key, CancellationToken ct = default);
     Task<TenantSettingDto> SetSettingAsync(string key, System.Text.Json.JsonElement value, CancellationToken ct = default);

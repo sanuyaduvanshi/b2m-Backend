@@ -172,6 +172,14 @@ public class MyBusinessController : ControllerBase
     public async Task<IActionResult> ChangeRole(Guid userId, [FromBody] UpdateUserRoleRequest req, CancellationToken ct)
         => await _svc.ChangeUserRoleAsync(userId, req, ct) ? NoContent() : NotFound();
 
+    [HttpPost("access/{userId:guid}/roles")] [HasPermission(Modules.MyBusiness, Actions.Edit)]
+    public async Task<IActionResult> AssignRole(Guid userId, [FromBody] AssignRoleRequest req, CancellationToken ct)
+        => await _svc.AssignRoleAsync(userId, req, ct) ? NoContent() : NotFound();
+
+    [HttpDelete("access/{userId:guid}/roles/{roleId:guid}")] [HasPermission(Modules.MyBusiness, Actions.Edit)]
+    public async Task<IActionResult> RemoveRole(Guid userId, Guid roleId, [FromQuery] Guid branchId, CancellationToken ct)
+        => await _svc.RemoveRoleAsync(userId, roleId, branchId, ct) ? NoContent() : NotFound();
+
     [HttpPost("access/{userId:guid}/reset-password")] [HasPermission(Modules.MyBusiness, Actions.Edit)]
     public async Task<IActionResult> ResetPassword(Guid userId, [FromBody] ResetPasswordRequest req, CancellationToken ct)
     {

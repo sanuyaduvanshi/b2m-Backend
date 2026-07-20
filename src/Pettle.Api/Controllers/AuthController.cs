@@ -46,7 +46,7 @@ public class AuthController : ControllerBase
     public async Task<IActionResult> SwitchContext([FromBody] SwitchContextRequest req, CancellationToken ct)
     {
         if (_user.UserId is null) return Unauthorized();
-        var r = await _auth.SwitchContextAsync(_user.UserId.Value, req.TenantId, req.BranchId, ct);
+        var r = await _auth.SwitchContextAsync(_user.UserId.Value, req.TenantId, req.BranchId, req.RoleId, ct);
         return r.Success ? Ok(r) : BadRequest(new { error = r.Error });
     }
 

@@ -38,8 +38,7 @@ public class AuthService : IAuthService
         if (contexts.Count == 0)
             return new AuthResult(false, null, null, null, null, "No tenant access");
 
-        var defaultContext = contexts.FirstOrDefault(c => c.TenantId == user.DefaultTenantId && c.BranchId == user.DefaultBranchId)
-                             ?? contexts.First();
+        var defaultContext = PickDefault(contexts, user.DefaultTenantId, user.DefaultBranchId);
 
         return await IssueTokenAsync(user, defaultContext, contexts, ct);
     }
@@ -51,7 +50,7 @@ public class AuthService : IAuthService
             return new AuthResult(false, null, null, null, null, "Invalid refresh token");
 
         var contexts = await GetContextsAsync(user.Id, ct);
-        var current = contexts.FirstOrDefault(c => c.TenantId == user.DefaultTenantId && c.BranchId == user.DefaultBranchId) ?? contexts.First();
+        var current = PickDefault(contexts, user.DefaultTenantId, user.DefaultBranchId);
         return await IssueTokenAsync(user, current, contexts, ct);
     }
 
@@ -64,13 +63,16 @@ public class AuthService : IAuthService
         await _db.SaveChangesAsync(ct);
     }
 
-    public async Task<AuthResult> SwitchContextAsync(Guid userId, Guid tenantId, Guid branchId, CancellationToken ct = default)
+    public async Task<AuthResult> SwitchContextAsync(Guid userId, Guid tenantId, Guid branchId, Guid? roleId = null, CancellationToken ct = default)
     {
         var user = await _db.Users.FirstOrDefaultAsync(u => u.Id == userId, ct);
         if (user is null) return new AuthResult(false, null, null, null, null, "User not found");
 
         var contexts = await GetContextsAsync(userId, ct);
-        var target = contexts.FirstOrDefault(c => c.TenantId == tenantId && c.BranchId == branchId);
+        var candidates = contexts.Where(c => c.TenantId == tenantId && c.BranchId == branchId).ToList();
+        var target = roleId.HasValue
+            ? candidates.FirstOrDefault(c => c.RoleId == roleId.Value)
+            : candidates.FirstOrDefault(c => c.IsPrimary) ?? candidates.FirstOrDefault();
         if (target is null) return new AuthResult(false, null, null, null, null, "Context not allowed");
 
         user.DefaultTenantId = tenantId;
@@ -80,6 +82,16 @@ public class AuthService : IAuthService
         return await IssueTokenAsync(user, target, contexts, ct);
     }
 
+    /// <summary>Picks which role is active by default at login/refresh: the row matching the user's
+    /// stored default tenant/branch, preferring the one flagged IsPrimary when more than one role
+    /// exists there (a user can hold several roles at the same branch since switching), falling back
+    /// to the first context at all if the stored default no longer resolves to anything.</summary>
+    private static TenantBranchOption PickDefault(List<TenantBranchOption> contexts, Guid? defaultTenantId, Guid? defaultBranchId)
+    {
+        var candidates = contexts.Where(c => c.TenantId == defaultTenantId && c.BranchId == defaultBranchId).ToList();
+        return candidates.FirstOrDefault(c => c.IsPrimary) ?? candidates.FirstOrDefault() ?? contexts.First();
+    }
+
     private async Task<List<TenantBranchOption>> GetContextsAsync(Guid userId, CancellationToken ct)
     {
         var rows = await (from ub in _db.UserBranches.AsNoTracking()
@@ -87,14 +99,14 @@ public class AuthService : IAuthService
                           join t in _db.Tenants.AsNoTracking() on ub.TenantId equals t.Id
                           join r in _db.AppRoles.AsNoTracking() on ub.RoleId equals r.Id
                           where ub.UserId == userId && t.IsActive && b.IsActive
-                          select new TenantBranchOption(t.Id, t.Name, b.Id, b.Name, r.Name))
+                          select new TenantBranchOption(t.Id, t.Name, b.Id, b.Name, r.Name, r.Id, ub.IsPrimary))
                          .ToListAsync(ct);
         return rows;
     }
 
     private async Task<AuthResult> IssueTokenAsync(ApplicationUser user, TenantBranchOption context, List<TenantBranchOption> all, CancellationToken ct)
     {
-        var role = await _db.AppRoles.FirstAsync(r => r.Name == context.RoleName && r.TenantId == context.TenantId, ct);
+        var role = await _db.AppRoles.FirstAsync(r => r.Id == context.RoleId, ct);
         var perms = await _db.RolePermissions.Where(p => p.RoleId == role.Id).Select(p => p.PermissionKey).ToListAsync(ct);
 
         var now = DateTimeOffset.UtcNow;
@@ -124,7 +136,7 @@ public class AuthService : IAuthService
 
         var session = new UserSession(
             user.Id, user.Email ?? string.Empty, user.DisplayName,
-            context.TenantId, context.TenantName, context.BranchId, context.BranchName, context.RoleName,
+            context.TenantId, context.TenantName, context.BranchId, context.BranchName, context.RoleName, context.RoleId,
             all, perms);
 
         return new AuthResult(true, accessToken, refresh, exp, session, null);

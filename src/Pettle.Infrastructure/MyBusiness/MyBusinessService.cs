@@ -417,10 +417,12 @@ public class MyBusinessService : IMyBusinessService
             .Select(g =>
             {
                 var pick = g.OrderByDescending(x => x.IsPrimary).First();
+                var allRoles = g.Select(x => new UserRoleAssignment(x.RoleId, x.RoleName, x.BranchId, x.BranchName, x.IsPrimary))
+                    .OrderByDescending(x => x.IsPrimary).ThenBy(x => x.RoleName).ToList();
                 return new AccessUserListItem(
                     pick.Id, pick.Email ?? "", pick.DisplayName, pick.PhoneNumber,
                     pick.IsActive, pick.CreatedAt, pick.LastLoginAt,
-                    pick.RoleId, pick.RoleName, pick.BranchId, pick.BranchName);
+                    pick.RoleId, pick.RoleName, pick.BranchId, pick.BranchName, allRoles);
             })
             .OrderBy(x => x.DisplayName)
             .ToList();
@@ -531,6 +533,57 @@ public class MyBusinessService : IMyBusinessService
         await _db.SaveChangesAsync(ct);
         _db.UserBranches.Add(newUb);
         await _db.SaveChangesAsync(ct);
+        return true;
+    }
+
+    public async Task<bool> AssignRoleAsync(Guid userId, AssignRoleRequest req, CancellationToken ct = default)
+    {
+        if (_user.TenantId is null) return false;
+        var tid = _user.TenantId.Value;
+
+        var belongs = await _db.UserBranches.AnyAsync(x => x.UserId == userId && x.TenantId == tid, ct);
+        if (!belongs) return false;
+        var role = await _db.AppRoles.AnyAsync(r => r.Id == req.RoleId && r.TenantId == tid, ct);
+        if (!role) return false;
+        var branch = await _db.Branches.AnyAsync(b => b.Id == req.BranchId && b.TenantId == tid && b.IsActive, ct);
+        if (!branch) return false;
+
+        // Composite PK (UserId, BranchId, RoleId) already de-dupes this exact grant.
+        var exists = await _db.UserBranches.AnyAsync(x => x.UserId == userId && x.BranchId == req.BranchId && x.RoleId == req.RoleId, ct);
+        if (exists) return true;
+
+        var hasAny = await _db.UserBranches.AnyAsync(x => x.UserId == userId && x.TenantId == tid, ct);
+        _db.UserBranches.Add(new UserBranch
+        {
+            UserId = userId, BranchId = req.BranchId, RoleId = req.RoleId, TenantId = tid,
+            IsPrimary = !hasAny,
+        });
+        await _db.SaveChangesAsync(ct);
+        return true;
+    }
+
+    public async Task<bool> RemoveRoleAsync(Guid userId, Guid roleId, Guid branchId, CancellationToken ct = default)
+    {
+        if (_user.TenantId is null) return false;
+        var tid = _user.TenantId.Value;
+
+        var ub = await _db.UserBranches.FirstOrDefaultAsync(
+            x => x.UserId == userId && x.TenantId == tid && x.RoleId == roleId && x.BranchId == branchId, ct);
+        if (ub is null) return false;
+
+        var totalGrants = await _db.UserBranches.CountAsync(x => x.UserId == userId && x.TenantId == tid, ct);
+        if (totalGrants <= 1)
+            throw AppException.BusinessRule("Can't remove a user's only role — assign another one first.");
+
+        var wasPrimary = ub.IsPrimary;
+        _db.UserBranches.Remove(ub);
+        await _db.SaveChangesAsync(ct);
+
+        if (wasPrimary)
+        {
+            var next = await _db.UserBranches.Where(x => x.UserId == userId && x.TenantId == tid).FirstOrDefaultAsync(ct);
+            if (next is not null) { next.IsPrimary = true; await _db.SaveChangesAsync(ct); }
+        }
         return true;
     }
 
