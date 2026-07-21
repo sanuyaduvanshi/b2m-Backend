@@ -818,6 +818,22 @@ public class InventoryService : IInventoryService
         return new PagedResult<StockMovementDto>(items, total, page, pageSize);
     }
 
+    public async Task<IReadOnlyList<StockMovementDto>> ExportMovementsAsync(DateOnly from, DateOnly to, CancellationToken ct = default)
+    {
+        if (_user.TenantId is null) return Array.Empty<StockMovementDto>();
+        var fromUtc = from.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
+        var toUtc = to.ToDateTime(TimeOnly.MaxValue, DateTimeKind.Utc);
+
+        return await _db.StockMovements
+            .Include(m => m.Sku)
+            .Where(m => m.TenantId == _user.TenantId && m.CreatedAt >= fromUtc && m.CreatedAt <= toUtc)
+            .OrderBy(m => m.CreatedAt) // chronological = FIFO order, matching how stock is actually deducted
+            .Select(m => new StockMovementDto(
+                m.Id, m.Sku!.Name, m.Sku.Code, m.Reason.ToString(),
+                m.QuantityChange, m.StockAfter, m.CreatedAt, m.Note))
+            .ToListAsync(ct);
+    }
+
     public async Task<IReadOnlyList<SkuBatchDto>> ListBatchesAsync(Guid skuId, CancellationToken ct = default)
     {
         if (_user.TenantId is null) return Array.Empty<SkuBatchDto>();

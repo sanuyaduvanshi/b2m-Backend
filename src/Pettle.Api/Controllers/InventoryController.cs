@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Pettle.Api.Authorization;
+using Pettle.Application.Common;
 using Pettle.Application.Inventory;
 using Pettle.Domain.Identity;
 
@@ -147,6 +148,14 @@ public class InventoryController : ControllerBase
     [HasPermission(Modules.Inventory, Actions.View)]
     public async Task<IActionResult> SkuMovements(Guid id, [FromQuery] string? reason, [FromQuery] int page = 1, [FromQuery] int pageSize = 30, CancellationToken ct = default)
         => Ok(await _svc.ListMovementsAsync(id, reason, page, pageSize, ct));
+
+    [HttpGet("movements/export")]
+    [HasPermission(Modules.Inventory, Actions.View)]
+    public async Task<IActionResult> ExportMovements([FromQuery] DateOnly? from, [FromQuery] DateOnly? to, CancellationToken ct = default)
+    {
+        var (f, t) = DateRangeGuard.Resolve(from, to);
+        return Ok(await _svc.ExportMovementsAsync(f, t, ct));
+    }
 
     [HttpGet("skus/{id:guid}/batches")]
     [HasPermission(Modules.Inventory, Actions.View)]

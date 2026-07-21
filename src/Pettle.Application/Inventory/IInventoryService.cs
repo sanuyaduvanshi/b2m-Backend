@@ -36,5 +36,8 @@ public interface IInventoryService
 
     Task<bool> CreateStockAdjustmentAsync(CreateStockAdjustmentRequest req, CancellationToken ct = default);
     Task<PagedResult<StockMovementDto>> ListMovementsAsync(Guid skuId, string? reason, int page, int pageSize, CancellationToken ct = default);
+    /// <summary>Every stock movement across all SKUs within the date range, oldest first (the
+    /// same FIFO order stock is actually deducted in) — backs the SKU tab's report download.</summary>
+    Task<IReadOnlyList<StockMovementDto>> ExportMovementsAsync(DateOnly from, DateOnly to, CancellationToken ct = default);
     Task<IReadOnlyList<SkuBatchDto>> ListBatchesAsync(Guid skuId, CancellationToken ct = default);
 }
