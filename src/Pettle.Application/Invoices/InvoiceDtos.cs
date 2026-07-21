@@ -69,7 +69,8 @@ public record InvoiceDetail(
     IReadOnlyList<InvoiceLineDto> Lines,
     IReadOnlyList<PaymentDto> Payments,
     string? Notes = null,
-    string? AdditionalChargesReason = null
+    string? AdditionalChargesReason = null,
+    Guid? BookingId = null
 );
 
 public record InvoiceListQuery(

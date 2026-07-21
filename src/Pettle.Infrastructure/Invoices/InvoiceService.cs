@@ -72,7 +72,8 @@ public class InvoiceService : IInvoiceService
             i.Lines.Select(l => new InvoiceLineDto(l.Id, l.BillItemName, l.Category, l.Description, l.Quantity, l.UnitAmount, l.Discount, l.Subtotal, l.Total, l.BatchNumber)).ToList(),
             i.Payments.OrderByDescending(p => p.PaymentTime).Select(p => new PaymentDto(p.Id, p.PaymentTime, p.Amount, p.Mode, p.Source, p.TransactionId, p.Type, p.Status, p.Notes)).ToList(),
             i.Notes,
-            i.AdditionalChargesReason
+            i.AdditionalChargesReason,
+            i.BookingId
         );
     }
 
