@@ -12,6 +12,24 @@ public class CreateOrUpdatePackageValidator : AbstractValidator<CreateOrUpdatePa
         RuleFor(x => x.ValidityDays).InclusiveBetween(1, 3650).WithMessage("Validity must be between 1 and 3650 days.");
         RuleFor(x => x.Price).NonNegativeAmount();
         RuleFor(x => x.TaxPercent).ValidTaxPercent();
+        RuleForEach(x => x.Services).SetValidator(new PackageServiceItemValidator()).When(x => x.Services is not null);
+    }
+}
+
+// Nothing previously stopped a package's per-item Coverage from being negative, or over 100%
+// in Percentage mode - either of which would silently corrupt how much a booking's subscription
+// auto-debit deducts (see BookingService.CreateAsync's SUB-4/5 block).
+public class PackageServiceItemValidator : AbstractValidator<PackageServiceItem>
+{
+    public PackageServiceItemValidator()
+    {
+        RuleFor(x => x.ServiceName).NotEmpty().WithMessage("Service name is required.").MaximumLength(200);
+        RuleFor(x => x.Discount).GreaterThanOrEqualTo(0).WithMessage("Coverage cannot be negative.");
+        RuleFor(x => x.Discount).LessThanOrEqualTo(100)
+            .When(x => !string.Equals(x.DiscountType, "FlatAmount", StringComparison.OrdinalIgnoreCase))
+            .WithMessage("Coverage percent cannot exceed 100.");
+        RuleFor(x => x.DaysOrSessions).GreaterThan(0).When(x => x.DaysOrSessions.HasValue)
+            .WithMessage("Quantity/sessions must be greater than zero.");
     }
 }
 
