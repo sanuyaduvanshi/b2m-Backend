@@ -145,4 +145,26 @@ public class InvoiceCalculationTests
     {
         Assert.Equal(expected, DeriveStatus(revenue, paid));
     }
+
+    // ── Payment tolerance ──────────────────────────────────────────────────────
+    // Mirrors the "paid > invoice.Revenue + 1.01m" guard in CreateSaleAsync/UpdateAsync.
+    // The POS screen recomputes this same whole-rupee total independently in JS; a raw total a
+    // fraction of a paisa from a .50 boundary can round to the adjacent rupee on one side and not
+    // the other, so a genuine ±1 rupee gap between what the screen offered and what the server
+    // computed must be accepted - only a real overpayment should still be rejected.
+
+    private static bool PaymentExceedsTotal(decimal paid, decimal revenue) => paid > revenue + 1.01m;
+
+    [Theory]
+    [InlineData(864, 865, false)]     // customer paid the ₹1-over amount the screen offered - must succeed
+    [InlineData(865, 864, false)]     // divergence can go either direction
+    [InlineData(100, 100, false)]     // exact match always fine
+    [InlineData(100, 100.5, false)]   // sub-rupee rounding noise
+    [InlineData(100, 101.01, false)]  // right at the edge of tolerance
+    [InlineData(100, 101.02, true)]   // just past tolerance - still rejected
+    [InlineData(100, 150, true)]      // genuine overpayment - must still be rejected
+    public void PaymentExceedsTotal_ToleratesOneRupeeRoundingGap(decimal revenue, decimal paid, bool expectRejected)
+    {
+        Assert.Equal(expectRejected, PaymentExceedsTotal(paid, revenue));
+    }
 }
