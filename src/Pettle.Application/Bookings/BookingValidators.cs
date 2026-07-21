@@ -21,6 +21,30 @@ public class CreateBookingValidator : AbstractValidator<CreateBookingRequest>
         RuleFor(x => x.Services).NotEmpty().WithMessage("At least one service is required.")
             .Must(s => s.Count <= 20).WithMessage("Maximum 20 services per booking.");
         RuleForEach(x => x.Services).SetValidator(new CreateBookingServiceLineValidator());
+        RuleForEach(x => x.AddOns).SetValidator(new CreateBookingAddOnLineValidator()).When(x => x.AddOns is not null);
+        RuleForEach(x => x.InventoryItems).SetValidator(new CreateBookingInventoryItemLineValidator()).When(x => x.InventoryItems is not null);
+    }
+}
+
+public class CreateBookingAddOnLineValidator : AbstractValidator<CreateBookingAddOnLine>
+{
+    public CreateBookingAddOnLineValidator()
+    {
+        RuleFor(x => x.Name).NotEmpty().WithMessage("Add-on name required.").MaximumLength(200);
+        RuleFor(x => x.Price).NonNegativeAmount();
+        RuleFor(x => x.Count).GreaterThan(0).WithMessage("Quantity must be at least 1.");
+        RuleFor(x => x.Discount).GreaterThanOrEqualTo(0).WithMessage("Discount can't be negative.");
+    }
+}
+
+public class CreateBookingInventoryItemLineValidator : AbstractValidator<CreateBookingInventoryItemLine>
+{
+    public CreateBookingInventoryItemLineValidator()
+    {
+        RuleFor(x => x.SkuId).NotEqual(Guid.Empty).WithMessage("Item is required.");
+        RuleFor(x => x.SkuName).NotEmpty().MaximumLength(200);
+        RuleFor(x => x.Quantity).GreaterThan(0).WithMessage("Quantity must be at least 1.");
+        RuleFor(x => x.FinalAmount).NonNegativeAmount();
     }
 }
 

@@ -56,6 +56,7 @@ public class PettleDbContext : IdentityDbContext<ApplicationUser, ApplicationRol
     public DbSet<VetDetail> VetDetails => Set<VetDetail>();
     public DbSet<DayCareDetail> DayCareDetails => Set<DayCareDetail>();
     public DbSet<BookingAddOn> BookingAddOns => Set<BookingAddOn>();
+    public DbSet<BookingInventoryItem> BookingInventoryItems => Set<BookingInventoryItem>();
     public DbSet<BookingServiceAddOn> BookingServiceAddOns => Set<BookingServiceAddOn>();
     public DbSet<BookingEstimateLine> BookingEstimateLines => Set<BookingEstimateLine>();
     public DbSet<BookingChangeRequest> BookingChangeRequests => Set<BookingChangeRequest>();
@@ -178,6 +179,7 @@ public class PettleDbContext : IdentityDbContext<ApplicationUser, ApplicationRol
             b.HasOne(x => x.PetParent).WithMany().HasForeignKey(x => x.PetParentId).OnDelete(DeleteBehavior.Restrict);
             b.HasMany(x => x.Services).WithOne(x => x.Booking!).HasForeignKey(x => x.BookingId).OnDelete(DeleteBehavior.Cascade);
             b.HasMany(x => x.AddOns).WithOne(x => x.Booking!).HasForeignKey(x => x.BookingId).OnDelete(DeleteBehavior.Cascade);
+            b.HasMany(x => x.InventoryItems).WithOne(x => x.Booking!).HasForeignKey(x => x.BookingId).OnDelete(DeleteBehavior.Cascade);
             b.HasQueryFilter(x => !x.IsDeleted);
             b.Property(x => x.TotalBillingAmount).HasPrecision(12, 2);
         });
@@ -207,6 +209,7 @@ public class PettleDbContext : IdentityDbContext<ApplicationUser, ApplicationRol
         builder.Entity<VetDetail>(b => b.HasOne(x => x.BookingService).WithMany().HasForeignKey(x => x.BookingServiceId).OnDelete(DeleteBehavior.Cascade));
         builder.Entity<DayCareDetail>(b => b.HasOne(x => x.BookingService).WithMany().HasForeignKey(x => x.BookingServiceId).OnDelete(DeleteBehavior.Cascade));
         builder.Entity<BookingAddOn>(b => b.Property(x => x.FinalAmount).HasPrecision(12, 2));
+        builder.Entity<BookingInventoryItem>(b => b.Property(x => x.FinalAmount).HasPrecision(12, 2));
 
         builder.Entity<BookingRequest>(b =>
         {

@@ -14,7 +14,8 @@ public record BookingListItem(
     decimal TotalBillingAmount,
     string? InvoiceNumber,
     BookingSource Source,
-    BookingStatus? AggregateStatus
+    BookingStatus? AggregateStatus,
+    Guid? InvoiceId = null
 );
 
 public record BookingDetail(
@@ -38,6 +39,7 @@ public record BookingDetail(
     string? AdditionalInstruction,
     IReadOnlyList<BookingServiceLine> Services,
     IReadOnlyList<BookingAddOnLine> AddOns,
+    IReadOnlyList<BookingInventoryItemLine> InventoryItems,
     IReadOnlyList<BookingEstimateLineDto> Estimate,
     IReadOnlyList<BookingChangeRequestDto> ChangeRequests
 );
@@ -51,6 +53,17 @@ public record CreateChangeRequestRequest(string Description);
 public record ResolveChangeRequestRequest(ChangeRequestStatus Status, string? ResolutionNote);
 
 public record ServiceAddOnLine(Guid Id, string Name, decimal Price, Guid? CatalogueItemId);
+
+/// <summary>A read-side row for a booking-level (not tied to any one service) inventory item sale.</summary>
+public record BookingInventoryItemLine(Guid Id, Guid SkuId, string SkuName, int Quantity, decimal FinalAmount);
+
+/// <summary>Create-side: a SKU sold as part of the booking, independent of which service it's for.</summary>
+public record CreateBookingInventoryItemLine(Guid SkuId, string SkuName, int Quantity, decimal FinalAmount);
+
+/// <summary>Create-side: a booking-level add-on, independent of which service it's for. Count is a
+/// user-editable quantity (e.g. picking the same catalogue add-on twice increments this instead of
+/// adding a duplicate row); Discount is a flat ₹ amount taken off Price*Count before billing.</summary>
+public record CreateBookingAddOnLine(string Name, decimal Price, int Count = 1, decimal Discount = 0, Guid? CatalogueItemId = null);
 
 public record BookingServiceLine(
     Guid Id,
@@ -100,7 +113,9 @@ public record CreateBookingRequest(
     List<CreateBookingServiceLine> Services,
     string? GuestName = null,
     string? GuestPhone = null,
-    Guid? UseSubscriptionId = null
+    Guid? UseSubscriptionId = null,
+    List<CreateBookingAddOnLine>? AddOns = null,
+    List<CreateBookingInventoryItemLine>? InventoryItems = null
 );
 
 public record CreateServiceAddOn(string Name, decimal Price, Guid? CatalogueItemId = null);

@@ -31,6 +31,7 @@ public class Booking : SoftDeletableTenantEntity
     public ICollection<VetDetail> VetDetails { get; set; } = new List<VetDetail>();
     public ICollection<DayCareDetail> DayCareDetails { get; set; } = new List<DayCareDetail>();
     public ICollection<BookingAddOn> AddOns { get; set; } = new List<BookingAddOn>();
+    public ICollection<BookingInventoryItem> InventoryItems { get; set; } = new List<BookingInventoryItem>();
     public ICollection<BookingEstimateLine> EstimateLines { get; set; } = new List<BookingEstimateLine>();
     public ICollection<BookingChangeRequest> ChangeRequests { get; set; } = new List<BookingChangeRequest>();
 }
@@ -173,6 +174,19 @@ public class BookingAddOn : TenantEntity
     public int Count { get; set; }
     public decimal? Distance { get; set; }
     public int? Days { get; set; }
+    public decimal FinalAmount { get; set; }
+}
+
+/// <summary>A SKU sold as part of a booking, independent of any one service line — e.g. a shampoo
+/// sold alongside a mixed Boarding+Grooming visit. Deducts stock the same way a per-service SKU
+/// sale does, just without being tied to which service line "used" it.</summary>
+public class BookingInventoryItem : TenantEntity
+{
+    public Guid BookingId { get; set; }
+    public Booking? Booking { get; set; }
+    public Guid SkuId { get; set; }
+    public string SkuNameSnapshot { get; set; } = string.Empty;
+    public int Quantity { get; set; } = 1;
     public decimal FinalAmount { get; set; }
 }
 

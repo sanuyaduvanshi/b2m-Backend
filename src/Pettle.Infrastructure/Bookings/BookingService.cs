@@ -82,7 +82,9 @@ public class BookingServiceImpl : IBookingService
                         s.Status == BookingStatus.Cancelled ? 6 :
                         s.Status == BookingStatus.Rejected ? 7 : 8)
                       .Select(s => (BookingStatus?)s.Status).FirstOrDefault()
-                    : null
+                    : null,
+                _db.Invoices.Where(i => i.BookingId == b.Id && i.TenantId == _user.TenantId)
+                    .Select(i => (Guid?)i.Id).FirstOrDefault()
             )).ToListAsync(ct);
 
         return new PagedResult<BookingListItem>(items, total, page, size);
@@ -100,6 +102,7 @@ public class BookingServiceImpl : IBookingService
             .Include(x => x.VetDetails)
             .Include(x => x.DayCareDetails)
             .Include(x => x.AddOns)
+            .Include(x => x.InventoryItems)
             .Include(x => x.EstimateLines)
             .Include(x => x.ChangeRequests)
             .FirstOrDefaultAsync(x => x.Id == id && x.TenantId == _user.TenantId, ct);
@@ -137,6 +140,7 @@ public class BookingServiceImpl : IBookingService
                 s.AddOns.Select(a => new ServiceAddOnLine(a.Id, a.Name, a.Price, a.CatalogueItemId)).ToList()
             )).ToList(),
             b.AddOns.Select(a => new BookingAddOnLine(a.Id, a.AddOnService, a.Count, a.Distance, a.Days, a.FinalAmount)).ToList(),
+            b.InventoryItems.Select(i => new BookingInventoryItemLine(i.Id, i.SkuId, i.SkuNameSnapshot, i.Quantity, i.FinalAmount)).ToList(),
             b.EstimateLines.OrderBy(e => e.SortOrder).Select(e => new BookingEstimateLineDto(e.Id, e.Label, e.Quantity, e.UnitAmount, e.Amount, e.SortOrder)).ToList(),
             b.ChangeRequests.OrderByDescending(c => c.RequestedAt).Select(c => new BookingChangeRequestDto(c.Id, c.Description, c.Status, c.RequestedAt, c.RequestedBy, c.ResolutionNote, c.ResolvedAt)).ToList()
         );
@@ -262,6 +266,12 @@ public class BookingServiceImpl : IBookingService
 
         var invNum = await NextBookingInvoiceNumberAsync(ct);
 
+        // Booking-level add-ons/inventory items aren't tied to any one service line, so their
+        // totals are computed separately and added on top of the per-service sum below.
+        var addOnsAmount = req.AddOns?.Sum(a => Math.Max(0, a.Price * Math.Max(1, a.Count) - a.Discount)) ?? 0m;
+        var inventoryAmount = req.InventoryItems?.Sum(i => i.FinalAmount) ?? 0m;
+        var servicesAmount = req.Services.Sum(s => s.FinalAmount + (s.AddOns?.Sum(a => a.Price) ?? 0m));
+
         var b = new Booking
         {
             PetParentId = req.PetParentId,
@@ -271,10 +281,26 @@ public class BookingServiceImpl : IBookingService
             Source = req.Source,
             Notes = req.Notes,
             AdditionalInstruction = req.AdditionalInstruction,
-            TotalBillingAmount = req.Services.Sum(s => s.FinalAmount + (s.AddOns?.Sum(a => a.Price) ?? 0m)),
-            GrossBillingAmount = req.Services.Sum(s => s.FinalAmount + (s.AddOns?.Sum(a => a.Price) ?? 0m)),
+            TotalBillingAmount = servicesAmount + addOnsAmount + inventoryAmount,
+            GrossBillingAmount = servicesAmount + addOnsAmount + inventoryAmount,
             InvoiceNumber = invNum,
         };
+
+        foreach (var ao in req.AddOns ?? [])
+        {
+            var qty = Math.Max(1, ao.Count);
+            b.AddOns.Add(new BookingAddOn { AddOnService = ao.Name, Count = qty, FinalAmount = Math.Max(0, ao.Price * qty - ao.Discount) });
+        }
+        foreach (var inv in req.InventoryItems ?? [])
+        {
+            b.InventoryItems.Add(new BookingInventoryItem
+            {
+                SkuId = inv.SkuId,
+                SkuNameSnapshot = inv.SkuName,
+                Quantity = Math.Max(1, inv.Quantity),
+                FinalAmount = inv.FinalAmount,
+            });
+        }
         foreach (var line in req.Services)
         {
             var svc = new BookingService
@@ -347,6 +373,33 @@ public class BookingServiceImpl : IBookingService
                     Subtotal = ao.Price,
                     Total = ao.Price,
                 });
+        }
+        foreach (var ao in req.AddOns ?? [])
+        {
+            var qty = Math.Max(1, ao.Count);
+            var net = Math.Max(0, ao.Price * qty - ao.Discount);
+            invoice.Lines.Add(new InvoiceLineItem
+            {
+                BillItemName = ao.Name,
+                BillSection = "Add-on",
+                Quantity = qty,
+                UnitAmount = ao.Price,
+                Subtotal = ao.Price * qty,
+                Total = net,
+            });
+        }
+        foreach (var inv in req.InventoryItems ?? [])
+        {
+            var qty = Math.Max(1, inv.Quantity);
+            invoice.Lines.Add(new InvoiceLineItem
+            {
+                BillItemName = inv.SkuName,
+                BillSection = "Inventory",
+                Quantity = qty,
+                UnitAmount = Math.Round(inv.FinalAmount / qty, 2, MidpointRounding.AwayFromZero),
+                Subtotal = inv.FinalAmount,
+                Total = inv.FinalAmount,
+            });
         }
 
         _db.Bookings.Add(b);
@@ -425,10 +478,13 @@ public class BookingServiceImpl : IBookingService
             _ => BookingPaymentStatus.Pending,
         };
 
-        // Deduct inventory for service lines that have an associated SKU
+        // Deduct inventory for service lines that have an associated SKU, plus any independent
+        // booking-level inventory items — fetched together so a SKU appearing in both places
+        // (unlikely but possible) is checked/deducted cumulatively against the same tracked entity.
         var skuIds = req.Services
             .Where(l => l.SkuId.HasValue)
             .Select(l => l.SkuId!.Value)
+            .Concat((req.InventoryItems ?? []).Select(i => i.SkuId))
             .Distinct()
             .ToList();
         if (skuIds.Count > 0)
@@ -459,6 +515,29 @@ public class BookingServiceImpl : IBookingService
                     QuantityChange = -qty,
                     StockAfter = sku.StockOnHand,
                     Note = $"Booking service: {line.ServiceName}",
+                });
+            }
+
+            foreach (var inv in req.InventoryItems ?? [])
+            {
+                var sku = skus.FirstOrDefault(s => s.Id == inv.SkuId);
+                if (sku is null) continue;
+                var qty = Math.Max(1, inv.Quantity);
+
+                if (sku.StockOnHand < qty)
+                    throw AppException.Conflict($"Not enough stock for '{sku.Name}' — {sku.StockOnHand} on hand, {qty} requested.");
+
+                await FifoBatchDeductor.DeductAsync(_db, sku.Id, _user.TenantId!.Value, qty, ct);
+
+                sku.StockOnHand = Math.Max(0, sku.StockOnHand - qty);
+                _db.Set<StockMovement>().Add(new StockMovement
+                {
+                    SkuId = sku.Id,
+                    TenantId = _user.TenantId!.Value,
+                    Reason = StockMovementReason.Sale,
+                    QuantityChange = -qty,
+                    StockAfter = sku.StockOnHand,
+                    Note = $"Booking inventory item: {inv.SkuName}",
                 });
             }
         }
