@@ -215,7 +215,16 @@ public class InvoiceService : IInvoiceService
             });
             paid += p.Amount;
         }
-        if (paid > invoice.Revenue + 0.01m)
+        // The POS screen independently recomputes this same whole-rupee total in JS (double
+        // precision) from the raw line items so it can show it live before checkout; this
+        // recomputes it again in C# decimal. The two are mathematically the same formula, but a
+        // rawTotal that lands within a fraction of a paisa of a .50 boundary can round to the
+        // *adjacent* rupee on one side and not the other (e.g. JS rounds 864.500001 up to 865
+        // while decimal math here lands on 864.499999 and rounds down to 864) - a real customer
+        // hit exactly this paying the "₹865" the screen offered against a server total of ₹864.
+        // A whole-rupee tolerance absorbs that single-boundary divergence without opening the
+        // door to any real underpayment (POS totals are already rounded to the nearest rupee).
+        if (paid > invoice.Revenue + 1.01m)
             throw AppException.Validation("Payment exceeds total",
                 new Dictionary<string, string[]> { ["payments"] = new[] { $"Payments ₹{paid:F2} exceed the bill total ₹{invoice.Revenue:F2}." } });
 
