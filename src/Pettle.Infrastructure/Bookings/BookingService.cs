@@ -424,7 +424,10 @@ public class BookingServiceImpl : IBookingService
                 .FirstOrDefaultAsync(s => s.Id == req.UseSubscriptionId.Value
                     && s.TenantId == _user.TenantId && s.PetParentId == req.PetParentId.Value
                     && s.Status == IssuedSubscriptionStatus.Active, ct);
-            if (sub?.Package != null)
+            // A subscription with no sessions left is exhausted regardless of Status/ValidUntil —
+            // without this the client's own request body deciding whether to auto-debit meant an
+            // already-used-up plan kept covering bookings for free indefinitely.
+            if (sub?.Package != null && sub.RemainingSessions > 0)
             {
                 decimal coveredAmount = 0;
                 foreach (var line in req.Services)

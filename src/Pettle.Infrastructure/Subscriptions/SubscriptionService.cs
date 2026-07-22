@@ -278,7 +278,8 @@ public class SubscriptionService : ISubscriptionService
         var sub = await _db.IssuedSubscriptions.AsNoTracking()
             .Include(s => s.Package)
             .Where(s => s.TenantId == _user.TenantId && s.PetParentId == petParentId
-                && s.Status == IssuedSubscriptionStatus.Active && s.ValidUntil >= today)
+                && s.Status == IssuedSubscriptionStatus.Active && s.ValidUntil >= today
+                && s.RemainingSessions > 0)
             .OrderByDescending(s => s.IssuedOn)
             .FirstOrDefaultAsync(ct);
         if (sub is null) return null;
