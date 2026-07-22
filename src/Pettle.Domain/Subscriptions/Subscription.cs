@@ -28,12 +28,20 @@ public class SubscriptionPackageService : TenantEntity
     public string? SkuCategory { get; set; }
     public string? SkuSubCategory { get; set; }
     public Guid? SkuId { get; set; }
+    // Which catalogue this row was picked from and, therefore, which booking lines it's matched
+    // against at deduction time (see BookingService.CreateAsync's SUB-4/5 block): Service rows
+    // match booking Services by name, Sku rows match booking InventoryItems by SkuId, AddOn rows
+    // match booking AddOns by catalogue id. Existing rows default to Service (0) so pre-migration
+    // packages keep matching exactly as they did before this split.
+    public PackageItemKind ItemKind { get; set; } = PackageItemKind.Service;
+    public Guid? AddOnCatalogueId { get; set; }
 }
 
 public enum DiscountType { Percentage = 0, FlatAmount = 1 }
 // Boarding = 0 so existing packages (created before this field existed) default to Boarding —
 // the most reasonable fallback for legacy data, and matches SubscriptionPackage.Type's own default.
 public enum SubscriptionPackageType { Boarding = 0, Vet = 1, Grooming = 2 }
+public enum PackageItemKind { Service = 0, Sku = 1, AddOn = 2 }
 
 public class IssuedSubscription : SoftDeletableTenantEntity
 {

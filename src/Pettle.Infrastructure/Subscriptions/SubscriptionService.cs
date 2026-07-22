@@ -85,6 +85,8 @@ public class SubscriptionService : ISubscriptionService
         SkuCategory = s.SkuCategory,
         SkuSubCategory = s.SkuSubCategory,
         SkuId = s.SkuId,
+        ItemKind = Enum.TryParse<PackageItemKind>(s.ItemKind, true, out var ik) ? ik : PackageItemKind.Service,
+        AddOnCatalogueId = s.AddOnCatalogueId,
     };
 
     private async Task<PackageListItem> ToListItemWithSkuNamesAsync(SubscriptionPackage p, CancellationToken ct)
@@ -100,7 +102,8 @@ public class SubscriptionService : ISubscriptionService
         p.Id, p.Name, p.ValidityDays, p.Price, p.TaxPercent, p.IsTaxInclusive, p.IsActive,
         p.Services.Select(s => new PackageServiceItem(s.ServiceName, s.Discount, s.DiscountType.ToString(),
             s.DaysOrSessions, s.BoardingType, s.SkuCategory, s.SkuSubCategory, s.SkuId,
-            s.SkuId.HasValue && skuNames.TryGetValue(s.SkuId.Value, out var n) ? n : null)).ToList(),
+            s.SkuId.HasValue && skuNames.TryGetValue(s.SkuId.Value, out var n) ? n : null,
+            s.ItemKind.ToString(), s.AddOnCatalogueId)).ToList(),
         p.Type.ToString());
 
     public async Task<bool> DeletePackageAsync(Guid id, CancellationToken ct = default)

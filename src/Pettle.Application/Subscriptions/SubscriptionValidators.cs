@@ -30,6 +30,9 @@ public class PackageServiceItemValidator : AbstractValidator<PackageServiceItem>
             .WithMessage("Coverage percent cannot exceed 100.");
         RuleFor(x => x.DaysOrSessions).GreaterThan(0).When(x => x.DaysOrSessions.HasValue)
             .WithMessage("Quantity/sessions must be greater than zero.");
+        RuleFor(x => x.SkuId).NotNull()
+            .When(x => string.Equals(x.ItemKind, "Sku", StringComparison.OrdinalIgnoreCase))
+            .WithMessage("Pick a SKU for this item.");
     }
 }
 

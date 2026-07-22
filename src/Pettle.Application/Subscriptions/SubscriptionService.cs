@@ -20,7 +20,7 @@ public record IssuedSubscriptionDetail(
 public record PackageServiceItem(
     string ServiceName, decimal Discount, string DiscountType,
     int? DaysOrSessions, string? BoardingType, string? SkuCategory, string? SkuSubCategory, Guid? SkuId,
-    string? SkuName = null);
+    string? SkuName = null, string ItemKind = "Service", Guid? AddOnCatalogueId = null);
 
 public record PackageListItem(
     Guid Id, string Name, int ValidityDays, decimal Price, decimal TaxPercent, bool IsTaxInclusive, bool IsActive,

@@ -406,17 +406,18 @@ public class BookingServiceImpl : IBookingService
         _db.Invoices.Add(invoice);
 
         // SUB-4/5: Auto-debit from subscription if client has an active subscription — but only
-        // for the portion of this booking the package actually covers. Each booked service line
-        // is matched against the package's included items, preferring an exact ServiceName match;
-        // when nothing matches by name (most packages have one broad "Boarding"/"Grooming" style
-        // entry rather than one row per exact catalogue service name), fall back to the package's
-        // first item as long as the package's own Type matches the line's ServiceType — e.g. a
-        // "Boarding" package covers any Boarding-vertical service line, not just one named exactly
-        // "Boarding". A matched item's Discount/DiscountType determines how much of that line is
-        // covered (100% Percentage = fully free, 50% = half covered, FlatAmount = up to that ₹
-        // amount). Anything still unmatched (a new/extra service outside the package's vertical) is
+        // for the portion of this booking the package actually covers. Package items now come in
+        // three kinds, each matched against a different part of the booking: Service items match
+        // booked service lines by ServiceName (falling back to the package's first Service item
+        // when nothing matches by name and the package's Type matches the line's ServiceType — most
+        // packages have one broad "Boarding"/"Grooming" style entry rather than one row per exact
+        // catalogue name); Sku items match the booking's independent inventory lines by SkuId, with
+        // DaysOrSessions capping how many units are covered per line; AddOn items match the
+        // booking's add-on lines, preferring the catalogue id and falling back to name. A matched
+        // item's Discount/DiscountType determines how much of that line is covered (100% Percentage
+        // = fully free, 50% = half covered, FlatAmount = up to that ₹ amount). Anything unmatched is
         // left as Due on the invoice for separate payment — the whole point being a subscription
-        // should never silently make out-of-plan services free.
+        // should never silently make out-of-plan items free.
         if (req.UseSubscriptionId.HasValue && req.PetParentId.HasValue)
         {
             var sub = await _db.IssuedSubscriptions
@@ -429,18 +430,47 @@ public class BookingServiceImpl : IBookingService
             // already-used-up plan kept covering bookings for free indefinitely.
             if (sub?.Package != null && sub.RemainingSessions > 0)
             {
+                var serviceItems = sub.Package.Services.Where(s => s.ItemKind == PackageItemKind.Service).ToList();
+                var skuItems = sub.Package.Services.Where(s => s.ItemKind == PackageItemKind.Sku).ToList();
+                var addOnItems = sub.Package.Services.Where(s => s.ItemKind == PackageItemKind.AddOn).ToList();
+
                 decimal coveredAmount = 0;
                 foreach (var line in req.Services)
                 {
-                    var match = sub.Package.Services
+                    var match = serviceItems
                         .FirstOrDefault(s => string.Equals(s.ServiceName, line.ServiceName, StringComparison.OrdinalIgnoreCase));
                     if (match is null && string.Equals(sub.Package.Type.ToString(), line.ServiceType.ToString(), StringComparison.OrdinalIgnoreCase))
-                        match = sub.Package.Services.FirstOrDefault();
+                        match = serviceItems.FirstOrDefault();
                     if (match is null) continue;
                     var portion = match.DiscountType == DiscountType.Percentage
                         ? line.FinalAmount * (match.Discount / 100m)
                         : Math.Min(match.Discount, line.FinalAmount);
                     coveredAmount += Math.Clamp(portion, 0, line.FinalAmount);
+                }
+                foreach (var line in req.InventoryItems ?? new List<CreateBookingInventoryItemLine>())
+                {
+                    var match = skuItems.FirstOrDefault(s => s.SkuId == line.SkuId);
+                    if (match is null) continue;
+                    var unitPrice = line.Quantity > 0 ? line.FinalAmount / line.Quantity : line.FinalAmount;
+                    var coveredUnits = match.DaysOrSessions.HasValue ? Math.Min(line.Quantity, match.DaysOrSessions.Value) : line.Quantity;
+                    var coveredBase = unitPrice * coveredUnits;
+                    var portion = match.DiscountType == DiscountType.Percentage
+                        ? coveredBase * (match.Discount / 100m)
+                        : Math.Min(match.Discount, coveredBase);
+                    coveredAmount += Math.Clamp(portion, 0, line.FinalAmount);
+                }
+                foreach (var line in req.AddOns ?? new List<CreateBookingAddOnLine>())
+                {
+                    var match = (line.CatalogueItemId.HasValue
+                            ? addOnItems.FirstOrDefault(a => a.AddOnCatalogueId == line.CatalogueItemId.Value)
+                            : null)
+                        ?? addOnItems.FirstOrDefault(a => string.Equals(a.ServiceName, line.Name, StringComparison.OrdinalIgnoreCase));
+                    if (match is null) continue;
+                    var lineTotal = Math.Max(0, line.Price * line.Count - line.Discount);
+                    var portion = match.DiscountType == DiscountType.Percentage
+                        ? lineTotal * (match.Discount / 100m)
+                        : Math.Min(match.Discount, lineTotal);
+                    coveredAmount += Math.Clamp(portion, 0, lineTotal);
                 }
                 coveredAmount = Math.Round(Math.Min(coveredAmount, invoice.Revenue), 2, MidpointRounding.AwayFromZero);
 
