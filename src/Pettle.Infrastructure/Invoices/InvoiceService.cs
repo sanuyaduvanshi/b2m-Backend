@@ -63,6 +63,14 @@ public class InvoiceService : IInvoiceService
             .FirstOrDefaultAsync(x => x.Id == id && x.TenantId == _user.TenantId, ct);
         if (i is null) return null;
 
+        // Which subscription (if any) paid for which payment row — resolved as one small
+        // follow-up query rather than per-row, since a payment only carries the subscription's id.
+        var subIds = i.Payments.Where(p => p.IssuedSubscriptionId.HasValue).Select(p => p.IssuedSubscriptionId!.Value).Distinct().ToList();
+        var subNames = subIds.Count == 0 ? new Dictionary<Guid, string>() : await _db.IssuedSubscriptions.AsNoTracking()
+            .Where(s => subIds.Contains(s.Id))
+            .Select(s => new { s.Id, PackageName = s.Package!.Name })
+            .ToDictionaryAsync(s => s.Id, s => s.PackageName, ct);
+
         return new InvoiceDetail(
             i.Id, i.InvoiceNumber, i.InvoiceType, i.InvoiceDate, i.PetParentId,
             i.ParentNameSnapshot, i.PhoneSnapshot, i.PetNameSnapshot,
@@ -70,10 +78,12 @@ public class InvoiceService : IInvoiceService
             i.IgstAmount, i.CgstAmount, i.SgstAmount,
             i.Revenue, i.Paid, i.Due, i.PaymentStatus,
             i.Lines.Select(l => new InvoiceLineDto(l.Id, l.BillItemName, l.Category, l.Description, l.Quantity, l.UnitAmount, l.Discount, l.Subtotal, l.Total, l.BatchNumber)).ToList(),
-            i.Payments.OrderByDescending(p => p.PaymentTime).Select(p => new PaymentDto(p.Id, p.PaymentTime, p.Amount, p.Mode, p.Source, p.TransactionId, p.Type, p.Status, p.Notes)).ToList(),
+            i.Payments.OrderByDescending(p => p.PaymentTime).Select(p => new PaymentDto(p.Id, p.PaymentTime, p.Amount, p.Mode, p.Source, p.TransactionId, p.Type, p.Status, p.Notes,
+                p.IssuedSubscriptionId.HasValue && subNames.TryGetValue(p.IssuedSubscriptionId.Value, out var pn) ? pn : null)).ToList(),
             i.Notes,
             i.AdditionalChargesReason,
-            i.BookingId
+            i.BookingId,
+            subIds.Count > 0 ? subNames.Values.FirstOrDefault() : null
         );
     }
 

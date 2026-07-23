@@ -43,7 +43,9 @@ public record PaymentDto(
     string? TransactionId,
     PaymentType Type = PaymentType.Balance,
     PaymentRecordStatus Status = PaymentRecordStatus.Success,
-    string? Notes = null
+    string? Notes = null,
+    // Which subscription package auto-paid this specific payment row, if any.
+    string? SubscriptionPackageName = null
 );
 
 public record InvoiceDetail(
@@ -70,7 +72,9 @@ public record InvoiceDetail(
     IReadOnlyList<PaymentDto> Payments,
     string? Notes = null,
     string? AdditionalChargesReason = null,
-    Guid? BookingId = null
+    Guid? BookingId = null,
+    // Set when any payment on this invoice was auto-debited from a subscription.
+    string? SubscriptionPackageName = null
 );
 
 public record InvoiceListQuery(

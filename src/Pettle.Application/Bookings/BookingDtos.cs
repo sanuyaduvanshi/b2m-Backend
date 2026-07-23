@@ -15,7 +15,10 @@ public record BookingListItem(
     string? InvoiceNumber,
     BookingSource Source,
     BookingStatus? AggregateStatus,
-    Guid? InvoiceId = null
+    Guid? InvoiceId = null,
+    // Set when any payment on this booking's invoice was auto-debited from a subscription —
+    // lets the list show a "Subscription" badge without a per-row detail fetch.
+    string? SubscriptionPackageName = null
 );
 
 public record BookingDetail(
@@ -41,7 +44,9 @@ public record BookingDetail(
     IReadOnlyList<BookingAddOnLine> AddOns,
     IReadOnlyList<BookingInventoryItemLine> InventoryItems,
     IReadOnlyList<BookingEstimateLineDto> Estimate,
-    IReadOnlyList<BookingChangeRequestDto> ChangeRequests
+    IReadOnlyList<BookingChangeRequestDto> ChangeRequests,
+    // Set when any payment on this booking's invoice was auto-debited from a subscription.
+    string? SubscriptionPackageName = null
 );
 
 public record BookingEstimateLineDto(Guid Id, string Label, decimal Quantity, decimal UnitAmount, decimal Amount, int SortOrder);

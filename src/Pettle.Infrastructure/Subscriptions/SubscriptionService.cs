@@ -222,7 +222,7 @@ public class SubscriptionService : ISubscriptionService
         var payments = await _db.Payments.AsNoTracking()
             .Where(p => p.IssuedSubscriptionId == id && p.TenantId == _user.TenantId)
             .OrderByDescending(p => p.PaymentTime)
-            .Select(p => new PaymentDto(p.Id, p.PaymentTime, p.Amount, p.Mode, p.Source, p.TransactionId, p.Type, p.Status, p.Notes))
+            .Select(p => new PaymentDto(p.Id, p.PaymentTime, p.Amount, p.Mode, p.Source, p.TransactionId, p.Type, p.Status, p.Notes, null))
             .ToListAsync(ct);
         return new IssuedSubscriptionDetail(s.Id, s.Package!.Name, s.PetParentId, s.PetParent!.Name, s.PetParent.Phone,
             s.IssuedOn, s.ValidUntil, s.RemainingSessions, s.TotalSessions, s.Status, s.PaymentStatus, s.AmountPaid, s.AmountDue, payments, s.BalanceUsed);

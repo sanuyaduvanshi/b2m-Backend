@@ -84,8 +84,35 @@ public class BookingServiceImpl : IBookingService
                       .Select(s => (BookingStatus?)s.Status).FirstOrDefault()
                     : null,
                 _db.Invoices.Where(i => i.BookingId == b.Id && i.TenantId == _user.TenantId)
-                    .Select(i => (Guid?)i.Id).FirstOrDefault()
+                    .Select(i => (Guid?)i.Id).FirstOrDefault(),
+                null
             )).ToListAsync(ct);
+
+        // Second pass: which of this page's invoices were (at least partly) paid via a
+        // subscription — batched as one lookup rather than a per-row query, then merged in.
+        var invoiceIds = items.Where(it => it.InvoiceId.HasValue).Select(it => it.InvoiceId!.Value).Distinct().ToList();
+        if (invoiceIds.Count > 0)
+        {
+            var subPayments = await _db.Payments.AsNoTracking()
+                .Where(p => p.TenantId == _user.TenantId && p.InvoiceId != null && invoiceIds.Contains(p.InvoiceId.Value) && p.IssuedSubscriptionId != null)
+                .Select(p => new { InvoiceId = p.InvoiceId!.Value, SubId = p.IssuedSubscriptionId!.Value })
+                .ToListAsync(ct);
+            if (subPayments.Count > 0)
+            {
+                var subIds = subPayments.Select(x => x.SubId).Distinct().ToList();
+                var subNames = await _db.IssuedSubscriptions.AsNoTracking()
+                    .Where(s => subIds.Contains(s.Id))
+                    .Select(s => new { s.Id, PackageName = s.Package!.Name })
+                    .ToDictionaryAsync(s => s.Id, s => s.PackageName, ct);
+                var invoiceToPackageName = subPayments
+                    .Where(x => subNames.ContainsKey(x.SubId))
+                    .GroupBy(x => x.InvoiceId)
+                    .ToDictionary(g => g.Key, g => subNames[g.First().SubId]);
+                items = items.Select(it => it.InvoiceId.HasValue && invoiceToPackageName.TryGetValue(it.InvoiceId.Value, out var name)
+                    ? it with { SubscriptionPackageName = name }
+                    : it).ToList();
+            }
+        }
 
         return new PagedResult<BookingListItem>(items, total, page, size);
     }
@@ -109,9 +136,16 @@ public class BookingServiceImpl : IBookingService
         if (b is null) return null;
 
         var inv = await _db.Invoices.AsNoTracking()
+            .Include(i => i.Payments)
             .Where(i => i.BookingId == id && i.TenantId == _user.TenantId)
-            .Select(i => new { i.Id, i.Paid, i.Due })
+            .Select(i => new { i.Id, i.Paid, i.Due, i.Payments })
             .FirstOrDefaultAsync(ct);
+
+        string? subscriptionPackageName = null;
+        var subId = inv?.Payments.Where(p => p.IssuedSubscriptionId.HasValue).Select(p => p.IssuedSubscriptionId!.Value).FirstOrDefault();
+        if (subId is { } sid && sid != Guid.Empty)
+            subscriptionPackageName = await _db.IssuedSubscriptions.AsNoTracking()
+                .Where(s => s.Id == sid).Select(s => s.Package!.Name).FirstOrDefaultAsync(ct);
 
         var subByService = new Dictionary<Guid, BookingSubDetail>();
         foreach (var d in b.BoardingDetails)
@@ -142,7 +176,8 @@ public class BookingServiceImpl : IBookingService
             b.AddOns.Select(a => new BookingAddOnLine(a.Id, a.AddOnService, a.Count, a.Distance, a.Days, a.FinalAmount)).ToList(),
             b.InventoryItems.Select(i => new BookingInventoryItemLine(i.Id, i.SkuId, i.SkuNameSnapshot, i.Quantity, i.FinalAmount)).ToList(),
             b.EstimateLines.OrderBy(e => e.SortOrder).Select(e => new BookingEstimateLineDto(e.Id, e.Label, e.Quantity, e.UnitAmount, e.Amount, e.SortOrder)).ToList(),
-            b.ChangeRequests.OrderByDescending(c => c.RequestedAt).Select(c => new BookingChangeRequestDto(c.Id, c.Description, c.Status, c.RequestedAt, c.RequestedBy, c.ResolutionNote, c.ResolvedAt)).ToList()
+            b.ChangeRequests.OrderByDescending(c => c.RequestedAt).Select(c => new BookingChangeRequestDto(c.Id, c.Description, c.Status, c.RequestedAt, c.RequestedBy, c.ResolutionNote, c.ResolvedAt)).ToList(),
+            subscriptionPackageName
         );
     }
 
@@ -486,6 +521,10 @@ public class BookingServiceImpl : IBookingService
                     _db.Payments.Add(new Payment
                     {
                         InvoiceId = invoice.Id,
+                        // Tags this payment back to the subscription it was drawn from — lets the
+                        // UI show which invoices/bookings were (at least partly) paid via a
+                        // subscription, not just parse it out of the Notes text below.
+                        IssuedSubscriptionId = sub.Id,
                         PaymentTime = DateTimeOffset.UtcNow,
                         Amount = coveredAmount,
                         Mode = PaymentMode.Other,
