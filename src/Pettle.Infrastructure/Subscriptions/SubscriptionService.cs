@@ -104,7 +104,7 @@ public class SubscriptionService : ISubscriptionService
             s.DaysOrSessions, s.BoardingType, s.SkuCategory, s.SkuSubCategory, s.SkuId,
             s.SkuId.HasValue && skuNames.TryGetValue(s.SkuId.Value, out var n) ? n : null,
             s.ItemKind.ToString(), s.AddOnCatalogueId)).ToList(),
-        p.Type.ToString());
+        p.Type.ToString(), p.Description);
 
     public async Task<bool> DeletePackageAsync(Guid id, CancellationToken ct = default)
     {
@@ -139,7 +139,7 @@ public class SubscriptionService : ISubscriptionService
             .Select(i => new IssuedListItem(
                 i.Id, i.Package!.Name, i.PetParentId, i.PetParent!.Name, i.PetParent!.Phone,
                 i.IssuedOn, i.ValidUntil, i.RemainingSessions, i.TotalSessions,
-                i.Status, i.PaymentStatus, i.AmountPaid, i.AmountDue, i.BalanceUsed))
+                i.Status, i.PaymentStatus, i.AmountPaid, i.AmountDue, i.BalanceUsed, i.Package!.Description))
             .ToListAsync(ct);
         return new PagedResult<IssuedListItem>(items, total, p, sz);
     }
@@ -175,7 +175,7 @@ public class SubscriptionService : ISubscriptionService
         await _db.SaveChangesAsync(ct);
         return new IssuedListItem(issued.Id, pkg.Name, parent.Id, parent.Name, parent.Phone,
             issued.IssuedOn, issued.ValidUntil, issued.RemainingSessions, issued.TotalSessions,
-            issued.Status, issued.PaymentStatus, issued.AmountPaid, issued.AmountDue, issued.BalanceUsed);
+            issued.Status, issued.PaymentStatus, issued.AmountPaid, issued.AmountDue, issued.BalanceUsed, pkg.Description);
     }
 
     public async Task<bool> FreezeAsync(Guid id, CancellationToken ct = default)
@@ -274,15 +274,25 @@ public class SubscriptionService : ISubscriptionService
         return true;
     }
 
-    public async Task<ActiveSubscriptionSummary?> GetActiveByClientAsync(Guid petParentId, CancellationToken ct = default)
+    public async Task<ActiveSubscriptionSummary?> GetActiveByClientAsync(Guid petParentId, string? packageType = null, CancellationToken ct = default)
     {
         if (_user.TenantId is null) return null;
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        // Parsed up front because Npgsql can't translate an enum's .ToString() inside the query -
+        // comparing enum to enum below works, comparing enum.ToString() to a string does not.
+        SubscriptionPackageType? parsedType = packageType != null && Enum.TryParse<SubscriptionPackageType>(packageType, true, out var pt)
+            ? pt
+            : null;
+        // A client can hold several active plans across Vet/Boarding/Grooming at once (e.g. a Vet
+        // consultation package and a Boarding package) - without filtering by the caller's booking
+        // type, this picked whichever was issued most recently regardless of type, so a Boarding
+        // booking could surface a Vet-only plan that then covers nothing when applied.
         var sub = await _db.IssuedSubscriptions.AsNoTracking()
             .Include(s => s.Package)
             .Where(s => s.TenantId == _user.TenantId && s.PetParentId == petParentId
                 && s.Status == IssuedSubscriptionStatus.Active && s.ValidUntil >= today
-                && s.RemainingSessions > 0)
+                && s.RemainingSessions > 0
+                && (parsedType == null || s.Package!.Type == parsedType))
             .OrderByDescending(s => s.IssuedOn)
             .FirstOrDefaultAsync(ct);
         if (sub is null) return null;
@@ -290,5 +300,22 @@ public class SubscriptionService : ISubscriptionService
         return new ActiveSubscriptionSummary(
             sub.Id, sub.Package!.Name, sub.AmountPaid, sub.BalanceUsed, Math.Max(0, remaining),
             sub.RemainingSessions, sub.TotalSessions, sub.ValidUntil, sub.Status.ToString());
+    }
+
+    // Deliberately not scoped by _user.TenantId — this backs the public, unauthenticated invoice
+    // link texted to customers, so there's no signed-in tenant context to filter by. The
+    // unguessable GUID id is the only access control; the DTO it returns is public-safe by design
+    // (see PublicSubscriptionInvoice).
+    public async Task<PublicSubscriptionInvoice?> GetPublicInvoiceAsync(Guid issuedId, CancellationToken ct = default)
+    {
+        var sub = await _db.IssuedSubscriptions.AsNoTracking()
+            .Include(s => s.Package).Include(s => s.PetParent)
+            .FirstOrDefaultAsync(s => s.Id == issuedId, ct);
+        if (sub is null) return null;
+        var tenantName = await _db.Tenants.AsNoTracking()
+            .Where(t => t.Id == sub.TenantId).Select(t => t.Name).FirstOrDefaultAsync(ct) ?? "";
+        return new PublicSubscriptionInvoice(
+            tenantName, sub.PetParent!.Name, sub.Package!.Name, sub.Package.Description,
+            sub.Package.Price, sub.AmountPaid, sub.IssuedOn, sub.ValidUntil);
     }
 }

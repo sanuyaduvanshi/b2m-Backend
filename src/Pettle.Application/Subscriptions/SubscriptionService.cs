@@ -24,7 +24,7 @@ public record PackageServiceItem(
 
 public record PackageListItem(
     Guid Id, string Name, int ValidityDays, decimal Price, decimal TaxPercent, bool IsTaxInclusive, bool IsActive,
-    IReadOnlyList<PackageServiceItem>? Services = null, string Type = "Boarding");
+    IReadOnlyList<PackageServiceItem>? Services = null, string Type = "Boarding", string? Description = null);
 
 public record CreateOrUpdatePackageRequest(
     string Name, string? Description, int ValidityDays, decimal Price, decimal TaxPercent, bool IsTaxInclusive, bool IsActive,
@@ -38,10 +38,17 @@ public record IssuedListItem(
     Guid Id, string PackageName, Guid PetParentId, string ParentName, string Phone,
     DateOnly IssuedOn, DateOnly ValidUntil, int RemainingSessions, int TotalSessions,
     IssuedSubscriptionStatus Status, IssuedPaymentStatus PaymentStatus, decimal AmountPaid, decimal AmountDue,
-    decimal BalanceUsed = 0
+    decimal BalanceUsed = 0, string? PackageDescription = null
 );
 
 public record IssueSubscriptionRequest(Guid PackageId, Guid PetParentId, int TotalSessions, DateOnly? IssuedOn, decimal AmountPaid);
+
+// Public, unauthenticated view of an issued subscription — the WhatsApp "your subscription is
+// confirmed" message links customers straight to this so they can see what they were billed for
+// without logging in, so it only exposes what a customer should see (no internal ids/statuses).
+public record PublicSubscriptionInvoice(
+    string TenantName, string ParentName, string PackageName, string? PackageDescription,
+    decimal Price, decimal AmountPaid, DateOnly IssuedOn, DateOnly ValidUntil);
 
 public interface ISubscriptionService
 {
@@ -59,5 +66,7 @@ public interface ISubscriptionService
     Task<PaymentDto?> RecordPaymentAsync(Guid issuedId, RecordSubscriptionPaymentRequest req, CancellationToken ct = default);
     Task<bool> DeletePaymentAsync(Guid issuedId, Guid paymentId, CancellationToken ct = default);
 
-    Task<ActiveSubscriptionSummary?> GetActiveByClientAsync(Guid petParentId, CancellationToken ct = default);
+    Task<ActiveSubscriptionSummary?> GetActiveByClientAsync(Guid petParentId, string? packageType = null, CancellationToken ct = default);
+
+    Task<PublicSubscriptionInvoice?> GetPublicInvoiceAsync(Guid issuedId, CancellationToken ct = default);
 }

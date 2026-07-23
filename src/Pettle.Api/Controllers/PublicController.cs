@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Pettle.Application.Subscriptions;
 using Pettle.Domain.ClientEnquiries;
 using Pettle.Infrastructure.Persistence;
 
@@ -10,7 +11,8 @@ namespace Pettle.Api.Controllers;
 public class PublicController : ControllerBase
 {
     private readonly PettleDbContext _db;
-    public PublicController(PettleDbContext db) => _db = db;
+    private readonly ISubscriptionService _subs;
+    public PublicController(PettleDbContext db, ISubscriptionService subs) { _db = db; _subs = subs; }
 
     public record PublicEnquiryRequest(
         string ParentName,
@@ -77,5 +79,17 @@ public class PublicController : ControllerBase
 
         if (t is null) return Ok(new { name = "Pettle", slug = (string?)null, logoUrl = (string?)null, primaryColor = (string?)null, secondaryColor = (string?)null, accentColor = (string?)null });
         return Ok(t);
+    }
+
+    /// <summary>
+    /// Public, unauthenticated invoice view for an issued subscription — the link texted to a
+    /// customer via WhatsApp when their subscription is assigned, opened straight from their
+    /// phone with no staff login. Access control is the unguessable GUID id alone.
+    /// </summary>
+    [HttpGet("subscriptions/{id:guid}/invoice")]
+    public async Task<IActionResult> SubscriptionInvoice(Guid id, CancellationToken ct)
+    {
+        var r = await _subs.GetPublicInvoiceAsync(id, ct);
+        return r is null ? NotFound() : Ok(r);
     }
 }
