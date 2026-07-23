@@ -92,4 +92,11 @@ public class PublicController : ControllerBase
         var r = await _subs.GetPublicInvoiceAsync(id, ct);
         return r is null ? NotFound() : Ok(r);
     }
+
+    [HttpGet("subscriptions/{id:guid}/invoice/pdf")]
+    public async Task<IActionResult> SubscriptionInvoicePdf(Guid id, CancellationToken ct)
+    {
+        var bytes = await _subs.GeneratePublicInvoicePdfAsync(id, ct);
+        return bytes is null ? NotFound() : File(bytes, "application/pdf", $"Subscription-Invoice-{id}.pdf");
+    }
 }

@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Http;
 using Pettle.Application.Clients;
 using Pettle.Application.Common;
 using Pettle.Application.Common.Errors;
@@ -14,7 +15,11 @@ public class SubscriptionService : ISubscriptionService
 {
     private readonly PettleDbContext _db;
     private readonly ICurrentUser _user;
-    public SubscriptionService(PettleDbContext db, ICurrentUser user) { _db = db; _user = user; }
+    private readonly IHttpClientFactory _httpClientFactory;
+    public SubscriptionService(PettleDbContext db, ICurrentUser user, IHttpClientFactory httpClientFactory)
+    {
+        _db = db; _user = user; _httpClientFactory = httpClientFactory;
+    }
 
     public async Task<IReadOnlyList<PackageListItem>> ListPackagesAsync(CancellationToken ct = default)
     {
@@ -299,7 +304,27 @@ public class SubscriptionService : ISubscriptionService
         var remaining = sub.AmountPaid - sub.BalanceUsed;
         return new ActiveSubscriptionSummary(
             sub.Id, sub.Package!.Name, sub.AmountPaid, sub.BalanceUsed, Math.Max(0, remaining),
-            sub.RemainingSessions, sub.TotalSessions, sub.ValidUntil, sub.Status.ToString());
+            sub.RemainingSessions, sub.TotalSessions, sub.ValidUntil, sub.Status.ToString(), sub.PackageId);
+    }
+
+    public async Task<IReadOnlyList<ActiveSubscriptionSummary>> GetActiveSubscriptionsByClientAsync(Guid petParentId, string? packageType = null, CancellationToken ct = default)
+    {
+        if (_user.TenantId is null) return Array.Empty<ActiveSubscriptionSummary>();
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        SubscriptionPackageType? parsedType = packageType != null && Enum.TryParse<SubscriptionPackageType>(packageType, true, out var pt)
+            ? pt
+            : null;
+        var subs = await _db.IssuedSubscriptions.AsNoTracking()
+            .Include(s => s.Package)
+            .Where(s => s.TenantId == _user.TenantId && s.PetParentId == petParentId
+                && s.Status == IssuedSubscriptionStatus.Active && s.ValidUntil >= today
+                && s.RemainingSessions > 0
+                && (parsedType == null || s.Package!.Type == parsedType))
+            .OrderByDescending(s => s.IssuedOn)
+            .ToListAsync(ct);
+        return subs.Select(sub => new ActiveSubscriptionSummary(
+            sub.Id, sub.Package!.Name, sub.AmountPaid, sub.BalanceUsed, Math.Max(0, sub.AmountPaid - sub.BalanceUsed),
+            sub.RemainingSessions, sub.TotalSessions, sub.ValidUntil, sub.Status.ToString(), sub.PackageId)).ToList();
     }
 
     // Deliberately not scoped by _user.TenantId — this backs the public, unauthenticated invoice
@@ -312,10 +337,34 @@ public class SubscriptionService : ISubscriptionService
             .Include(s => s.Package).Include(s => s.PetParent)
             .FirstOrDefaultAsync(s => s.Id == issuedId, ct);
         if (sub is null) return null;
-        var tenantName = await _db.Tenants.AsNoTracking()
-            .Where(t => t.Id == sub.TenantId).Select(t => t.Name).FirstOrDefaultAsync(ct) ?? "";
+        var tenant = await _db.Tenants.AsNoTracking()
+            .Where(t => t.Id == sub.TenantId).Select(t => new { t.Name, t.LogoUrl }).FirstOrDefaultAsync(ct);
         return new PublicSubscriptionInvoice(
-            tenantName, sub.PetParent!.Name, sub.Package!.Name, sub.Package.Description,
-            sub.Package.Price, sub.AmountPaid, sub.IssuedOn, sub.ValidUntil);
+            tenant?.Name ?? "", sub.PetParent!.Name, sub.Package!.Name, sub.Package.Description,
+            sub.Package.Price, sub.AmountPaid, sub.IssuedOn, sub.ValidUntil, tenant?.LogoUrl);
+    }
+
+    public async Task<byte[]?> GeneratePublicInvoicePdfAsync(Guid issuedId, CancellationToken ct = default)
+    {
+        var inv = await GetPublicInvoiceAsync(issuedId, ct);
+        if (inv is null) return null;
+
+        byte[]? logoBytes = null;
+        if (!string.IsNullOrWhiteSpace(inv.TenantLogoUrl))
+        {
+            try
+            {
+                var http = _httpClientFactory.CreateClient();
+                http.Timeout = TimeSpan.FromSeconds(5);
+                logoBytes = await http.GetByteArrayAsync(inv.TenantLogoUrl, ct);
+            }
+            catch
+            {
+                // A slow/unreachable/invalid logo URL shouldn't block the invoice PDF - it just
+                // renders without a logo, same as InvoicePdfRenderer's existing null-logo path.
+                logoBytes = null;
+            }
+        }
+        return SubscriptionInvoicePdfRenderer.Render(inv, logoBytes);
     }
 }

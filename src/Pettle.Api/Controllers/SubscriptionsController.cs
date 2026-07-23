@@ -84,4 +84,9 @@ public class SubscriptionsController : ControllerBase
         var r = await _svc.GetActiveByClientAsync(petParentId, type, ct);
         return r is null ? NoContent() : Ok(r);
     }
+
+    [HttpGet("issued/active-for-client/{petParentId:guid}/all")]
+    [HasPermission(Modules.Subscriptions, Actions.View)]
+    public async Task<IActionResult> ActiveSubscriptionsForClient(Guid petParentId, [FromQuery] string? type, CancellationToken ct)
+        => Ok(await _svc.GetActiveSubscriptionsByClientAsync(petParentId, type, ct));
 }

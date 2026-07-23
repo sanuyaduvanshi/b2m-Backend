@@ -32,7 +32,7 @@ public record CreateOrUpdatePackageRequest(
 
 public record ActiveSubscriptionSummary(
     Guid Id, string PackageName, decimal PackagePrice, decimal BalanceUsed, decimal RemainingBalance,
-    int RemainingSessions, int TotalSessions, DateOnly ValidUntil, string Status);
+    int RemainingSessions, int TotalSessions, DateOnly ValidUntil, string Status, Guid PackageId = default);
 
 public record IssuedListItem(
     Guid Id, string PackageName, Guid PetParentId, string ParentName, string Phone,
@@ -48,7 +48,7 @@ public record IssueSubscriptionRequest(Guid PackageId, Guid PetParentId, int Tot
 // without logging in, so it only exposes what a customer should see (no internal ids/statuses).
 public record PublicSubscriptionInvoice(
     string TenantName, string ParentName, string PackageName, string? PackageDescription,
-    decimal Price, decimal AmountPaid, DateOnly IssuedOn, DateOnly ValidUntil);
+    decimal Price, decimal AmountPaid, DateOnly IssuedOn, DateOnly ValidUntil, string? TenantLogoUrl = null);
 
 public interface ISubscriptionService
 {
@@ -67,6 +67,11 @@ public interface ISubscriptionService
     Task<bool> DeletePaymentAsync(Guid issuedId, Guid paymentId, CancellationToken ct = default);
 
     Task<ActiveSubscriptionSummary?> GetActiveByClientAsync(Guid petParentId, string? packageType = null, CancellationToken ct = default);
+    // A client can hold more than one active plan of the same type at once (e.g. two separate
+    // Boarding packages) - the booking form lets staff pick which one to apply rather than only
+    // ever surfacing whichever was issued most recently.
+    Task<IReadOnlyList<ActiveSubscriptionSummary>> GetActiveSubscriptionsByClientAsync(Guid petParentId, string? packageType = null, CancellationToken ct = default);
 
     Task<PublicSubscriptionInvoice?> GetPublicInvoiceAsync(Guid issuedId, CancellationToken ct = default);
+    Task<byte[]?> GeneratePublicInvoicePdfAsync(Guid issuedId, CancellationToken ct = default);
 }
