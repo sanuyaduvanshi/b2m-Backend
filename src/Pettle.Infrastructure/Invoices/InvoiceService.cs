@@ -350,6 +350,16 @@ public class InvoiceService : IInvoiceService
         if (invoice is null) return null;
         var payment = invoice.Payments.FirstOrDefault(p => p.Id == paymentId);
         if (payment is null) return null;
+
+        // Keep the source subscription's balance in sync with whatever this payment settles to
+        // now — without this, editing the amount on an auto-debited payment left the subscription
+        // still holding its old (now wrong) BalanceUsed, drifting out of sync with the invoice.
+        if (payment.IssuedSubscriptionId is { } subId && req.Amount != payment.Amount)
+        {
+            var sub = await _db.IssuedSubscriptions.FirstOrDefaultAsync(s => s.Id == subId && s.TenantId == _user.TenantId, ct);
+            if (sub is not null) sub.BalanceUsed = Math.Max(0, sub.BalanceUsed - payment.Amount + req.Amount);
+        }
+
         payment.Amount = req.Amount; payment.Mode = req.Mode; payment.Source = req.Source;
         payment.Type = req.Type; payment.Status = req.Status;
         payment.TransactionId = req.TransactionId; payment.Notes = req.Notes;
@@ -370,6 +380,21 @@ public class InvoiceService : IInvoiceService
         if (invoice is null) return false;
         var payment = invoice.Payments.FirstOrDefault(p => p.Id == paymentId);
         if (payment is null) return false;
+
+        // Deleting an auto-debited payment must give the session/balance back to the subscription
+        // it came from — otherwise the subscription stays "spent" forever while the booking/invoice
+        // it paid for goes back to unpaid, and the client's remaining balance silently understates
+        // what they actually have left.
+        if (payment.IssuedSubscriptionId is { } subId)
+        {
+            var sub = await _db.IssuedSubscriptions.FirstOrDefaultAsync(s => s.Id == subId && s.TenantId == _user.TenantId, ct);
+            if (sub is not null)
+            {
+                sub.BalanceUsed = Math.Max(0, sub.BalanceUsed - payment.Amount);
+                sub.RemainingSessions = Math.Min(sub.TotalSessions, sub.RemainingSessions + 1);
+            }
+        }
+
         _db.Payments.Remove(payment);
         invoice.Payments.Remove(payment);
         RecomputeInvoiceBalance(invoice);
