@@ -63,7 +63,7 @@ public class BookingServiceImpl : IBookingService
         var page = Math.Max(query.Page, 1);
         var size = Math.Clamp(query.PageSize, 1, 200);
 
-        var items = await q.OrderByDescending(b => b.BookingDate)
+        var items = await q.OrderByDescending(b => b.BookingDate).ThenByDescending(b => b.CreatedAt)
             .Skip((page - 1) * size).Take(size)
             .Select(b => new BookingListItem(
                 b.Id, b.LegacyBookingId, b.BookingDate,
@@ -142,10 +142,14 @@ public class BookingServiceImpl : IBookingService
             .FirstOrDefaultAsync(ct);
 
         string? subscriptionPackageName = null;
+        decimal? subscriptionCoveredAmount = null;
         var subId = inv?.Payments.Where(p => p.IssuedSubscriptionId.HasValue).Select(p => p.IssuedSubscriptionId!.Value).FirstOrDefault();
         if (subId is { } sid && sid != Guid.Empty)
+        {
             subscriptionPackageName = await _db.IssuedSubscriptions.AsNoTracking()
                 .Where(s => s.Id == sid).Select(s => s.Package!.Name).FirstOrDefaultAsync(ct);
+            subscriptionCoveredAmount = inv!.Payments.Where(p => p.IssuedSubscriptionId == sid).Sum(p => p.Amount);
+        }
 
         var subByService = new Dictionary<Guid, BookingSubDetail>();
         foreach (var d in b.BoardingDetails)
@@ -177,7 +181,8 @@ public class BookingServiceImpl : IBookingService
             b.InventoryItems.Select(i => new BookingInventoryItemLine(i.Id, i.SkuId, i.SkuNameSnapshot, i.Quantity, i.FinalAmount)).ToList(),
             b.EstimateLines.OrderBy(e => e.SortOrder).Select(e => new BookingEstimateLineDto(e.Id, e.Label, e.Quantity, e.UnitAmount, e.Amount, e.SortOrder)).ToList(),
             b.ChangeRequests.OrderByDescending(c => c.RequestedAt).Select(c => new BookingChangeRequestDto(c.Id, c.Description, c.Status, c.RequestedAt, c.RequestedBy, c.ResolutionNote, c.ResolvedAt)).ToList(),
-            subscriptionPackageName
+            subscriptionPackageName,
+            subscriptionCoveredAmount
         );
     }
 

@@ -46,7 +46,10 @@ public record BookingDetail(
     IReadOnlyList<BookingEstimateLineDto> Estimate,
     IReadOnlyList<BookingChangeRequestDto> ChangeRequests,
     // Set when any payment on this booking's invoice was auto-debited from a subscription.
-    string? SubscriptionPackageName = null
+    string? SubscriptionPackageName = null,
+    // How much of InvoicePaid came from that subscription (vs. cash/card/etc paid separately) —
+    // lets the Record Payment dialog show a proper breakdown instead of one opaque "Paid" figure.
+    decimal? SubscriptionCoveredAmount = null
 );
 
 public record BookingEstimateLineDto(Guid Id, string Label, decimal Quantity, decimal UnitAmount, decimal Amount, int SortOrder);
