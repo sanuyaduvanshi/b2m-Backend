@@ -638,6 +638,29 @@ public class BookingServiceImpl : IBookingService
         return true;
     }
 
+    public async Task<bool> ChangeBookingStatusAsync(Guid bookingId, BookingStateChangeRequest req, CancellationToken ct = default)
+    {
+        if (_user.TenantId is null) throw AppException.Forbidden();
+        var b = await _db.Bookings.Include(x => x.Services)
+            .FirstOrDefaultAsync(x => x.Id == bookingId && x.TenantId == _user.TenantId, ct);
+        if (b is null || b.Services.Count == 0) return false;
+
+        // Every service must be able to make this exact move — a booking's status is one shared
+        // value now, not per-service, so letting some services jump ahead while others can't
+        // would just re-introduce the per-service divergence this endpoint exists to remove.
+        foreach (var s in b.Services)
+            if (!BookingStateChangeValidator.IsAllowed(s.Status, req.NewStatus))
+                throw AppException.BusinessRule($"Can't move this booking from \"{s.Status.Humanize()}\" to \"{req.NewStatus.Humanize()}\".");
+
+        foreach (var s in b.Services)
+        {
+            s.Status = req.NewStatus;
+            if (!string.IsNullOrWhiteSpace(req.Reason)) s.Notes = (s.Notes is null ? "" : s.Notes + " | ") + $"Status->{req.NewStatus}: {req.Reason}";
+        }
+        await _db.SaveChangesAsync(ct);
+        return true;
+    }
+
     public async Task<bool> CancelAsync(Guid id, string? reason, CancellationToken ct = default)
     {
         if (_user.TenantId is null) return false;

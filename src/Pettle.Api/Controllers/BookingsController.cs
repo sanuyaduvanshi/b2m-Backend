@@ -38,6 +38,11 @@ public class BookingsController : ControllerBase
     public async Task<IActionResult> ChangeStatus(Guid serviceId, [FromBody] BookingStateChangeRequest req, CancellationToken ct)
         => await _svc.ChangeStatusAsync(serviceId, req, ct) ? NoContent() : NotFound();
 
+    [HttpPost("{id:guid}/status")]
+    [HasPermission(Modules.BookingRecords, Actions.Edit)]
+    public async Task<IActionResult> ChangeBookingStatus(Guid id, [FromBody] BookingStateChangeRequest req, CancellationToken ct)
+        => await _svc.ChangeBookingStatusAsync(id, req, ct) ? NoContent() : NotFound();
+
     [HttpPost("{id:guid}/cancel")]
     [HasPermission(Modules.BookingRecords, Actions.Edit)]
     public async Task<IActionResult> Cancel(Guid id, [FromBody] CancelRequest req, CancellationToken ct)
