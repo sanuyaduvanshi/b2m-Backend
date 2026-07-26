@@ -82,9 +82,27 @@ public class InventoryService : IInventoryService
     {
         if (_user.TenantId is null) throw AppException.Forbidden();
         var code = req.Code.Trim();
-        var dup = await _db.Skus.IgnoreQueryFilters()
-            .AnyAsync(s => s.TenantId == _user.TenantId && s.Code == code, ct);
-        if (dup) throw AppException.Conflict($"SKU code '{code}' is already in use.");
+
+        // Code is unique at the DB level regardless of soft-delete, so a previously-deleted SKU
+        // with this code must be revived (not just excluded from the duplicate check) or the
+        // insert below would fail with a raw unique-constraint violation.
+        var existing = await _db.Skus.IgnoreQueryFilters()
+            .FirstOrDefaultAsync(s => s.TenantId == _user.TenantId && s.Code == code, ct);
+        if (existing is not null && !existing.IsDeleted)
+            throw AppException.Conflict($"SKU code '{code}' is already in use.");
+
+        if (existing is not null)
+        {
+            existing.IsDeleted = false; existing.DeletedAt = null; existing.DeletedById = null;
+            existing.Name = req.Name.Trim(); existing.Description = req.Description; existing.CategoryId = req.CategoryId;
+            existing.BrandId = req.BrandId;
+            existing.Unit = req.Unit; existing.MrpPrice = req.MrpPrice; existing.SellingPrice = req.SellingPrice; existing.CostPrice = req.CostPrice;
+            existing.TaxPercent = req.TaxPercent; existing.HsnSacCode = req.HsnSacCode; existing.ReorderLevel = req.ReorderLevel;
+            existing.TrackExpiry = req.TrackExpiry; existing.IsActive = req.IsActive;
+            existing.AppImageUrl = req.ImageUrl;
+            await _db.SaveChangesAsync(ct);
+            return (await GetSkuAsync(existing.Id, ct))!;
+        }
 
         var sku = new Sku
         {
