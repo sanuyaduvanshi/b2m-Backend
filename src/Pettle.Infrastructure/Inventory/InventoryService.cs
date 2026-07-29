@@ -402,9 +402,12 @@ public class InventoryService : IInventoryService
             if (line is null)
                 throw AppException.Validation("Unknown PO line",
                     new Dictionary<string, string[]> { ["lines"] = new[] { $"Line {lineUpd.LineId} does not belong to this PO." } });
-            if (lineUpd.ReceivedQuantity > line.Quantity + 0.001m)
+            // Free-quantity units are still physical stock arriving on this line, so they count
+            // toward what can be received — capping at Quantity alone silently discarded them.
+            var receivable = line.Quantity + line.FreeQuantity;
+            if (lineUpd.ReceivedQuantity > receivable + 0.001m)
                 throw AppException.Validation("Received quantity exceeds ordered",
-                    new Dictionary<string, string[]> { ["lines"] = new[] { $"Received {lineUpd.ReceivedQuantity} > ordered {line.Quantity} for '{line.ItemName}'." } });
+                    new Dictionary<string, string[]> { ["lines"] = new[] { $"Received {lineUpd.ReceivedQuantity} > ordered + free {receivable} for '{line.ItemName}'." } });
             var delta = lineUpd.ReceivedQuantity - line.ReceivedQuantity;
             line.ReceivedQuantity = lineUpd.ReceivedQuantity;
             if (line.SkuId.HasValue && delta != 0)
@@ -451,7 +454,7 @@ public class InventoryService : IInventoryService
                 }
             }
         }
-        var totalQty = po.Lines.Sum(l => l.Quantity);
+        var totalQty = po.Lines.Sum(l => l.Quantity + l.FreeQuantity);
         var receivedQty = po.Lines.Sum(l => l.ReceivedQuantity);
         po.Status = receivedQty >= totalQty ? PoStatus.Received : PoStatus.PartiallyReceived;
         await _db.SaveChangesAsync(ct);
