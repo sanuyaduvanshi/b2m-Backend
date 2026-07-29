@@ -35,6 +35,16 @@ public record ReportsOverview(
 /// <summary>One calendar month's revenue/expenses/net — the Reports Overview trend chart.</summary>
 public record MonthlyPoint(string Month, decimal Revenue, decimal Expenses, decimal Net);
 
+/// <summary>Dashboard's period-filterable KPI row — one line per business vertical so "Sale"
+/// (walk-in/POS) revenue is never blended into booking or subscription revenue. Purchase Orders
+/// track spend (cost), not revenue, and are reported separately for that reason.</summary>
+public record PeriodSummary(
+    decimal SalesRevenue, int SalesCount,
+    int TotalBookings, decimal BookingsRevenue,
+    int TotalSubscriptions, decimal SubscriptionsRevenue,
+    int TotalPurchaseOrders, decimal PurchaseOrdersValue
+);
+
 public interface IReportsService
 {
     Task<ReportsOverview> OverviewAsync(DateRange range, CancellationToken ct = default);
@@ -45,4 +55,5 @@ public interface IReportsService
     Task<ExpensesReport> ExpensesAsync(DateRange range, CancellationToken ct = default);
     Task<ProfitReport> ProfitAsync(DateRange range, CancellationToken ct = default);
     Task<IReadOnlyList<MonthlyPoint>> MonthlyAsync(DateRange range, CancellationToken ct = default);
+    Task<PeriodSummary> PeriodSummaryAsync(DateRange range, CancellationToken ct = default);
 }

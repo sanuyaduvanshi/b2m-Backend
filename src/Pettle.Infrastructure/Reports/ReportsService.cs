@@ -192,6 +192,44 @@ public class ReportsService : IReportsService
         return new ProfitReport(collected, expenses, collected - expenses);
     }
 
+    public async Task<PeriodSummary> PeriodSummaryAsync(DateRange range, CancellationToken ct = default)
+    {
+        if (_user.TenantId is null) return new PeriodSummary(0, 0, 0, 0, 0, 0, 0, 0);
+        var tid = _user.TenantId.Value;
+
+        // Sale/Booking revenue come from invoices (what was actually billed for that vertical),
+        // kept separate per-type so a walk-in sale never gets blended into booking revenue.
+        var invoicesByType = await _db.Invoices.AsNoTracking()
+            .Where(i => i.TenantId == tid && i.InvoiceDate >= range.From && i.InvoiceDate <= range.To
+                        && (i.InvoiceType == InvoiceType.Sale || i.InvoiceType == InvoiceType.Booking))
+            .Select(i => new { i.InvoiceType, i.Revenue })
+            .ToListAsync(ct);
+        var salesRevenue = invoicesByType.Where(i => i.InvoiceType == InvoiceType.Sale).Sum(i => i.Revenue);
+        var salesCount = invoicesByType.Count(i => i.InvoiceType == InvoiceType.Sale);
+        var bookingsRevenue = invoicesByType.Where(i => i.InvoiceType == InvoiceType.Booking).Sum(i => i.Revenue);
+
+        var totalBookings = await _db.Bookings.CountAsync(
+            b => b.TenantId == tid && b.BookingDate >= range.From && b.BookingDate <= range.To, ct);
+
+        var subs = await _db.IssuedSubscriptions.AsNoTracking()
+            .Where(s => s.TenantId == tid && s.IssuedOn >= range.From && s.IssuedOn <= range.To)
+            .Select(s => s.AmountPaid)
+            .ToListAsync(ct);
+
+        // Purchase Orders are money spent (cost), not revenue — kept in its own field so it's
+        // never mistaken for income when the frontend labels/sums these cards.
+        var poTotals = await _db.PurchaseOrders.AsNoTracking()
+            .Where(p => p.TenantId == tid && p.PurchaseDate >= range.From && p.PurchaseDate <= range.To)
+            .Select(p => p.Total)
+            .ToListAsync(ct);
+
+        return new PeriodSummary(
+            salesRevenue, salesCount,
+            totalBookings, bookingsRevenue,
+            subs.Count, subs.Sum(),
+            poTotals.Count, poTotals.Sum());
+    }
+
     public async Task<InventoryReport> InventoryAsync(CancellationToken ct = default)
     {
         if (_user.TenantId is null) return new InventoryReport(0, 0, 0, 0, Array.Empty<ExpenseSlice>(), 0, 0);

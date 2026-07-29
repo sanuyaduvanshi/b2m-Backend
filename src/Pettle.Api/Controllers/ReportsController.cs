@@ -49,4 +49,8 @@ public class ReportsController : ControllerBase
     [HttpGet("monthly")] [HasPermission(Modules.Reports, Actions.View)]
     public async Task<IActionResult> Monthly([FromQuery] DateOnly? from, [FromQuery] DateOnly? to, CancellationToken ct)
         => Ok(await _svc.MonthlyAsync(ResolveRange(from, to), ct));
+
+    [HttpGet("period-summary")] [HasPermission(Modules.Reports, Actions.View)]
+    public async Task<IActionResult> PeriodSummary([FromQuery] DateOnly? from, [FromQuery] DateOnly? to, CancellationToken ct)
+        => Ok(await _svc.PeriodSummaryAsync(ResolveRange(from, to), ct));
 }
