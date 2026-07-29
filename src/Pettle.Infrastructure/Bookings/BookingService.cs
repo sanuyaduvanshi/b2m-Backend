@@ -705,11 +705,23 @@ public class BookingServiceImpl : IBookingService
         return true;
     }
 
+    private const string BookingInvoicePrefix = "BKG-";
+
+    // COUNT-based numbering broke the moment any invoice in the sequence was deleted (count shifts
+    // down, so "count+1" recomputes a number that an earlier, still-existing invoice already has —
+    // a duplicate-key 500 on every booking after that). Deriving the next number from the highest
+    // number actually in use is immune to gaps from deletions.
     private async Task<string> NextBookingInvoiceNumberAsync(CancellationToken ct)
     {
-        var count = await _db.Invoices.IgnoreQueryFilters()
-            .Where(i => i.TenantId == _user.TenantId && i.InvoiceType == InvoiceType.Booking && i.LegacyInvoiceNo == null)
-            .CountAsync(ct);
-        return $"BKG-{(count + 1).ToString().PadLeft(5, '0')}";
+        var existingNumbers = await _db.Invoices.IgnoreQueryFilters()
+            .Where(i => i.TenantId == _user.TenantId && i.InvoiceType == InvoiceType.Booking && i.LegacyInvoiceNo == null
+                        && i.InvoiceNumber != null && i.InvoiceNumber.StartsWith(BookingInvoicePrefix))
+            .Select(i => i.InvoiceNumber!)
+            .ToListAsync(ct);
+        var maxNum = existingNumbers
+            .Select(n => int.TryParse(n.AsSpan(BookingInvoicePrefix.Length), out var v) ? v : 0)
+            .DefaultIfEmpty(0)
+            .Max();
+        return $"{BookingInvoicePrefix}{(maxNum + 1).ToString().PadLeft(5, '0')}";
     }
 }
