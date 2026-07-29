@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Pettle.Infrastructure.Persistence;
@@ -11,9 +12,11 @@ using Pettle.Infrastructure.Persistence;
 namespace Pettle.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(PettleDbContext))]
-    partial class PettleDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260729041826_AddRefreshTokensTable")]
+    partial class AddRefreshTokensTable
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder

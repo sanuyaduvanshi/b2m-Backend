@@ -4,7 +4,9 @@ public interface IAuthService
 {
     Task<AuthResult> LoginAsync(string email, string password, CancellationToken ct = default);
     Task<AuthResult> RefreshAsync(string refreshToken, CancellationToken ct = default);
-    Task LogoutAsync(Guid userId, CancellationToken ct = default);
+    /// <summary>Revokes only the session identified by <paramref name="refreshToken"/> — other
+    /// devices/tabs the user is signed in on are left untouched.</summary>
+    Task LogoutAsync(Guid userId, string? refreshToken, CancellationToken ct = default);
     /// <summary>roleId disambiguates when a user holds more than one role at the same tenant/branch
     /// (a "switch role" rather than a "switch branch"); when null, the primary role there is used.</summary>
     Task<AuthResult> SwitchContextAsync(Guid userId, Guid tenantId, Guid branchId, Guid? roleId = null, CancellationToken ct = default);

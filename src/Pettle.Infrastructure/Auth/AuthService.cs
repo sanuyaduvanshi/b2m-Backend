@@ -7,6 +7,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using Pettle.Application.Auth;
+using Pettle.Domain.Identity;
 using Pettle.Infrastructure.Identity;
 using Pettle.Infrastructure.Persistence;
 
@@ -45,21 +46,28 @@ public class AuthService : IAuthService
 
     public async Task<AuthResult> RefreshAsync(string refreshToken, CancellationToken ct = default)
     {
-        var user = await _db.Users.FirstOrDefaultAsync(u => u.RefreshToken == refreshToken, ct);
-        if (user is null || user.RefreshTokenExpiresAt < DateTimeOffset.UtcNow)
+        var entry = await _db.RefreshTokens.FirstOrDefaultAsync(t => t.Token == refreshToken, ct);
+        if (entry is null || entry.RevokedAt is not null || entry.ExpiresAt < DateTimeOffset.UtcNow)
             return new AuthResult(false, null, null, null, null, "Invalid refresh token");
+
+        var user = await _db.Users.FindAsync(new object?[] { entry.UserId }, ct);
+        if (user is null) return new AuthResult(false, null, null, null, null, "Invalid refresh token");
+
+        // Rotate: revoke this one row only — sibling sessions on other devices/tabs keep theirs.
+        entry.RevokedAt = DateTimeOffset.UtcNow;
 
         var contexts = await GetContextsAsync(user.Id, ct);
         var current = PickDefault(contexts, user.DefaultTenantId, user.DefaultBranchId);
         return await IssueTokenAsync(user, current, contexts, ct);
     }
 
-    public async Task LogoutAsync(Guid userId, CancellationToken ct = default)
+    public async Task LogoutAsync(Guid userId, string? refreshToken, CancellationToken ct = default)
     {
-        var user = await _db.Users.FindAsync(new object?[] { userId }, ct);
-        if (user is null) return;
-        user.RefreshToken = null;
-        user.RefreshTokenExpiresAt = null;
+        if (string.IsNullOrEmpty(refreshToken)) return;
+        // Only revoke the session that's actually logging out — other devices/tabs stay signed in.
+        var entry = await _db.RefreshTokens.FirstOrDefaultAsync(t => t.UserId == userId && t.Token == refreshToken, ct);
+        if (entry is null) return;
+        entry.RevokedAt = DateTimeOffset.UtcNow;
         await _db.SaveChangesAsync(ct);
     }
 
@@ -129,8 +137,12 @@ public class AuthService : IAuthService
         var accessToken = new JwtSecurityTokenHandler().WriteToken(token);
 
         var refresh = Convert.ToBase64String(RandomNumberGenerator.GetBytes(48));
-        user.RefreshToken = refresh;
-        user.RefreshTokenExpiresAt = now.AddDays(_jwt.RefreshTokenDays);
+        _db.RefreshTokens.Add(new RefreshTokenEntry
+        {
+            UserId = user.Id,
+            Token = refresh,
+            ExpiresAt = now.AddDays(_jwt.RefreshTokenDays),
+        });
         user.LastLoginAt = now;
         await _db.SaveChangesAsync(ct);
 

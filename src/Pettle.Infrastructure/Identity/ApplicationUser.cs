@@ -11,8 +11,6 @@ public class ApplicationUser : IdentityUser<Guid>
     public bool IsActive { get; set; } = true;
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset? LastLoginAt { get; set; }
-    public string? RefreshToken { get; set; }
-    public DateTimeOffset? RefreshTokenExpiresAt { get; set; }
 }
 
 public class ApplicationRole : IdentityRole<Guid>

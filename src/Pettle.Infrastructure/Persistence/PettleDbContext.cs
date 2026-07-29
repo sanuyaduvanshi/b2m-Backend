@@ -37,6 +37,7 @@ public class PettleDbContext : IdentityDbContext<ApplicationUser, ApplicationRol
     public DbSet<Role> AppRoles => Set<Role>();
     public DbSet<RolePermission> RolePermissions => Set<RolePermission>();
     public DbSet<UserBranch> UserBranches => Set<UserBranch>();
+    public DbSet<RefreshTokenEntry> RefreshTokens => Set<RefreshTokenEntry>();
     public DbSet<AuditEntry> AuditEntries => Set<AuditEntry>();
     public DbSet<TenantSetting> TenantSettings => Set<TenantSetting>();
 
@@ -148,6 +149,12 @@ public class PettleDbContext : IdentityDbContext<ApplicationUser, ApplicationRol
             b.HasKey(x => new { x.UserId, x.BranchId, x.RoleId });
             b.HasIndex(x => x.UserId);
             b.HasIndex(x => x.BranchId);
+        });
+
+        builder.Entity<RefreshTokenEntry>(b =>
+        {
+            b.HasIndex(x => x.Token).IsUnique();
+            b.HasIndex(x => x.UserId);
         });
 
         builder.Entity<PetParent>(b =>

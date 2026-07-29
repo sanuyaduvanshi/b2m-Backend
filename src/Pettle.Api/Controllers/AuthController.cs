@@ -34,10 +34,10 @@ public class AuthController : ControllerBase
 
     [Authorize]
     [HttpPost("logout")]
-    public async Task<IActionResult> Logout(CancellationToken ct)
+    public async Task<IActionResult> Logout([FromBody] RefreshRequest? req, CancellationToken ct)
     {
         if (_user.UserId is null) return Unauthorized();
-        await _auth.LogoutAsync(_user.UserId.Value, ct);
+        await _auth.LogoutAsync(_user.UserId.Value, req?.RefreshToken, ct);
         return NoContent();
     }
 
