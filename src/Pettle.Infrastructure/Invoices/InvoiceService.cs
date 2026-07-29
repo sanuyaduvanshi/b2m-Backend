@@ -564,17 +564,71 @@ public class InvoiceService : IInvoiceService
             }
         }
 
-        // Booking.InvoiceNumber/TotalBillingAmount/PaymentStatus are a cached snapshot of the
-        // invoice (the booking views don't join the invoice live) — clear them so a deleted
-        // invoice doesn't keep showing up against the booking as if it still existed.
+        // Deleting a booking's invoice deletes the booking itself too — a booking with no invoice
+        // was previously left behind as an orphaned "No bill" row, which is confusing clutter, not
+        // a real booking anyone still needs. Booking is soft-deletable but its children aren't, so
+        // removing the Booking entity alone wouldn't cascade to them (the soft-delete interceptor
+        // converts that Remove into an UPDATE, which never fires the DB's ON DELETE CASCADE) — each
+        // child table is deleted explicitly here instead.
         if (invoice.BookingId is { } bookingId)
         {
-            var booking = await _db.Bookings.FirstOrDefaultAsync(b => b.Id == bookingId && b.TenantId == _user.TenantId, ct);
+            var booking = await _db.Bookings
+                .Include(b => b.Services)
+                .Include(b => b.AddOns)
+                .Include(b => b.InventoryItems)
+                .Include(b => b.EstimateLines)
+                .Include(b => b.ChangeRequests)
+                .FirstOrDefaultAsync(b => b.Id == bookingId && b.TenantId == _user.TenantId, ct);
             if (booking is not null)
             {
-                booking.PaymentStatus = BookingPaymentStatus.Pending;
-                booking.InvoiceNumber = null;
-                if (booking.GrossBillingAmount > 0) booking.TotalBillingAmount = booking.GrossBillingAmount;
+                // Restore stock this booking deducted — both service-linked SKUs and independent
+                // booking inventory items — mirroring the Sale-invoice restoration above.
+                var skuIds = booking.Services.Where(s => s.SkuId.HasValue).Select(s => s.SkuId!.Value)
+                    .Concat(booking.InventoryItems.Select(i => i.SkuId))
+                    .Distinct().ToList();
+                if (skuIds.Count > 0)
+                {
+                    var skus = await _db.Skus.Where(s => skuIds.Contains(s.Id) && s.TenantId == _user.TenantId).ToListAsync(ct);
+                    void Restore(Guid skuId, int qty, string note)
+                    {
+                        var sku = skus.FirstOrDefault(s => s.Id == skuId);
+                        if (sku is null || qty <= 0) return;
+                        sku.StockOnHand += qty;
+                        _db.SkuBatches.Add(new SkuBatch
+                        {
+                            TenantId = sku.TenantId, SkuId = sku.Id, QtyRemaining = qty,
+                            LandingCost = sku.CostPrice, Source = "Return", ReceivedAt = DateTimeOffset.UtcNow,
+                        });
+                        _db.StockMovements.Add(new StockMovement
+                        {
+                            SkuId = sku.Id, Reason = StockMovementReason.Return,
+                            QuantityChange = qty, StockAfter = sku.StockOnHand,
+                            RelatedInvoiceId = invoice.Id, Note = note,
+                        });
+                    }
+                    foreach (var s in booking.Services.Where(s => s.SkuId.HasValue))
+                        Restore(s.SkuId!.Value, s.SkuQuantity, $"Deleted invoice {invoice.InvoiceNumber} (booking service)");
+                    foreach (var i in booking.InventoryItems)
+                        Restore(i.SkuId, i.Quantity, $"Deleted invoice {invoice.InvoiceNumber} (booking inventory item)");
+                    foreach (var sku in skus)
+                        sku.NearestExpiry = await GetNearestExpiryAsync(sku.Id, sku.TenantId, ct);
+                }
+
+                var serviceIds = booking.Services.Select(s => s.Id).ToList();
+                if (serviceIds.Count > 0)
+                {
+                    _db.BoardingDetails.RemoveRange(await _db.BoardingDetails.Where(d => serviceIds.Contains(d.BookingServiceId)).ToListAsync(ct));
+                    _db.GroomingDetails.RemoveRange(await _db.GroomingDetails.Where(d => serviceIds.Contains(d.BookingServiceId)).ToListAsync(ct));
+                    _db.VetDetails.RemoveRange(await _db.VetDetails.Where(d => serviceIds.Contains(d.BookingServiceId)).ToListAsync(ct));
+                    _db.DayCareDetails.RemoveRange(await _db.DayCareDetails.Where(d => serviceIds.Contains(d.BookingServiceId)).ToListAsync(ct));
+                    _db.BookingServiceAddOns.RemoveRange(await _db.BookingServiceAddOns.Where(a => serviceIds.Contains(a.BookingServiceId)).ToListAsync(ct));
+                }
+                _db.BookingAddOns.RemoveRange(booking.AddOns);
+                _db.BookingInventoryItems.RemoveRange(booking.InventoryItems);
+                _db.BookingEstimateLines.RemoveRange(booking.EstimateLines);
+                _db.BookingChangeRequests.RemoveRange(booking.ChangeRequests);
+                _db.BookingServices.RemoveRange(booking.Services);
+                _db.Bookings.Remove(booking); // soft-delete interceptor sets IsDeleted = true
             }
         }
 
