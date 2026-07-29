@@ -49,7 +49,7 @@ public class DashboardService : IDashboardService
 
         var todayStart = today.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
         var todayEnd = today.ToDateTime(TimeOnly.MaxValue, DateTimeKind.Utc);
-        var revenueToday = await _db.Payments
+        var revenueToday = await _db.Payments.RealRevenue()
             .Where(p => p.TenantId == tid && p.PaymentTime >= todayStart && p.PaymentTime <= todayEnd
                 && (!restrictOwn || p.CreatedById == uid))
             .SumAsync(p => (decimal?)p.Amount, ct) ?? 0m;
@@ -73,7 +73,7 @@ public class DashboardService : IDashboardService
 
         // ---------- Revenue trend (last 14 days, fill gaps with zero) ----------
         var fromUtc = today.AddDays(-13).ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
-        var rawPayments = await _db.Payments.AsNoTracking()
+        var rawPayments = await _db.Payments.AsNoTracking().RealRevenue()
             .Where(p => p.TenantId == tid && p.PaymentTime >= fromUtc && p.PaymentTime <= todayEnd)
             .Select(p => new { p.PaymentTime, p.Amount })
             .ToListAsync(ct);

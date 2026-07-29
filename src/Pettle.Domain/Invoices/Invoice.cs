@@ -97,5 +97,18 @@ public class Payment : TenantEntity
 
 public enum PaymentMode { Cash = 0, Card = 1, Upi = 2, NetBanking = 3, Wallet = 4, Cheque = 5, Credit = 6, Other = 99 }
 public enum PaymentSource { WalkIn = 0, Online = 1, Gateway = 2, App = 3 }
+
+public static class PaymentQueryExtensions
+{
+    /// <summary>Filters out the marker Payment BookingService writes when a booking is auto-covered
+    /// by an already-paid-for subscription — it sets *both* InvoiceId and IssuedSubscriptionId
+    /// (violating the "belongs to either an invoice or a subscription" rule above) purely so the UI
+    /// can show which invoice a subscription's balance covered. That money was already recognized as
+    /// revenue when the subscription itself was purchased (a separate Payment with only
+    /// IssuedSubscriptionId set), so summing it again here would double-count the same cash. Apply
+    /// this to every query that sums Payments as "revenue collected".</summary>
+    public static IQueryable<Payment> RealRevenue(this IQueryable<Payment> q) =>
+        q.Where(p => !(p.InvoiceId != null && p.IssuedSubscriptionId != null));
+}
 public enum PaymentType { Advance = 0, Balance = 1 }
 public enum PaymentRecordStatus { Success = 0, Pending = 1, Failed = 2 }

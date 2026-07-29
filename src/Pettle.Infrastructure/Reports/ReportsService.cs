@@ -23,7 +23,7 @@ public class ReportsService : IReportsService
         var tid = _user.TenantId.Value;
         var (from, to) = RangeAsUtc(range);
 
-        var revenue = await _db.Payments.Where(p => p.TenantId == tid && p.PaymentTime >= from && p.PaymentTime <= to)
+        var revenue = await _db.Payments.RealRevenue().Where(p => p.TenantId == tid && p.PaymentTime >= from && p.PaymentTime <= to)
             .SumAsync(p => (decimal?)p.Amount, ct) ?? 0m;
         var bookings = await _db.Bookings.CountAsync(b => b.TenantId == tid && b.BookingDate >= range.From && b.BookingDate <= range.To, ct);
         var newClients = await _db.PetParents.CountAsync(p => p.TenantId == tid && p.OnboardingDate >= range.From && p.OnboardingDate <= range.To, ct);
@@ -52,7 +52,7 @@ public class ReportsService : IReportsService
             .ToDictionary(g => g.Key, g => g.Count());
 
         // Pull raw rows then group in-memory: DateOnly.FromDateTime() doesn't translate to PostgreSQL.
-        var rawPayments = await _db.Payments.AsNoTracking()
+        var rawPayments = await _db.Payments.AsNoTracking().RealRevenue()
             .Where(p => p.TenantId == tid && p.PaymentTime >= from && p.PaymentTime <= to)
             .Select(p => new { p.PaymentTime, p.Amount, p.Mode })
             .ToListAsync(ct);
@@ -85,7 +85,7 @@ public class ReportsService : IReportsService
         var tid = _user.TenantId.Value;
         var (from, to) = RangeAsUtc(range);
 
-        var rawPayments = await _db.Payments.AsNoTracking()
+        var rawPayments = await _db.Payments.AsNoTracking().RealRevenue()
             .Where(p => p.TenantId == tid && p.PaymentTime >= from && p.PaymentTime <= to)
             .Select(p => new { p.PaymentTime, p.Amount })
             .ToListAsync(ct);
@@ -185,7 +185,7 @@ public class ReportsService : IReportsService
         var tid = _user.TenantId.Value;
         var (from, to) = RangeAsUtc(range);
 
-        var collected = await _db.Payments.Where(p => p.TenantId == tid && p.PaymentTime >= from && p.PaymentTime <= to)
+        var collected = await _db.Payments.RealRevenue().Where(p => p.TenantId == tid && p.PaymentTime >= from && p.PaymentTime <= to)
             .SumAsync(p => (decimal?)p.Amount, ct) ?? 0m;
         var expenses = await _db.Expenses.Where(e => e.TenantId == tid && e.Time >= from && e.Time <= to)
             .SumAsync(e => (decimal?)e.AmountIncTax, ct) ?? 0m;
