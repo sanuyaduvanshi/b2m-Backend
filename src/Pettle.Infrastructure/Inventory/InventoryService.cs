@@ -55,6 +55,25 @@ public class InventoryService : IInventoryService
         return new PagedResult<SkuListItem>(items, total, p, sz);
     }
 
+    public async Task<IReadOnlyList<SkuListItem>> ExportSkusAsync(string? search, bool? lowStock, Guid? categoryId, CancellationToken ct = default)
+    {
+        if (_user.TenantId is null) return Array.Empty<SkuListItem>();
+        var q = _db.Skus.AsNoTracking().Include(s => s.Category).Include(s => s.Brand).Where(s => s.TenantId == _user.TenantId);
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var s = search.Trim().ToLower();
+            q = q.Where(x => x.Name.ToLower().Contains(s) || x.Code.ToLower().Contains(s));
+        }
+        if (lowStock == true) q = q.Where(x => x.ReorderLevel > 0 && x.StockOnHand <= x.ReorderLevel);
+        if (categoryId.HasValue) q = q.Where(x => x.CategoryId == categoryId.Value);
+
+        return await q.OrderBy(x => x.Name)
+            .Select(x => new SkuListItem(x.Id, x.Code, x.Name, x.Category != null ? x.Category.Name : null, x.Unit, x.SellingPrice, x.CostPrice, x.TaxPercent,
+                x.StockOnHand, x.ReorderLevel, x.NearestExpiry, x.IsActive, x.IsListedInApp, x.AppImageUrl,
+                x.Description, x.CategoryId, x.MrpPrice, x.HsnSacCode, x.TrackExpiry,
+                x.BrandId, x.Brand != null ? x.Brand.Name : null, null)).ToListAsync(ct);
+    }
+
     public async Task<SkuListItem?> GetSkuAsync(Guid id, CancellationToken ct = default)
     {
         if (_user.TenantId is null) return null;
@@ -188,6 +207,20 @@ public class InventoryService : IInventoryService
             .Select(x => new PoListItem(x.Id, x.LegacyPoNumber, x.PoNumber, x.Vendor!.Name, x.Status, x.PurchaseDate,
                 x.VendorInvoiceNumber, x.PaymentStatus, x.NumberOfItems, x.Total, x.Paid, x.Due)).ToListAsync(ct);
         return new PagedResult<PoListItem>(items, total, pg, sz);
+    }
+
+    public async Task<IReadOnlyList<PoListItem>> ExportPosAsync(string? search, CancellationToken ct = default)
+    {
+        if (_user.TenantId is null) return Array.Empty<PoListItem>();
+        var q = _db.PurchaseOrders.AsNoTracking().Include(p => p.Vendor).Where(p => p.TenantId == _user.TenantId);
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var s = search.Trim().ToLower();
+            q = q.Where(x => x.PoNumber.ToLower().Contains(s) || x.Vendor!.Name.ToLower().Contains(s));
+        }
+        return await q.OrderByDescending(x => x.PurchaseDate)
+            .Select(x => new PoListItem(x.Id, x.LegacyPoNumber, x.PoNumber, x.Vendor!.Name, x.Status, x.PurchaseDate,
+                x.VendorInvoiceNumber, x.PaymentStatus, x.NumberOfItems, x.Total, x.Paid, x.Due)).ToListAsync(ct);
     }
 
     public async Task<PoDetail?> GetPoAsync(Guid id, CancellationToken ct = default)

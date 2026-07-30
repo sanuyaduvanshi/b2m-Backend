@@ -41,6 +41,11 @@ public class InventoryController : ControllerBase
     public async Task<IActionResult> Skus([FromQuery] string? search, [FromQuery] bool? lowStock, [FromQuery] bool? inAppStore, [FromQuery] Guid? categoryId, [FromQuery] int page = 1, [FromQuery] int pageSize = 50, [FromQuery] bool withVariants = false, CancellationToken ct = default)
         => Ok(await _svc.ListSkusAsync(search, lowStock, inAppStore, categoryId, page, pageSize, withVariants, ct));
 
+    [HttpGet("skus/export")]
+    [HasPermission(Modules.Inventory, Actions.Export)]
+    public async Task<IActionResult> ExportSkus([FromQuery] string? search, [FromQuery] bool? lowStock, [FromQuery] Guid? categoryId, CancellationToken ct)
+        => Ok(await _svc.ExportSkusAsync(search, lowStock, categoryId, ct));
+
     [HttpPatch("skus/{id:guid}/listing")]
     [HasPermission(Modules.Inventory, Actions.Edit)]
     public async Task<IActionResult> UpdateSkuListing(Guid id, [FromBody] UpdateSkuListingRequest req, CancellationToken ct)
@@ -94,6 +99,11 @@ public class InventoryController : ControllerBase
     [HasPermission(Modules.Inventory, Actions.View)]
     public async Task<IActionResult> Pos([FromQuery] string? search, [FromQuery] int page = 1, [FromQuery] int pageSize = 50, CancellationToken ct = default)
         => Ok(await _svc.ListPosAsync(search, page, pageSize, ct));
+
+    [HttpGet("purchase-orders/export")]
+    [HasPermission(Modules.Inventory, Actions.Export)]
+    public async Task<IActionResult> ExportPos([FromQuery] string? search, CancellationToken ct)
+        => Ok(await _svc.ExportPosAsync(search, ct));
 
     [HttpGet("purchase-orders/{id:guid}")]
     [HasPermission(Modules.Inventory, Actions.View)]

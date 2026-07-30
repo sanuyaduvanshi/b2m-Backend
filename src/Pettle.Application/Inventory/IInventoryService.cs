@@ -5,6 +5,9 @@ using Pettle.Application.Clients;
 public interface IInventoryService
 {
     Task<PagedResult<SkuListItem>> ListSkusAsync(string? search, bool? lowStock, bool? inAppStore, Guid? categoryId, int page, int pageSize, bool withVariants = false, CancellationToken ct = default);
+    /// <summary>Same filters as ListSkusAsync but every match, unpaginated — backs the SKU table's
+    /// "Download Report" so the export matches exactly what's on screen, not a separate dataset.</summary>
+    Task<IReadOnlyList<SkuListItem>> ExportSkusAsync(string? search, bool? lowStock, Guid? categoryId, CancellationToken ct = default);
     Task<SkuListItem?> GetSkuAsync(Guid id, CancellationToken ct = default);
     Task<SkuListItem> CreateSkuAsync(CreateOrUpdateSkuRequest req, CancellationToken ct = default);
     Task<SkuListItem?> UpdateSkuAsync(Guid id, CreateOrUpdateSkuRequest req, CancellationToken ct = default);
@@ -27,6 +30,9 @@ public interface IInventoryService
     Task<bool> DeleteVendorAsync(Guid id, CancellationToken ct = default);
 
     Task<PagedResult<PoListItem>> ListPosAsync(string? search, int page, int pageSize, CancellationToken ct = default);
+    /// <summary>Same filter as ListPosAsync but every match, unpaginated — backs the Purchase
+    /// Order table's "Download Report".</summary>
+    Task<IReadOnlyList<PoListItem>> ExportPosAsync(string? search, CancellationToken ct = default);
     Task<PoDetail?> GetPoAsync(Guid id, CancellationToken ct = default);
     Task<PoDetail> CreatePoAsync(CreatePoRequest req, CancellationToken ct = default);
     Task<PoDetail?> UpdatePoAsync(Guid id, CreatePoRequest req, CancellationToken ct = default);
