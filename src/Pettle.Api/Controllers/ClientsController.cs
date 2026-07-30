@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Pettle.Api.Authorization;
 using Pettle.Application.Clients;
+using Pettle.Domain.Clients;
 using Pettle.Domain.Identity;
 
 namespace Pettle.Api.Controllers;
@@ -16,6 +17,11 @@ public class ClientsController : ControllerBase
     [HasPermission(Modules.ClientDatabase, Actions.View)]
     public async Task<IActionResult> List([FromQuery] ClientListQuery query, CancellationToken ct)
         => Ok(await _service.ListAsync(query, ct));
+
+    [HttpGet("export")]
+    [HasPermission(Modules.ClientDatabase, Actions.Export)]
+    public async Task<IActionResult> Export([FromQuery] string? search, [FromQuery] ClientStatus? status, CancellationToken ct)
+        => Ok(await _service.ExportAsync(search, status, ct));
 
     [HttpGet("{id:guid}")]
     [HasPermission(Modules.ClientDatabase, Actions.View)]

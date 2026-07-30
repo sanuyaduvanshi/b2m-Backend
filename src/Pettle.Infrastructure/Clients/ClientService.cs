@@ -84,6 +84,53 @@ public class ClientService : IClientService
         return new PagedResult<PetParentListItem>(items, total, page, size);
     }
 
+    public async Task<IReadOnlyList<PetParentListItem>> ExportAsync(string? search, ClientStatus? status, CancellationToken ct = default)
+    {
+        if (_user.TenantId is null) return Array.Empty<PetParentListItem>();
+
+        var q = _db.PetParents.AsNoTracking().Where(p => p.TenantId == _user.TenantId);
+
+        if (status.HasValue)
+            q = q.Where(p => p.Status == status.Value);
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var s = search.Trim().ToLower();
+            q = q.Where(p =>
+                p.Name.ToLower().Contains(s) ||
+                p.Phone.Contains(s) ||
+                (p.Email != null && p.Email.ToLower().Contains(s)) ||
+                p.Pets.Any(pet => pet.Name.ToLower().Contains(s)));
+        }
+
+        var items = await q.OrderBy(p => p.Name)
+            .Select(p => new PetParentListItem(
+                p.Id,
+                p.LegacyClientId,
+                p.Name,
+                p.Phone,
+                p.Email,
+                p.City,
+                p.Pets.Count,
+                p.OutstandingBalance,
+                p.WalletBalance,
+                p.Status,
+                p.OnboardingDate,
+                null,
+                p.Tags.Select(t => t.ClientTag!.Name).ToList(),
+                p.Pets.Where(pet => pet.Breed != null).Select(pet => pet.Breed!).Distinct().ToList()
+            )).ToListAsync(ct);
+
+        var ids = items.Select(i => i.Id).ToList();
+        var latestByParent = await _db.Bookings.AsNoTracking()
+            .Where(b => b.TenantId == _user.TenantId && b.PetParentId != null && ids.Contains(b.PetParentId.Value))
+            .GroupBy(b => b.PetParentId!.Value)
+            .Select(g => new { ParentId = g.Key, Latest = g.Max(b => b.BookingDate) })
+            .ToDictionaryAsync(x => x.ParentId, x => x.Latest, ct);
+
+        return items.Select(i => i with { LatestBookingDate = latestByParent.GetValueOrDefault(i.Id) }).ToList();
+    }
+
     public async Task<PetParentDetail?> GetAsync(Guid id, CancellationToken ct = default)
     {
         if (_user.TenantId is null) return null;
