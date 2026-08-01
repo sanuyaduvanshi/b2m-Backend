@@ -41,6 +41,12 @@ public class SubscriptionsController : ControllerBase
         [FromQuery] int page = 1, [FromQuery] int pageSize = 50, CancellationToken ct = default)
         => Ok(await _svc.ListIssuedAsync(search, status, page, pageSize, ct));
 
+    [HttpGet("issued/export")]
+    [HasPermission(Modules.Subscriptions, Actions.Export)]
+    public async Task<IActionResult> ExportIssued([FromQuery] string? search, [FromQuery] IssuedSubscriptionStatus? status,
+        [FromQuery] Guid? packageId, [FromQuery] DateOnly? from, [FromQuery] DateOnly? to, CancellationToken ct = default)
+        => Ok(await _svc.ExportIssuedAsync(search, status, packageId, from, to, ct));
+
     [HttpPost("issued")]
     [HasPermission(Modules.Subscriptions, Actions.Create)]
     public async Task<IActionResult> Issue([FromBody] IssueSubscriptionRequest req, CancellationToken ct)
@@ -69,6 +75,14 @@ public class SubscriptionsController : ControllerBase
     public async Task<IActionResult> RecordPayment(Guid id, [FromBody] RecordSubscriptionPaymentRequest req, CancellationToken ct)
     {
         var p = await _svc.RecordPaymentAsync(id, req, ct);
+        return p is null ? NotFound() : Ok(p);
+    }
+
+    [HttpPut("issued/{id:guid}/payments/{paymentId:guid}")]
+    [HasPermission(Modules.Subscriptions, Actions.Edit)]
+    public async Task<IActionResult> UpdatePayment(Guid id, Guid paymentId, [FromBody] RecordSubscriptionPaymentRequest req, CancellationToken ct)
+    {
+        var p = await _svc.UpdatePaymentAsync(id, paymentId, req, ct);
         return p is null ? NotFound() : Ok(p);
     }
 

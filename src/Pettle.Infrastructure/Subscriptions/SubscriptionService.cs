@@ -149,6 +149,29 @@ public class SubscriptionService : ISubscriptionService
         return new PagedResult<IssuedListItem>(items, total, p, sz);
     }
 
+    public async Task<IReadOnlyList<IssuedListItem>> ExportIssuedAsync(string? search, IssuedSubscriptionStatus? status, Guid? packageId, DateOnly? from, DateOnly? to, CancellationToken ct = default)
+    {
+        if (_user.TenantId is null) return Array.Empty<IssuedListItem>();
+        var q = _db.IssuedSubscriptions.AsNoTracking()
+            .Include(i => i.Package).Include(i => i.PetParent)
+            .Where(i => i.TenantId == _user.TenantId);
+        if (status.HasValue) q = q.Where(i => i.Status == status.Value);
+        if (packageId.HasValue) q = q.Where(i => i.PackageId == packageId.Value);
+        if (from.HasValue) q = q.Where(i => i.IssuedOn >= from.Value);
+        if (to.HasValue) q = q.Where(i => i.IssuedOn <= to.Value);
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var s = search.Trim().ToLower();
+            q = q.Where(i => i.PetParent!.Name.ToLower().Contains(s) || i.PetParent!.Phone.Contains(s) || i.Package!.Name.ToLower().Contains(s));
+        }
+        return await q.OrderByDescending(i => i.IssuedOn)
+            .Select(i => new IssuedListItem(
+                i.Id, i.Package!.Name, i.PetParentId, i.PetParent!.Name, i.PetParent!.Phone,
+                i.IssuedOn, i.ValidUntil, i.RemainingSessions, i.TotalSessions,
+                i.Status, i.PaymentStatus, i.AmountPaid, i.AmountDue, i.BalanceUsed, i.Package!.Description))
+            .ToListAsync(ct);
+    }
+
     public async Task<IssuedListItem> IssueAsync(IssueSubscriptionRequest req, CancellationToken ct = default)
     {
         if (_user.TenantId is null) throw AppException.Forbidden();
@@ -177,6 +200,24 @@ public class SubscriptionService : ISubscriptionService
             PaymentStatus = req.AmountPaid >= pkg.Price ? IssuedPaymentStatus.Paid : req.AmountPaid > 0 ? IssuedPaymentStatus.PartiallyPaid : IssuedPaymentStatus.Pending
         };
         _db.IssuedSubscriptions.Add(issued);
+        // The amount collected up front (full or partial) previously only updated the
+        // AmountPaid/AmountDue fields with no matching Payment row — it never showed up in the
+        // Payments ledger below, so a partial payment at issue time looked like it vanished until
+        // the remaining balance was paid later. Logging it here keeps the ledger complete from day one.
+        if (req.AmountPaid > 0)
+        {
+            _db.Payments.Add(new Payment
+            {
+                IssuedSubscriptionId = issued.Id,
+                PaymentTime = DateTimeOffset.UtcNow,
+                Amount = req.AmountPaid,
+                Mode = req.Mode,
+                Source = PaymentSource.WalkIn,
+                Type = PaymentType.Advance,
+                Status = PaymentRecordStatus.Success,
+                Notes = "Collected at subscription issue",
+            });
+        }
         await _db.SaveChangesAsync(ct);
         return new IssuedListItem(issued.Id, pkg.Name, parent.Id, parent.Name, parent.Phone,
             issued.IssuedOn, issued.ValidUntil, issued.RemainingSessions, issued.TotalSessions,
@@ -257,6 +298,47 @@ public class SubscriptionService : ISubscriptionService
             s.PaymentStatus = s.AmountDue == 0 ? IssuedPaymentStatus.Paid
                 : s.AmountPaid > 0 ? IssuedPaymentStatus.PartiallyPaid : IssuedPaymentStatus.Pending;
         }
+        await _db.SaveChangesAsync(ct);
+        return new PaymentDto(payment.Id, payment.PaymentTime, payment.Amount, payment.Mode, payment.Source, payment.TransactionId, payment.Type, payment.Status, payment.Notes);
+    }
+
+    public async Task<PaymentDto?> UpdatePaymentAsync(Guid issuedId, Guid paymentId, RecordSubscriptionPaymentRequest req, CancellationToken ct = default)
+    {
+        if (_user.TenantId is null) return null;
+        var s = await _db.IssuedSubscriptions.FirstOrDefaultAsync(x => x.Id == issuedId && x.TenantId == _user.TenantId, ct);
+        if (s is null) return null;
+        var payment = await _db.Payments.FirstOrDefaultAsync(p => p.Id == paymentId && p.IssuedSubscriptionId == issuedId && p.TenantId == _user.TenantId, ct);
+        if (payment is null) return null;
+        if (s.Status == IssuedSubscriptionStatus.Cancelled)
+            throw AppException.BusinessRule("Cannot edit a payment on a cancelled subscription.");
+        if (req.Amount <= 0)
+            throw AppException.Validation("Invalid amount",
+                new Dictionary<string, string[]> { ["amount"] = new[] { "Payment amount must be greater than zero." } });
+
+        // Free the old amount before re-validating the new one against amount due, same as
+        // invoice payment edits - otherwise the old amount is still "spent" while checking whether
+        // the new amount fits, so a same-amount edit (e.g. only changing the mode) would wrongly fail.
+        if (payment.Status == PaymentRecordStatus.Success)
+        {
+            s.AmountPaid = Math.Max(0, s.AmountPaid - payment.Amount);
+            s.AmountDue += payment.Amount;
+        }
+        if (req.Status == PaymentRecordStatus.Success && req.Amount > s.AmountDue + 0.01m)
+            throw AppException.Validation("Payment exceeds amount due",
+                new Dictionary<string, string[]> { ["amount"] = new[] { $"Payment Rs.{req.Amount:F2} exceeds amount due Rs.{s.AmountDue:F2}." } });
+
+        payment.Amount = req.Amount; payment.Mode = req.Mode; payment.Source = req.Source;
+        payment.Type = req.Type; payment.Status = req.Status;
+        payment.TransactionId = req.TransactionId; payment.Notes = req.Notes;
+        if (req.PaymentTime is { } t) payment.PaymentTime = t;
+
+        if (payment.Status == PaymentRecordStatus.Success)
+        {
+            s.AmountPaid += req.Amount;
+            s.AmountDue = Math.Max(0, s.AmountDue - req.Amount);
+        }
+        s.PaymentStatus = s.AmountDue == 0 ? IssuedPaymentStatus.Paid
+            : s.AmountPaid > 0 ? IssuedPaymentStatus.PartiallyPaid : IssuedPaymentStatus.Pending;
         await _db.SaveChangesAsync(ct);
         return new PaymentDto(payment.Id, payment.PaymentTime, payment.Amount, payment.Mode, payment.Source, payment.TransactionId, payment.Type, payment.Status, payment.Notes);
     }

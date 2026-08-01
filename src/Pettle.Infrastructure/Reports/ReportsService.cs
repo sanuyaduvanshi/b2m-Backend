@@ -196,6 +196,7 @@ public class ReportsService : IReportsService
     {
         if (_user.TenantId is null) return new PeriodSummary(0, 0, 0, 0, 0, 0, 0, 0);
         var tid = _user.TenantId.Value;
+        var (from, to) = RangeAsUtc(range);
 
         // Sale/Booking revenue come from invoices (what was actually billed for that vertical),
         // kept separate per-type so a walk-in sale never gets blended into booking revenue.
@@ -211,10 +212,18 @@ public class ReportsService : IReportsService
         var totalBookings = await _db.Bookings.CountAsync(
             b => b.TenantId == tid && b.BookingDate >= range.From && b.BookingDate <= range.To, ct);
 
-        var subs = await _db.IssuedSubscriptions.AsNoTracking()
-            .Where(s => s.TenantId == tid && s.IssuedOn >= range.From && s.IssuedOn <= range.To)
-            .Select(s => s.AmountPaid)
-            .ToListAsync(ct);
+        var subsIssuedCount = await _db.IssuedSubscriptions.CountAsync(
+            s => s.TenantId == tid && s.IssuedOn >= range.From && s.IssuedOn <= range.To, ct);
+
+        // Cash actually collected against subscriptions in the period - not "AmountPaid at issue
+        // for subscriptions issued in this period", which silently ignored any balance payment
+        // collected later (via Record Payment) on a subscription issued outside the range, and so
+        // undercounted real money received during the period. RealRevenue() drops the marker
+        // payment BookingService writes when a subscription auto-covers a booking, since that cash
+        // was already recognized when the subscription itself was purchased.
+        var subsRevenue = await _db.Payments.RealRevenue()
+            .Where(p => p.TenantId == tid && p.IssuedSubscriptionId != null && p.PaymentTime >= from && p.PaymentTime <= to)
+            .SumAsync(p => (decimal?)p.Amount, ct) ?? 0m;
 
         // Purchase Orders are money spent (cost), not revenue — kept in its own field so it's
         // never mistaken for income when the frontend labels/sums these cards.
@@ -226,7 +235,7 @@ public class ReportsService : IReportsService
         return new PeriodSummary(
             salesRevenue, salesCount,
             totalBookings, bookingsRevenue,
-            subs.Count, subs.Sum(),
+            subsIssuedCount, subsRevenue,
             poTotals.Count, poTotals.Sum());
     }
 

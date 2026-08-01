@@ -41,7 +41,7 @@ public record IssuedListItem(
     decimal BalanceUsed = 0, string? PackageDescription = null
 );
 
-public record IssueSubscriptionRequest(Guid PackageId, Guid PetParentId, int TotalSessions, DateOnly? IssuedOn, decimal AmountPaid);
+public record IssueSubscriptionRequest(Guid PackageId, Guid PetParentId, int TotalSessions, DateOnly? IssuedOn, decimal AmountPaid, PaymentMode Mode = PaymentMode.Cash);
 
 // Public, unauthenticated view of an issued subscription — the WhatsApp "your subscription is
 // confirmed" message links customers straight to this so they can see what they were billed for
@@ -58,12 +58,16 @@ public interface ISubscriptionService
     Task<bool> DeletePackageAsync(Guid id, CancellationToken ct = default);
 
     Task<PagedResult<IssuedListItem>> ListIssuedAsync(string? search, IssuedSubscriptionStatus? status, int page, int pageSize, CancellationToken ct = default);
+    /// <summary>Every issued subscription matching the filters, unpaginated — backs the
+    /// Subscriptions report's KPI cards and its CSV download so both read the same rows.</summary>
+    Task<IReadOnlyList<IssuedListItem>> ExportIssuedAsync(string? search, IssuedSubscriptionStatus? status, Guid? packageId, DateOnly? from, DateOnly? to, CancellationToken ct = default);
     Task<IssuedListItem> IssueAsync(IssueSubscriptionRequest req, CancellationToken ct = default);
     Task<bool> FreezeAsync(Guid id, CancellationToken ct = default);
     Task<bool> CancelAsync(Guid id, CancellationToken ct = default);
 
     Task<IssuedSubscriptionDetail?> GetIssuedAsync(Guid id, CancellationToken ct = default);
     Task<PaymentDto?> RecordPaymentAsync(Guid issuedId, RecordSubscriptionPaymentRequest req, CancellationToken ct = default);
+    Task<PaymentDto?> UpdatePaymentAsync(Guid issuedId, Guid paymentId, RecordSubscriptionPaymentRequest req, CancellationToken ct = default);
     Task<bool> DeletePaymentAsync(Guid issuedId, Guid paymentId, CancellationToken ct = default);
 
     Task<ActiveSubscriptionSummary?> GetActiveByClientAsync(Guid petParentId, string? packageType = null, CancellationToken ct = default);
