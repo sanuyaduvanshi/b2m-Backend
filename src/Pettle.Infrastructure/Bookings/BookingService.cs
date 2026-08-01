@@ -469,6 +469,11 @@ public class BookingServiceImpl : IBookingService
                 .FirstOrDefaultAsync(s => s.Id == req.UseSubscriptionId.Value
                     && s.TenantId == _user.TenantId && s.PetParentId == req.PetParentId.Value
                     && s.Status == IssuedSubscriptionStatus.Active, ct);
+            // Nothing ever flips a subscription's Status to Expired once ValidUntil passes (that
+            // only ever gets read, e.g. by the "active subscriptions" dropdown) - without this
+            // check here too, a subscription past its own validity date with sessions still left
+            // kept covering bookings indefinitely, since Status alone stayed "Active" forever.
+            if (sub is not null && sub.ValidUntil < BusinessClock.TodayIst()) sub = null;
             // A subscription with no sessions left is exhausted regardless of Status/ValidUntil —
             // without this the client's own request body deciding whether to auto-debit meant an
             // already-used-up plan kept covering bookings for free indefinitely.

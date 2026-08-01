@@ -105,11 +105,14 @@ public class ReportsService : IReportsService
             .Select(e => new { e.Time, e.AmountIncTax })
             .ToListAsync(ct);
 
+        // IST-based grouping, not UTC calendar month - a payment made between midnight and 5:30 AM
+        // IST on the 1st of a month is still the previous UTC day (and so the previous UTC month),
+        // which silently rolled it into last month's bar on the Profit trend chart.
         var revenueByMonth = rawPayments
-            .GroupBy(p => p.PaymentTime.UtcDateTime.ToString("yyyy-MM"))
+            .GroupBy(p => BusinessClock.ToIstDate(p.PaymentTime).ToString("yyyy-MM"))
             .ToDictionary(g => g.Key, g => g.Sum(x => x.Amount));
         var expensesByMonth = rawExpenses
-            .GroupBy(e => e.Time.UtcDateTime.ToString("yyyy-MM"))
+            .GroupBy(e => BusinessClock.ToIstDate(e.Time).ToString("yyyy-MM"))
             .ToDictionary(g => g.Key, g => g.Sum(x => x.AmountIncTax));
 
         var months = revenueByMonth.Keys.Union(expensesByMonth.Keys).OrderBy(m => m).ToList();

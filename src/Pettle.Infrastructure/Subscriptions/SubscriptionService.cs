@@ -198,6 +198,9 @@ public class SubscriptionService : ISubscriptionService
         var parent = await _db.PetParents.FirstOrDefaultAsync(p => p.Id == req.PetParentId && p.TenantId == _user.TenantId, ct)
             ?? throw AppException.Validation("Invalid pet parent",
                 new Dictionary<string, string[]> { ["petParentId"] = new[] { "Pet parent not found in this business." } });
+        if (req.AmountPaid < 0)
+            throw AppException.Validation("Invalid amount",
+                new Dictionary<string, string[]> { ["amountPaid"] = new[] { "Amount paid cannot be negative." } });
         if (req.AmountPaid > pkg.Price + 0.01m)
             throw AppException.Validation("Amount paid exceeds package price",
                 new Dictionary<string, string[]> { ["amountPaid"] = new[] { $"Amount paid Rs.{req.AmountPaid:F2} > price Rs.{pkg.Price:F2}." } });

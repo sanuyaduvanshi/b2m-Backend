@@ -312,6 +312,9 @@ public class InvoiceService : IInvoiceService
 
         if (invoice.PaymentStatus == InvoicePaymentStatus.Cancelled || invoice.PaymentStatus == InvoicePaymentStatus.Refunded)
             throw AppException.BusinessRule($"Cannot record a payment on an invoice that's already {invoice.PaymentStatus.Humanize().ToLower()}.");
+        if (req.Amount <= 0)
+            throw AppException.Validation("Invalid amount",
+                new Dictionary<string, string[]> { ["amount"] = new[] { "Payment amount must be greater than zero." } });
         if (req.Amount > invoice.Due + 0.01m)
             throw AppException.Validation("Payment exceeds amount due",
                 new Dictionary<string, string[]> { ["amount"] = new[] { $"Payment ₹{req.Amount:F2} exceeds amount due ₹{invoice.Due:F2}." } });
@@ -350,6 +353,9 @@ public class InvoiceService : IInvoiceService
         if (invoice is null) return null;
         var payment = invoice.Payments.FirstOrDefault(p => p.Id == paymentId);
         if (payment is null) return null;
+        if (req.Amount <= 0)
+            throw AppException.Validation("Invalid amount",
+                new Dictionary<string, string[]> { ["amount"] = new[] { "Payment amount must be greater than zero." } });
 
         // Keep the source subscription's balance in sync with whatever this payment settles to
         // now — without this, editing the amount on an auto-debited payment left the subscription
@@ -442,6 +448,43 @@ public class InvoiceService : IInvoiceService
             throw AppException.Validation("Empty invoice",
                 new Dictionary<string, string[]> { ["lines"] = new[] { "Add at least one line item." } });
 
+        // Compute the new totals first, purely in memory - validated (including against money
+        // already collected) before anything is written, so a rejected edit can't leave the
+        // invoice's old line items hard-deleted with the new ones never having been saved.
+        decimal sumGross = 0, sumLineDiscount = 0, sumTaxable = 0, sumTax = 0;
+        foreach (var line in req.Lines)
+        {
+            if (line.Quantity <= 0)
+                throw AppException.Validation("Invalid quantity",
+                    new Dictionary<string, string[]> { ["lines"] = new[] { $"Quantity must be > 0 for '{line.ItemName}'." } });
+
+            var gross = line.Quantity * line.UnitAmount;
+            var disc = gross * (line.DiscountPercent / 100m);
+            var net = gross - disc;
+            var taxable = line.TaxPercent > 0 ? net / (1 + line.TaxPercent / 100m) : net;
+            var taxAmt = net - taxable;
+
+            sumGross += gross;
+            sumLineDiscount += disc;
+            sumTaxable += taxable;
+            sumTax += taxAmt;
+        }
+
+        // Bill-level flat discount
+        var flatDiscAmt = sumTaxable * (req.FlatDiscountPercent / 100m);
+        var finalTaxable = sumTaxable - flatDiscAmt;
+        var finalTax = sumTaxable > 0 ? sumTax * (finalTaxable / sumTaxable) : 0m;
+        var rawTotal = finalTaxable + finalTax + req.AdditionalCharges;
+        var rounded = Math.Round(rawTotal, MidpointRounding.AwayFromZero);
+
+        // Editing a line/discount can lower the total below what's already been collected - without
+        // this check, Due just clamped to 0 and the invoice silently showed "Paid" while quietly
+        // holding an overpayment with no refund, credit note, or any record of where that money went.
+        if (invoice.Paid > R(rounded) + 0.01m)
+            throw AppException.Validation("Edit would overpay the invoice",
+                new Dictionary<string, string[]> { ["lines"] = new[] {
+                    $"₹{invoice.Paid:F2} is already paid, but this edit brings the total to ₹{R(rounded):F2}. Refund the difference first, then edit." } });
+
         // Header
         invoice.InvoiceDate = req.InvoiceDate;
         invoice.ParentNameSnapshot = req.ParentName.Trim();
@@ -453,14 +496,8 @@ public class InvoiceService : IInvoiceService
         await _db.InvoiceLineItems
             .Where(l => l.InvoiceId == id && l.TenantId == _user.TenantId.Value)
             .ExecuteDeleteAsync(ct);
-
-        decimal sumGross = 0, sumLineDiscount = 0, sumTaxable = 0, sumTax = 0;
         foreach (var line in req.Lines)
         {
-            if (line.Quantity <= 0)
-                throw AppException.Validation("Invalid quantity",
-                    new Dictionary<string, string[]> { ["lines"] = new[] { $"Quantity must be > 0 for '{line.ItemName}'." } });
-
             var gross = line.Quantity * line.UnitAmount;
             var disc = gross * (line.DiscountPercent / 100m);
             var net = gross - disc;
@@ -480,19 +517,7 @@ public class InvoiceService : IInvoiceService
                 SgstAmount = R(taxAmt / 2m),
                 Total = R(net),
             });
-
-            sumGross += gross;
-            sumLineDiscount += disc;
-            sumTaxable += taxable;
-            sumTax += taxAmt;
         }
-
-        // Bill-level flat discount
-        var flatDiscAmt = sumTaxable * (req.FlatDiscountPercent / 100m);
-        var finalTaxable = sumTaxable - flatDiscAmt;
-        var finalTax = sumTaxable > 0 ? sumTax * (finalTaxable / sumTaxable) : 0m;
-        var rawTotal = finalTaxable + finalTax + req.AdditionalCharges;
-        var rounded = Math.Round(rawTotal, MidpointRounding.AwayFromZero);
 
         invoice.BaseAmount = R(sumTaxable);
         invoice.DiscountAmount = R(sumLineDiscount + flatDiscAmt);

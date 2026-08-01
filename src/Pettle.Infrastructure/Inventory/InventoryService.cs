@@ -448,7 +448,10 @@ public class InventoryService : IInventoryService
                 var sku = await _db.Skus.FirstOrDefaultAsync(s => s.Id == line.SkuId && s.TenantId == _user.TenantId, ct);
                 if (sku is not null)
                 {
-                    sku.StockOnHand += (int)delta;
+                    // A downward correction (e.g. fixing an over-receipt after some of that stock
+                    // already sold) could otherwise drive this negative with no floor, unlike
+                    // CreateStockAdjustmentAsync which already clamps at 0.
+                    sku.StockOnHand = Math.Max(0, sku.StockOnHand + (int)delta);
                     if (delta > 0 && line.LandingCost > 0)
                         sku.CostPrice = line.LandingCost;
 
