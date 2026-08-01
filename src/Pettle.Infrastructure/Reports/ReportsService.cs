@@ -203,11 +203,13 @@ public class ReportsService : IReportsService
         var invoicesByType = await _db.Invoices.AsNoTracking()
             .Where(i => i.TenantId == tid && i.InvoiceDate >= range.From && i.InvoiceDate <= range.To
                         && (i.InvoiceType == InvoiceType.Sale || i.InvoiceType == InvoiceType.Booking))
-            .Select(i => new { i.InvoiceType, i.Revenue })
+            .Select(i => new { i.InvoiceType, i.Revenue, i.Due })
             .ToListAsync(ct);
         var salesRevenue = invoicesByType.Where(i => i.InvoiceType == InvoiceType.Sale).Sum(i => i.Revenue);
         var salesCount = invoicesByType.Count(i => i.InvoiceType == InvoiceType.Sale);
+        var salesDue = invoicesByType.Where(i => i.InvoiceType == InvoiceType.Sale).Sum(i => i.Due);
         var bookingsRevenue = invoicesByType.Where(i => i.InvoiceType == InvoiceType.Booking).Sum(i => i.Revenue);
+        var bookingsDue = invoicesByType.Where(i => i.InvoiceType == InvoiceType.Booking).Sum(i => i.Due);
 
         var totalBookings = await _db.Bookings.CountAsync(
             b => b.TenantId == tid && b.BookingDate >= range.From && b.BookingDate <= range.To, ct);
@@ -225,6 +227,12 @@ public class ReportsService : IReportsService
             .Where(p => p.TenantId == tid && p.IssuedSubscriptionId != null && p.PaymentTime >= from && p.PaymentTime <= to)
             .SumAsync(p => (decimal?)p.Amount, ct) ?? 0m;
 
+        // How much is still outstanding across subscriptions issued in this period specifically —
+        // paired with subsRevenue (all-time cash collected) to show a paid-vs-due split on the card.
+        var subsDue = await _db.IssuedSubscriptions.AsNoTracking()
+            .Where(s => s.TenantId == tid && s.IssuedOn >= range.From && s.IssuedOn <= range.To)
+            .SumAsync(s => (decimal?)s.AmountDue, ct) ?? 0m;
+
         // Purchase Orders are money spent (cost), not revenue — kept in its own field so it's
         // never mistaken for income when the frontend labels/sums these cards.
         var poTotals = await _db.PurchaseOrders.AsNoTracking()
@@ -236,7 +244,8 @@ public class ReportsService : IReportsService
             salesRevenue, salesCount,
             totalBookings, bookingsRevenue,
             subsIssuedCount, subsRevenue,
-            poTotals.Count, poTotals.Sum());
+            poTotals.Count, poTotals.Sum(),
+            salesDue, bookingsDue, subsDue);
     }
 
     public async Task<InventoryReport> InventoryAsync(CancellationToken ct = default)
