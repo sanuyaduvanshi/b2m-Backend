@@ -128,6 +128,10 @@ public class ReportsService : IReportsService
 
         var services = await _db.BookingServices.AsNoTracking()
             .Where(s => s.TenantId == tid && s.Booking!.BookingDate >= range.From && s.Booking.BookingDate <= range.To)
+            .Select(s => new {
+                s.BookingId, s.ServiceType, s.Status, s.FinalAmount,
+                s.Booking!.GrossBillingAmount, s.Booking.TotalBillingAmount,
+            })
             .ToListAsync(ct);
 
         var bookingsCount = services.Select(s => s.BookingId).Distinct().Count();
@@ -135,8 +139,17 @@ public class ReportsService : IReportsService
         var cancelled = services.Count(s => s.Status == BookingStatus.Cancelled);
         var noshow = services.Count(s => s.Status == BookingStatus.NoShow);
 
+        // ApplyDiscountAsync only adjusts Booking.TotalBillingAmount/Invoice.Revenue, never each
+        // line's own FinalAmount - summed straight, a discounted booking's services still added up
+        // to the pre-discount gross, so this breakdown never reconciled with "Bookings Revenue"
+        // elsewhere on the same page. Scale each line by the booking's actual discount ratio so the
+        // two agree; bookings that never had a discount applied (GrossBillingAmount unset) pass
+        // through unchanged.
         var breakdown = services.GroupBy(s => s.ServiceType)
-            .Select(g => new BookingsBreakdown(g.Key.ToString(), g.Count(), g.Sum(x => x.FinalAmount)))
+            .Select(g => new BookingsBreakdown(g.Key.ToString(), g.Count(), g.Sum(x =>
+                x.GrossBillingAmount > 0.01m
+                    ? Math.Round(x.FinalAmount * (x.TotalBillingAmount / x.GrossBillingAmount), 2, MidpointRounding.AwayFromZero)
+                    : x.FinalAmount)))
             .ToList();
 
         return new BookingsReport(bookingsCount, completed, cancelled, noshow, breakdown);
