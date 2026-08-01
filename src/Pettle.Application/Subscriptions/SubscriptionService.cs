@@ -64,6 +64,9 @@ public interface ISubscriptionService
     Task<IssuedListItem> IssueAsync(IssueSubscriptionRequest req, CancellationToken ct = default);
     Task<bool> FreezeAsync(Guid id, CancellationToken ct = default);
     Task<bool> CancelAsync(Guid id, CancellationToken ct = default);
+    /// <summary>Hard-deletes an issued subscription — only allowed when AmountPaid is 0, mirroring
+    /// invoices, so a subscription with money against it can't be removed except via Cancel.</summary>
+    Task<bool> DeleteIssuedAsync(Guid id, CancellationToken ct = default);
 
     Task<IssuedSubscriptionDetail?> GetIssuedAsync(Guid id, CancellationToken ct = default);
     Task<PaymentDto?> RecordPaymentAsync(Guid issuedId, RecordSubscriptionPaymentRequest req, CancellationToken ct = default);

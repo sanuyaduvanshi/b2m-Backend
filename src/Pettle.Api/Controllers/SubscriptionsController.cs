@@ -62,6 +62,11 @@ public class SubscriptionsController : ControllerBase
     public async Task<IActionResult> Cancel(Guid id, CancellationToken ct)
         => await _svc.CancelAsync(id, ct) ? NoContent() : NotFound();
 
+    [HttpDelete("issued/{id:guid}")]
+    [HasPermission(Modules.Subscriptions, Actions.Delete)]
+    public async Task<IActionResult> DeleteIssued(Guid id, CancellationToken ct)
+        => await _svc.DeleteIssuedAsync(id, ct) ? NoContent() : NotFound();
+
     [HttpGet("issued/{id:guid}")]
     [HasPermission(Modules.Subscriptions, Actions.View)]
     public async Task<IActionResult> IssuedDetail(Guid id, CancellationToken ct)

@@ -253,6 +253,21 @@ public class SubscriptionService : ISubscriptionService
         return true;
     }
 
+    public async Task<bool> DeleteIssuedAsync(Guid id, CancellationToken ct = default)
+    {
+        if (_user.TenantId is null) return false;
+        var s = await _db.IssuedSubscriptions.FirstOrDefaultAsync(x => x.Id == id && x.TenantId == _user.TenantId, ct);
+        if (s is null) return false;
+        // Same rule as invoices: only a subscription that never collected any money can be
+        // outright deleted - anything with a payment against it must go through Cancel instead,
+        // so a paid record can't quietly disappear from revenue history.
+        if (s.AmountPaid > 0)
+            throw AppException.BusinessRule("Cannot delete a subscription that has payments recorded — cancel it instead.");
+        _db.IssuedSubscriptions.Remove(s);
+        await _db.SaveChangesAsync(ct);
+        return true;
+    }
+
     public async Task<IssuedSubscriptionDetail?> GetIssuedAsync(Guid id, CancellationToken ct = default)
     {
         if (_user.TenantId is null) return null;
