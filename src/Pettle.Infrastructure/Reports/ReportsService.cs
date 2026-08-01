@@ -15,7 +15,7 @@ public class ReportsService : IReportsService
     public ReportsService(PettleDbContext db, ICurrentUser user) { _db = db; _user = user; }
 
     private (DateTimeOffset from, DateTimeOffset to) RangeAsUtc(DateRange r)
-        => (r.From.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc), r.To.ToDateTime(TimeOnly.MaxValue, DateTimeKind.Utc));
+        => (BusinessClock.StartOfDayUtc(r.From), BusinessClock.EndOfDayUtc(r.To));
 
     public async Task<ReportsOverview> OverviewAsync(DateRange range, CancellationToken ct = default)
     {
@@ -27,7 +27,10 @@ public class ReportsService : IReportsService
             .SumAsync(p => (decimal?)p.Amount, ct) ?? 0m;
         var bookings = await _db.Bookings.CountAsync(b => b.TenantId == tid && b.BookingDate >= range.From && b.BookingDate <= range.To, ct);
         var newClients = await _db.PetParents.CountAsync(p => p.TenantId == tid && p.OnboardingDate >= range.From && p.OnboardingDate <= range.To, ct);
-        var invoices = await _db.Invoices.CountAsync(i => i.TenantId == tid && i.InvoiceDate >= range.From && i.InvoiceDate <= range.To, ct);
+        // Credit notes are a return/liability record, not a new sale — counting them here would
+        // inflate "invoices raised" with entries that generated no new revenue.
+        var invoices = await _db.Invoices.CountAsync(i => i.TenantId == tid && i.InvoiceDate >= range.From && i.InvoiceDate <= range.To
+            && i.InvoiceType != InvoiceType.CreditNote, ct);
         return new ReportsOverview(revenue, bookings, newClients, invoices);
     }
 
@@ -41,6 +44,14 @@ public class ReportsService : IReportsService
             .Where(i => i.TenantId == tid && i.InvoiceDate >= range.From && i.InvoiceDate <= range.To)
             .Select(i => new { i.Revenue, i.Paid, i.Due, i.InvoiceType, i.PaymentStatus })
             .ToListAsync(ct);
+
+        // A credit note only records a store-credit liability against a return — its Revenue/Paid
+        // fields are set just so it displays like a normal settled line item, not because it's a
+        // new sale. Summing it into the headline Total/Paid/Due here would double-count money
+        // already recognized as revenue on the invoice the credit note was issued against. It stays
+        // in `invoices` (and so in byType/byStatus/countByType below) since seeing "how much credit
+        // was issued" is legitimate — it just shouldn't inflate the combined totals.
+        var revenueInvoices = invoices.Where(i => i.InvoiceType != InvoiceType.CreditNote).ToList();
 
         var byType = invoices.GroupBy(i => i.InvoiceType.ToString())
             .Select(g => new ExpenseSlice(g.Key, g.Sum(x => x.Revenue)))
@@ -58,7 +69,7 @@ public class ReportsService : IReportsService
             .ToListAsync(ct);
 
         var daily = rawPayments
-            .GroupBy(p => DateOnly.FromDateTime(p.PaymentTime.UtcDateTime))
+            .GroupBy(p => BusinessClock.ToIstDate(p.PaymentTime))
             .Select(g => new RevenuePoint(g.Key, g.Sum(x => x.Amount)))
             .OrderBy(p => p.Date)
             .ToList();
@@ -68,14 +79,14 @@ public class ReportsService : IReportsService
             .ToDictionary(g => g.Key.ToString(), g => g.Sum(x => x.Amount));
 
         return new RevenueReport(
-            invoices.Sum(i => i.Revenue),
-            invoices.Sum(i => i.Paid),
-            invoices.Sum(i => i.Due),
+            revenueInvoices.Sum(i => i.Revenue),
+            revenueInvoices.Sum(i => i.Paid),
+            revenueInvoices.Sum(i => i.Due),
             daily,
             byMode,
             byType,
             byStatus,
-            invoices.Count,
+            revenueInvoices.Count,
             countByType);
     }
 
@@ -144,7 +155,8 @@ public class ReportsService : IReportsService
         // doesn't translate to PostgreSQL cleanly.
         var rawInvoices = await _db.Invoices.AsNoTracking()
             .Where(i => i.TenantId == tid && i.PetParentId.HasValue
-                        && i.InvoiceDate >= range.From && i.InvoiceDate <= range.To)
+                        && i.InvoiceDate >= range.From && i.InvoiceDate <= range.To
+                        && i.InvoiceType != InvoiceType.CreditNote)
             .Select(i => new { ParentId = i.PetParentId!.Value, i.ParentNameSnapshot, i.PhoneSnapshot, i.Revenue })
             .ToListAsync(ct);
 

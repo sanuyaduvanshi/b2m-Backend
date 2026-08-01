@@ -47,8 +47,8 @@ public class DashboardService : IDashboardService
                 && (d.BookingService!.Status == BookingStatus.CheckedIn || d.BookingService.Status == BookingStatus.Active)
                 && (!restrictOwn || d.BookingService.CreatedById == uid), ct);
 
-        var todayStart = today.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
-        var todayEnd = today.ToDateTime(TimeOnly.MaxValue, DateTimeKind.Utc);
+        var todayStart = BusinessClock.StartOfDayUtc(today);
+        var todayEnd = BusinessClock.EndOfDayUtc(today);
         var revenueToday = await _db.Payments.RealRevenue()
             .Where(p => p.TenantId == tid && p.PaymentTime >= todayStart && p.PaymentTime <= todayEnd
                 && (!restrictOwn || p.CreatedById == uid))
@@ -72,13 +72,13 @@ public class DashboardService : IDashboardService
             .ToListAsync(ct);
 
         // ---------- Revenue trend (last 14 days, fill gaps with zero) ----------
-        var fromUtc = today.AddDays(-13).ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
+        var fromUtc = BusinessClock.StartOfDayUtc(today.AddDays(-13));
         var rawPayments = await _db.Payments.AsNoTracking().RealRevenue()
             .Where(p => p.TenantId == tid && p.PaymentTime >= fromUtc && p.PaymentTime <= todayEnd)
             .Select(p => new { p.PaymentTime, p.Amount })
             .ToListAsync(ct);
         var byDay = rawPayments
-            .GroupBy(p => DateOnly.FromDateTime(p.PaymentTime.UtcDateTime))
+            .GroupBy(p => BusinessClock.ToIstDate(p.PaymentTime))
             .ToDictionary(g => g.Key, g => g.Sum(p => p.Amount));
         var trend = Enumerable.Range(0, 14)
             .Select(i => today.AddDays(-(13 - i)))

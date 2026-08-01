@@ -24,8 +24,8 @@ public class ExpenseService : IExpenseService
             var s = search.Trim().ToLower();
             q = q.Where(e => e.Description.ToLower().Contains(s) || (e.CategoryName != null && e.CategoryName.ToLower().Contains(s)));
         }
-        if (from.HasValue) q = q.Where(e => e.Time >= from.Value.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc));
-        if (to.HasValue) q = q.Where(e => e.Time <= to.Value.ToDateTime(TimeOnly.MaxValue, DateTimeKind.Utc));
+        if (from.HasValue) q = q.Where(e => e.Time >= BusinessClock.StartOfDayUtc(from.Value));
+        if (to.HasValue) q = q.Where(e => e.Time <= BusinessClock.EndOfDayUtc(to.Value));
 
         var total = await q.CountAsync(ct);
         var p = Math.Max(page, 1); var sz = Math.Clamp(pageSize, 1, 200);

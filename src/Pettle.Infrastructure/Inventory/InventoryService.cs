@@ -875,8 +875,8 @@ public class InventoryService : IInventoryService
     public async Task<IReadOnlyList<StockMovementDto>> ExportMovementsAsync(DateOnly from, DateOnly to, CancellationToken ct = default)
     {
         if (_user.TenantId is null) return Array.Empty<StockMovementDto>();
-        var fromUtc = from.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
-        var toUtc = to.ToDateTime(TimeOnly.MaxValue, DateTimeKind.Utc);
+        var fromUtc = BusinessClock.StartOfDayUtc(from);
+        var toUtc = BusinessClock.EndOfDayUtc(to);
 
         return await _db.StockMovements
             .Include(m => m.Sku)
