@@ -43,7 +43,8 @@ public record PeriodSummary(
     int TotalBookings, decimal BookingsRevenue,
     int TotalSubscriptions, decimal SubscriptionsRevenue,
     int TotalPurchaseOrders, decimal PurchaseOrdersValue,
-    decimal SalesDue = 0, decimal BookingsDue = 0, decimal SubscriptionsDue = 0
+    decimal SalesDue = 0, decimal BookingsDue = 0, decimal SubscriptionsDue = 0,
+    decimal PurchaseOrdersDue = 0
 );
 
 public interface IReportsService

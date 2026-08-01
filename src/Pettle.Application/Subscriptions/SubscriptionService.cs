@@ -43,6 +43,11 @@ public record IssuedListItem(
 
 public record IssueSubscriptionRequest(Guid PackageId, Guid PetParentId, int TotalSessions, DateOnly? IssuedOn, decimal AmountPaid, PaymentMode Mode = PaymentMode.Cash);
 
+/// <summary>Live (not date-ranged) count of issued subscriptions per lifecycle status — backs the
+/// Subscriptions page's status breakdown cards, since "how many are Active right now" is a
+/// current-state question, not something a Today/This Month period filter should scope.</summary>
+public record SubscriptionStatusSummary(int Active, int Frozen, int Expired, int Cancelled, int Transferred);
+
 // Public, unauthenticated view of an issued subscription — the WhatsApp "your subscription is
 // confirmed" message links customers straight to this so they can see what they were billed for
 // without logging in, so it only exposes what a customer should see (no internal ids/statuses).
@@ -58,6 +63,7 @@ public interface ISubscriptionService
     Task<bool> DeletePackageAsync(Guid id, CancellationToken ct = default);
 
     Task<PagedResult<IssuedListItem>> ListIssuedAsync(string? search, IssuedSubscriptionStatus? status, int page, int pageSize, CancellationToken ct = default);
+    Task<SubscriptionStatusSummary> StatusSummaryAsync(CancellationToken ct = default);
     /// <summary>Every issued subscription matching the filters, unpaginated — backs the
     /// Subscriptions report's KPI cards and its CSV download so both read the same rows.</summary>
     Task<IReadOnlyList<IssuedListItem>> ExportIssuedAsync(string? search, IssuedSubscriptionStatus? status, Guid? packageId, DateOnly? from, DateOnly? to, CancellationToken ct = default);

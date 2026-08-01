@@ -149,6 +149,21 @@ public class SubscriptionService : ISubscriptionService
         return new PagedResult<IssuedListItem>(items, total, p, sz);
     }
 
+    public async Task<SubscriptionStatusSummary> StatusSummaryAsync(CancellationToken ct = default)
+    {
+        if (_user.TenantId is null) return new SubscriptionStatusSummary(0, 0, 0, 0, 0);
+        var rows = await _db.IssuedSubscriptions.AsNoTracking()
+            .Where(s => s.TenantId == _user.TenantId)
+            .GroupBy(s => s.Status)
+            .Select(g => new { Status = g.Key, Count = g.Count() })
+            .ToListAsync(ct);
+        int Count(IssuedSubscriptionStatus s) => rows.FirstOrDefault(r => r.Status == s)?.Count ?? 0;
+        return new SubscriptionStatusSummary(
+            Count(IssuedSubscriptionStatus.Active), Count(IssuedSubscriptionStatus.Frozen),
+            Count(IssuedSubscriptionStatus.Expired), Count(IssuedSubscriptionStatus.Cancelled),
+            Count(IssuedSubscriptionStatus.Transferred));
+    }
+
     public async Task<IReadOnlyList<IssuedListItem>> ExportIssuedAsync(string? search, IssuedSubscriptionStatus? status, Guid? packageId, DateOnly? from, DateOnly? to, CancellationToken ct = default)
     {
         if (_user.TenantId is null) return Array.Empty<IssuedListItem>();

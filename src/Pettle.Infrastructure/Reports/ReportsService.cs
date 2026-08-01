@@ -260,17 +260,19 @@ public class ReportsService : IReportsService
 
         // Purchase Orders are money spent (cost), not revenue — kept in its own field so it's
         // never mistaken for income when the frontend labels/sums these cards.
-        var poTotals = await _db.PurchaseOrders.AsNoTracking()
+        var poRows = await _db.PurchaseOrders.AsNoTracking()
             .Where(p => p.TenantId == tid && p.PurchaseDate >= range.From && p.PurchaseDate <= range.To)
-            .Select(p => p.Total)
+            .Select(p => new { p.Total, p.Due })
             .ToListAsync(ct);
+        var poTotals = poRows.Select(p => p.Total).ToList();
+        var poDue = poRows.Sum(p => p.Due);
 
         return new PeriodSummary(
             salesRevenue, salesCount,
             totalBookings, bookingsRevenue,
             subsIssuedCount, subsRevenue,
             poTotals.Count, poTotals.Sum(),
-            salesDue, bookingsDue, subsDue);
+            salesDue, bookingsDue, subsDue, poDue);
     }
 
     public async Task<InventoryReport> InventoryAsync(CancellationToken ct = default)

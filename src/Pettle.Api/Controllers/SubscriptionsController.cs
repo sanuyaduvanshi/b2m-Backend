@@ -41,6 +41,11 @@ public class SubscriptionsController : ControllerBase
         [FromQuery] int page = 1, [FromQuery] int pageSize = 50, CancellationToken ct = default)
         => Ok(await _svc.ListIssuedAsync(search, status, page, pageSize, ct));
 
+    [HttpGet("issued/status-summary")]
+    [HasPermission(Modules.Subscriptions, Actions.View)]
+    public async Task<IActionResult> StatusSummary(CancellationToken ct)
+        => Ok(await _svc.StatusSummaryAsync(ct));
+
     [HttpGet("issued/export")]
     [HasPermission(Modules.Subscriptions, Actions.Export)]
     public async Task<IActionResult> ExportIssued([FromQuery] string? search, [FromQuery] IssuedSubscriptionStatus? status,
