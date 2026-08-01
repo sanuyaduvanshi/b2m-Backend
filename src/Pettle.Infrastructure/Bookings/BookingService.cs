@@ -85,7 +85,11 @@ public class BookingServiceImpl : IBookingService
                     : null,
                 _db.Invoices.Where(i => i.BookingId == b.Id && i.TenantId == _user.TenantId)
                     .Select(i => (Guid?)i.Id).FirstOrDefault(),
-                null
+                null,
+                _db.Invoices.Where(i => i.BookingId == b.Id && i.TenantId == _user.TenantId)
+                    .Select(i => (decimal?)i.Paid).FirstOrDefault() ?? 0m,
+                _db.Invoices.Where(i => i.BookingId == b.Id && i.TenantId == _user.TenantId)
+                    .Select(i => (decimal?)i.Due).FirstOrDefault() ?? 0m
             )).ToListAsync(ct);
 
         // Second pass: which of this page's invoices were (at least partly) paid via a

@@ -18,7 +18,9 @@ public record BookingListItem(
     Guid? InvoiceId = null,
     // Set when any payment on this booking's invoice was auto-debited from a subscription —
     // lets the list show a "Subscription" badge without a per-row detail fetch.
-    string? SubscriptionPackageName = null
+    string? SubscriptionPackageName = null,
+    decimal InvoicePaid = 0,
+    decimal InvoiceDue = 0
 );
 
 public record BookingDetail(
