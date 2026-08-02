@@ -249,6 +249,21 @@ public class InventoryService : IInventoryService
 
     public async Task<PoDetail> CreatePoAsync(CreatePoRequest req, CancellationToken ct = default)
     {
+        if (_user.TenantId is null) throw AppException.Forbidden();
+        if (req.Lines is null || req.Lines.Count == 0)
+            throw AppException.Validation("Empty purchase order",
+                new Dictionary<string, string[]> { ["lines"] = new[] { "Add at least one line item." } });
+        foreach (var l in req.Lines)
+        {
+            if (l.Quantity <= 0)
+                throw AppException.Validation("Invalid quantity",
+                    new Dictionary<string, string[]> { ["lines"] = new[] { $"Quantity must be greater than zero for '{l.ItemName}'." } });
+        }
+        var vendorExists = await _db.Vendors.AnyAsync(v => v.Id == req.VendorId && v.TenantId == _user.TenantId, ct);
+        if (!vendorExists)
+            throw AppException.Validation("Invalid vendor",
+                new Dictionary<string, string[]> { ["vendorId"] = new[] { "Vendor not found in this business." } });
+
         var po = new PurchaseOrder
         {
             PoNumber = await NextPoNumberAsync(ct),
@@ -347,6 +362,19 @@ public class InventoryService : IInventoryService
         if (po is null) return null;
         if (po.Status != PoStatus.Draft)
             throw AppException.BusinessRule("Only Draft purchase orders can be edited. Once items are received the bill is locked.");
+        if (req.Lines is null || req.Lines.Count == 0)
+            throw AppException.Validation("Empty purchase order",
+                new Dictionary<string, string[]> { ["lines"] = new[] { "Add at least one line item." } });
+        foreach (var l in req.Lines)
+        {
+            if (l.Quantity <= 0)
+                throw AppException.Validation("Invalid quantity",
+                    new Dictionary<string, string[]> { ["lines"] = new[] { $"Quantity must be greater than zero for '{l.ItemName}'." } });
+        }
+        var vendorExists = await _db.Vendors.AnyAsync(v => v.Id == req.VendorId && v.TenantId == _user.TenantId, ct);
+        if (!vendorExists)
+            throw AppException.Validation("Invalid vendor",
+                new Dictionary<string, string[]> { ["vendorId"] = new[] { "Vendor not found in this business." } });
 
         // Update header
         po.VendorId = req.VendorId;
@@ -804,9 +832,12 @@ public class InventoryService : IInventoryService
 
             // Procurement always adds; SelfConsumption/Damage always deduct (user enters positive qty);
             // Adjustment uses the sign the user provided (positive = add, negative = reduce).
+            // Procurement forces Math.Abs too, not just the other two - a staff typo entering a
+            // negative quantity under "Procurement" would otherwise silently deduct stock instead
+            // of adding it, under a label that says the opposite of what just happened.
             var delta = req.AdjustmentType switch
             {
-                ManualAdjustmentType.Procurement    =>  line.Quantity,
+                ManualAdjustmentType.Procurement    =>  Math.Abs(line.Quantity),
                 ManualAdjustmentType.SelfConsumption => -Math.Abs(line.Quantity),
                 ManualAdjustmentType.Damage          => -Math.Abs(line.Quantity),
                 _                                    =>  line.Quantity, // Adjustment: honour sign
