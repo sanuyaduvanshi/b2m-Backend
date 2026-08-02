@@ -910,12 +910,24 @@ public class InventoryService : IInventoryService
             .Select(b => b.ExpiryDate)
             .FirstOrDefaultAsync(ct);
 
+    // COUNT-based numbering breaks the moment any PO in the sequence is deleted (soft-delete
+    // leaves the row - and its PoNumber - in place, so "count+1" recomputes a number an existing
+    // row already has, a duplicate-key error on the next PO) - the same bug already hit production
+    // for booking invoice numbers and was fixed there with this same MAX-based approach.
+    // DeletePoAsync allows deleting any not-yet-received PO freely, so this is a live path.
     private async Task<string> NextPoNumberAsync(CancellationToken ct)
     {
         var year = DateTime.UtcNow.Year;
-        var count = await _db.PurchaseOrders.IgnoreQueryFilters()
-            .Where(p => p.TenantId == _user.TenantId && p.CreatedAt.Year == year).CountAsync(ct);
-        return $"PO-{year}-{(count + 1).ToString().PadLeft(5, '0')}";
+        var prefix = $"PO-{year}-";
+        var existingNumbers = await _db.PurchaseOrders.IgnoreQueryFilters()
+            .Where(p => p.TenantId == _user.TenantId && p.PoNumber != null && p.PoNumber.StartsWith(prefix))
+            .Select(p => p.PoNumber!)
+            .ToListAsync(ct);
+        var maxNum = existingNumbers
+            .Select(n => int.TryParse(n.AsSpan(prefix.Length), out var v) ? v : 0)
+            .DefaultIfEmpty(0)
+            .Max();
+        return $"{prefix}{(maxNum + 1).ToString().PadLeft(5, '0')}";
     }
 
     private static PagedResult<T> Empty<T>(int page, int pageSize) => new(Array.Empty<T>(), 0, Math.Max(page, 1), Math.Clamp(pageSize, 1, 200));

@@ -295,13 +295,26 @@ public class InvoiceService : IInvoiceService
 
     private static decimal R(decimal value) => Math.Round(value, 2, MidpointRounding.AwayFromZero);
 
+    // COUNT-based numbering broke booking invoices the moment any invoice in the sequence was
+    // deleted (soft-delete leaves the row - and its InvoiceNumber - in place, so "count+1" recomputes
+    // a number an existing row already has, a duplicate-key 500 on the next sale) — this hit
+    // production for BKG- numbers earlier and was fixed there; Sale invoices had the exact same bug
+    // and are just as deletable (DeleteAsync allows it whenever Paid is still 0). Deriving the next
+    // number from the highest number actually in use is immune to gaps from deletions.
     private async Task<string> NextSaleInvoiceNumberAsync(CancellationToken ct)
     {
         var year = DateTime.UtcNow.Year;
-        var count = await _db.Invoices.IgnoreQueryFilters()
-            .Where(i => i.TenantId == _user.TenantId && i.InvoiceType == InvoiceType.Sale && i.CreatedAt.Year == year)
-            .CountAsync(ct);
-        return $"SALE-{year}-{(count + 1).ToString().PadLeft(5, '0')}";
+        var prefix = $"SALE-{year}-";
+        var existingNumbers = await _db.Invoices.IgnoreQueryFilters()
+            .Where(i => i.TenantId == _user.TenantId && i.InvoiceType == InvoiceType.Sale
+                        && i.InvoiceNumber != null && i.InvoiceNumber.StartsWith(prefix))
+            .Select(i => i.InvoiceNumber!)
+            .ToListAsync(ct);
+        var maxNum = existingNumbers
+            .Select(n => int.TryParse(n.AsSpan(prefix.Length), out var v) ? v : 0)
+            .DefaultIfEmpty(0)
+            .Max();
+        return $"{prefix}{(maxNum + 1).ToString().PadLeft(5, '0')}";
     }
 
     public async Task<PaymentDto?> RecordPaymentAsync(Guid invoiceId, RecordPaymentRequest req, CancellationToken ct = default)
@@ -730,12 +743,23 @@ public class InvoiceService : IInvoiceService
         if (req.AsCreditNote)
         {
             var year = DateTime.UtcNow.Year;
-            var cnCount = await _db.Invoices.IgnoreQueryFilters()
-                .CountAsync(i => i.TenantId == _user.TenantId && i.InvoiceType == InvoiceType.CreditNote && i.CreatedAt.Year == year, ct);
+            var cnPrefix = $"CN-{year}-";
+            // Same MAX-based fix as Sale/Booking invoice numbering — COUNT-based breaks the moment
+            // any credit note row is ever removed (soft-delete leaves it in place either way, but
+            // COUNT is fragile against any future deletion path too).
+            var cnExisting = await _db.Invoices.IgnoreQueryFilters()
+                .Where(i => i.TenantId == _user.TenantId && i.InvoiceType == InvoiceType.CreditNote
+                            && i.InvoiceNumber != null && i.InvoiceNumber.StartsWith(cnPrefix))
+                .Select(i => i.InvoiceNumber!)
+                .ToListAsync(ct);
+            var cnMaxNum = cnExisting
+                .Select(n => int.TryParse(n.AsSpan(cnPrefix.Length), out var v) ? v : 0)
+                .DefaultIfEmpty(0)
+                .Max();
             var creditNote = new Invoice
             {
                 TenantId = _user.TenantId.Value,
-                InvoiceNumber = $"CN-{year}-{(cnCount + 1).ToString().PadLeft(4, '0')}",
+                InvoiceNumber = $"{cnPrefix}{(cnMaxNum + 1).ToString().PadLeft(4, '0')}",
                 InvoiceType = InvoiceType.CreditNote,
                 InvoiceDate = DateOnly.FromDateTime(DateTime.UtcNow),
                 PetParentId = invoice.PetParentId,
