@@ -21,6 +21,23 @@ public class SubscriptionService : ISubscriptionService
         _db = db; _user = user; _httpClientFactory = httpClientFactory;
     }
 
+    // There's no background scheduler in this app, so a subscription's Status never flips to
+    // Expired on its own — it only ever gets checked "live" (ValidUntil >= today) at the moment
+    // it's used for booking coverage. That left the Status column and every list/count that reads
+    // it (badges, KPI cards, status filter) permanently stuck on "Active" for a plan whose date
+    // had already passed. Self-heal it instead: every read path below flips any Active plan whose
+    // ValidUntil is in the past to Expired before returning data, so the DB stays correct without
+    // needing a cron job. Frozen is deliberately excluded — freezing is a staff-initiated pause
+    // with no date math of its own, so an auto-expiry would silently override that choice.
+    private async Task ExpireOverdueAsync(CancellationToken ct)
+    {
+        if (_user.TenantId is null) return;
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        await _db.IssuedSubscriptions
+            .Where(s => s.TenantId == _user.TenantId && s.Status == IssuedSubscriptionStatus.Active && s.ValidUntil < today)
+            .ExecuteUpdateAsync(s => s.SetProperty(x => x.Status, IssuedSubscriptionStatus.Expired), ct);
+    }
+
     public async Task<IReadOnlyList<PackageListItem>> ListPackagesAsync(CancellationToken ct = default)
     {
         if (_user.TenantId is null) return Array.Empty<PackageListItem>();
@@ -129,6 +146,7 @@ public class SubscriptionService : ISubscriptionService
     public async Task<PagedResult<IssuedListItem>> ListIssuedAsync(string? search, IssuedSubscriptionStatus? status, int page, int pageSize, CancellationToken ct = default)
     {
         if (_user.TenantId is null) return new PagedResult<IssuedListItem>(Array.Empty<IssuedListItem>(), 0, page, pageSize);
+        await ExpireOverdueAsync(ct);
         var q = _db.IssuedSubscriptions.AsNoTracking()
             .Include(i => i.Package).Include(i => i.PetParent)
             .Where(i => i.TenantId == _user.TenantId);
@@ -152,6 +170,7 @@ public class SubscriptionService : ISubscriptionService
     public async Task<SubscriptionStatusSummary> StatusSummaryAsync(CancellationToken ct = default)
     {
         if (_user.TenantId is null) return new SubscriptionStatusSummary(0, 0, 0, 0, 0);
+        await ExpireOverdueAsync(ct);
         var rows = await _db.IssuedSubscriptions.AsNoTracking()
             .Where(s => s.TenantId == _user.TenantId)
             .GroupBy(s => s.Status)
@@ -167,6 +186,7 @@ public class SubscriptionService : ISubscriptionService
     public async Task<IReadOnlyList<IssuedListItem>> ExportIssuedAsync(string? search, IssuedSubscriptionStatus? status, Guid? packageId, DateOnly? from, DateOnly? to, CancellationToken ct = default)
     {
         if (_user.TenantId is null) return Array.Empty<IssuedListItem>();
+        await ExpireOverdueAsync(ct);
         var q = _db.IssuedSubscriptions.AsNoTracking()
             .Include(i => i.Package).Include(i => i.PetParent)
             .Where(i => i.TenantId == _user.TenantId);
@@ -271,17 +291,18 @@ public class SubscriptionService : ISubscriptionService
         return true;
     }
 
-    public async Task<bool> DeleteIssuedAsync(Guid id, CancellationToken ct = default)
+    public async Task<bool> DeleteIssuedAsync(Guid id, string? reason, CancellationToken ct = default)
     {
         if (_user.TenantId is null) return false;
         var s = await _db.IssuedSubscriptions.FirstOrDefaultAsync(x => x.Id == id && x.TenantId == _user.TenantId, ct);
         if (s is null) return false;
-        // Same rule as invoices: only a subscription that never collected any money can be
-        // outright deleted - anything with a payment against it must go through Cancel instead,
-        // so a paid record can't quietly disappear from revenue history.
-        if (s.AmountPaid > 0)
-            throw AppException.BusinessRule("Cannot delete a subscription that has payments recorded — cancel it instead.");
-        _db.IssuedSubscriptions.Remove(s);
+        // Deleting a still-live plan (Active/Frozen) is allowed, but staff must record why —
+        // unlike Cancelled/Expired/Transferred rows, which are already at rest.
+        var isLive = s.Status is IssuedSubscriptionStatus.Active or IssuedSubscriptionStatus.Frozen;
+        if (isLive && string.IsNullOrWhiteSpace(reason))
+            throw AppException.BusinessRule("A reason is required to delete an active or frozen subscription.");
+        s.DeletedReason = reason?.Trim();
+        _db.IssuedSubscriptions.Remove(s); // soft-delete interceptor sets IsDeleted = true, row + payment history stay in the DB
         await _db.SaveChangesAsync(ct);
         return true;
     }
@@ -289,6 +310,7 @@ public class SubscriptionService : ISubscriptionService
     public async Task<IssuedSubscriptionDetail?> GetIssuedAsync(Guid id, CancellationToken ct = default)
     {
         if (_user.TenantId is null) return null;
+        await ExpireOverdueAsync(ct);
         var s = await _db.IssuedSubscriptions.AsNoTracking()
             .Include(x => x.Package).Include(x => x.PetParent)
             .FirstOrDefaultAsync(x => x.Id == id && x.TenantId == _user.TenantId, ct);

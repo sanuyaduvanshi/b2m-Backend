@@ -60,6 +60,9 @@ public class IssuedSubscription : SoftDeletableTenantEntity
     public decimal BalanceUsed { get; set; }
     public Guid? FrozenUntilTransferredTo { get; set; }
     public DateTimeOffset? FrozenAt { get; set; }
+    // Only required (enforced in SubscriptionService.DeleteIssuedAsync) when deleting a still-Active
+    // or Frozen subscription — captures why staff removed a plan that was still in use.
+    public string? DeletedReason { get; set; }
 }
 
 public enum IssuedSubscriptionStatus { Active = 0, Expired = 1, Cancelled = 2, Frozen = 3, Transferred = 4 }

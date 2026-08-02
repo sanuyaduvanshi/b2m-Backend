@@ -209,6 +209,15 @@ public class ClientService : IClientService
         if (_user.TenantId is null) return false;
         var p = await _db.PetParents.FirstOrDefaultAsync(x => x.Id == id && x.TenantId == _user.TenantId, ct);
         if (p is null) return false;
+        // A client with any real history (pets, bookings, invoices, subscriptions) must be Archived
+        // instead — hard-deleting them would soft-delete the parent row while their pets/bookings/
+        // invoices stay behind still pointing at it, orphaning that history from the UI that shows it.
+        var hasHistory = await _db.Pets.AnyAsync(x => x.PetParentId == id, ct)
+            || await _db.Bookings.AnyAsync(x => x.PetParentId == id, ct)
+            || await _db.Invoices.AnyAsync(x => x.PetParentId == id, ct)
+            || await _db.IssuedSubscriptions.AnyAsync(x => x.PetParentId == id, ct);
+        if (hasHistory)
+            throw AppException.BusinessRule("This client has pets, bookings, invoices or subscriptions on record — archive them instead of deleting.");
         _db.PetParents.Remove(p);
         await _db.SaveChangesAsync(ct);
         return true;

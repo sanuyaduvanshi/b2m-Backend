@@ -114,6 +114,7 @@ public class ReminderService : IReminderService
             "reorder"            => await ReorderSkusAsync(ct),
             "inventory-expiry"   => await ExpirySkusAsync(from, to, ct),
             "low-inventory"      => await LowInventoryAsync(ct),
+            "subscriptions"      => await SubscriptionExpiryAsync(from, to, ct),
             _ => Array.Empty<ReminderFeedItem>(),
         };
     }
@@ -132,6 +133,7 @@ public class ReminderService : IReminderService
         var vaccinations = await VaccinationsAsync(firstDay, lastDay, ct);
         var followUps = await StoredRemindersAsync(ReminderType.BookingFollowUp, firstDay, lastDay, ct);
         var expiries = await ExpirySkusAsync(firstDay, lastDay, ct);
+        var subExpiries = await SubscriptionExpiryAsync(firstDay, lastDay, ct);
         // Reorder/low-inventory have no specific date — surfaced on tabs only, not on calendar.
 
         var totals = new Dictionary<string, int>
@@ -141,10 +143,11 @@ public class ReminderService : IReminderService
             ["vaccinations"] = vaccinations.Count,
             ["bookings"] = followUps.Count,
             ["inventory-expiry"] = expiries.Count,
+            ["subscriptions"] = subExpiries.Count,
         };
 
         var perDay = birthdays
-            .Concat(bookings).Concat(vaccinations).Concat(followUps).Concat(expiries)
+            .Concat(bookings).Concat(vaccinations).Concat(followUps).Concat(expiries).Concat(subExpiries)
             .Where(x => x.DueDate >= firstDay && x.DueDate <= lastDay)
             .GroupBy(x => x.DueDate)
             .Select(g => new ReminderCalendarDay(g.Key, g.Count()))
@@ -317,6 +320,43 @@ public class ReminderService : IReminderService
             Subtitle: $"Expires · stock {s.StockOnHand} {s.Unit}",
             DueDate: s.NearestExpiry!.Value,
             ContactName: null, Phone: null, Email: null, RelatedId: s.Id)).ToList();
+    }
+
+    private async Task<IReadOnlyList<ReminderFeedItem>> SubscriptionExpiryAsync(DateOnly from, DateOnly to, CancellationToken ct)
+    {
+        var tid = _user.TenantId!.Value;
+        // Same "fires 1 day prior" convention as Birthdays: only plans still Active (a Frozen plan
+        // is paused by staff choice, not counting down to its date the same way) are eligible, and
+        // the alert date is ValidUntil - 1 day, not ValidUntil itself.
+        var rows = await _db.IssuedSubscriptions.AsNoTracking()
+            .Include(s => s.Package).Include(s => s.PetParent)
+            .Where(s => s.TenantId == tid && s.Status == Pettle.Domain.Subscriptions.IssuedSubscriptionStatus.Active
+                        && s.ValidUntil >= from && s.ValidUntil <= to.AddDays(1))
+            .Select(s => new {
+                s.Id, s.ValidUntil, PackageName = s.Package!.Name,
+                ParentName = s.PetParent != null ? s.PetParent.Name : null,
+                ParentPhone = s.PetParent != null ? s.PetParent.Phone : null,
+                ParentEmail = s.PetParent != null ? s.PetParent.Email : null,
+            })
+            .ToListAsync(ct);
+
+        var items = new List<ReminderFeedItem>();
+        foreach (var s in rows)
+        {
+            var reminderDate = s.ValidUntil.AddDays(-1);
+            if (reminderDate < from || reminderDate > to) continue;
+            items.Add(new ReminderFeedItem(
+                Id: $"subscription:{s.Id}",
+                Type: "SubscriptionExpiry",
+                Title: $"{s.PackageName} expires tomorrow",
+                Subtitle: s.ParentName,
+                DueDate: reminderDate,
+                ContactName: s.ParentName,
+                Phone: s.ParentPhone,
+                Email: s.ParentEmail,
+                RelatedId: s.Id));
+        }
+        return items.OrderBy(x => x.DueDate).ToList();
     }
 
     public async Task<bool> SetBirthdayReminderAsync(Guid petId, bool enabled, CancellationToken ct = default)
