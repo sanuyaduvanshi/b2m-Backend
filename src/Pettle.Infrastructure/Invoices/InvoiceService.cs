@@ -108,6 +108,19 @@ public class InvoiceService : IInvoiceService
             throw AppException.Validation("Empty sale",
                 new Dictionary<string, string[]> { ["lines"] = new[] { "Add at least one item to the sale." } });
 
+        // The money taken at the till belongs to the day the bill is dated. Stamping payments with
+        // "now" instead meant a bill entered a day late put its sale on yesterday (Revenue reports
+        // group by invoice date) but its cash on today (Dashboard and Overview group by payment
+        // time) — the same day answering two different numbers. Today's sales keep the real clock
+        // time so the till order stays readable; a backdated one lands at the start of its own
+        // business day in IST.
+        // Midday rather than midnight: the reports convert back to the IST date either way, but a
+        // payment stamped 00:00 IST is 18:30 the previous day in UTC, so anything rendering the
+        // raw timestamp (the payments list, an export opened abroad) would show the day before.
+        var saleTime = req.InvoiceDate == BusinessClock.TodayIst()
+            ? DateTimeOffset.UtcNow
+            : BusinessClock.StartOfDayUtc(req.InvoiceDate).AddHours(12);
+
         var invoice = new Invoice
         {
             InvoiceNumber = await NextSaleInvoiceNumberAsync(ct),
@@ -202,7 +215,7 @@ public class InvoiceService : IInvoiceService
             creditRedeemed = R(req.RedeemCreditNoteAmount);
             invoice.Payments.Add(new Payment
             {
-                PaymentTime = DateTimeOffset.UtcNow,
+                PaymentTime = saleTime,
                 Amount = creditRedeemed,
                 Mode = PaymentMode.Credit,
                 Source = PaymentSource.WalkIn,
@@ -218,7 +231,7 @@ public class InvoiceService : IInvoiceService
             if (p.Amount <= 0) continue;
             invoice.Payments.Add(new Payment
             {
-                PaymentTime = DateTimeOffset.UtcNow,
+                PaymentTime = saleTime,
                 Amount = p.Amount,
                 Mode = p.Mode,
                 Source = PaymentSource.WalkIn,

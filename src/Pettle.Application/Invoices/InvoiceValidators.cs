@@ -1,7 +1,31 @@
 using FluentValidation;
+using Pettle.Application.Common;
 using Pettle.Application.Validation;
 
 namespace Pettle.Application.Invoices;
+
+/// <summary>How far back a bill may be dated.
+///
+/// Neither the sale nor the edit request validated InvoiceDate at all, so any date — including
+/// years in the past or the future — was accepted. That matters because the invoice date is what
+/// the Revenue report groups by: a bill dropped into a closed month silently changes a figure
+/// somebody has already reported. A small backward window covers the real case (yesterday's bill
+/// wasn't entered) without letting anyone reopen last quarter; forward-dating has no legitimate
+/// use here at all, since a sale is rung up when it happens.
+/// </summary>
+public static class InvoiceDateWindow
+{
+    public const int MaxBackdateDays = 7;
+
+    public static bool IsAllowed(DateOnly date)
+    {
+        var today = BusinessClock.TodayIst();
+        return date <= today && date >= today.AddDays(-MaxBackdateDays);
+    }
+
+    public static string Message =>
+        $"Invoice date must be today or within the last {MaxBackdateDays} days — future dates aren't allowed.";
+}
 
 // CreateSaleRequest/UpdateInvoiceRequest previously had no registered validator at all - only the
 // ad-hoc "Quantity <= 0" check inline in the service. Nothing stopped a negative UnitAmount, or a
@@ -34,6 +58,7 @@ public class CreateSaleValidator : AbstractValidator<CreateSaleRequest>
 {
     public CreateSaleValidator()
     {
+        RuleFor(x => x.InvoiceDate).Must(InvoiceDateWindow.IsAllowed).WithMessage(InvoiceDateWindow.Message);
         RuleFor(x => x.ParentName).MaximumLength(160);
         RuleFor(x => x.Phone).ValidPhoneFormat().When(x => !string.IsNullOrWhiteSpace(x.Phone));
         RuleFor(x => x.Notes).MaximumLength(2000);
@@ -63,6 +88,7 @@ public class UpdateInvoiceValidator : AbstractValidator<UpdateInvoiceRequest>
 {
     public UpdateInvoiceValidator()
     {
+        RuleFor(x => x.InvoiceDate).Must(InvoiceDateWindow.IsAllowed).WithMessage(InvoiceDateWindow.Message);
         RuleFor(x => x.ParentName).NotEmpty().WithMessage("Client name is required.").MaximumLength(160);
         RuleFor(x => x.Phone).ValidPhoneFormat().When(x => !string.IsNullOrWhiteSpace(x.Phone));
         RuleFor(x => x.Notes).MaximumLength(2000);
