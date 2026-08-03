@@ -493,6 +493,13 @@ public class PettleDbContext : IdentityDbContext<ApplicationUser, ApplicationRol
             }
         }
 
+        // Collected after the soft-delete rewrite (so a delete is logged as a delete) but before
+        // the save, while the original values are still on the tracked entries. The audit rows go
+        // out in the same transaction as the change they describe — a change can't be committed
+        // with its log entry missing.
+        var auditEntries = AuditCapture.Collect(ChangeTracker, _currentUser, now);
+        if (auditEntries.Count > 0) AuditEntries.AddRange(auditEntries);
+
         return await base.SaveChangesAsync(cancellationToken);
     }
 }

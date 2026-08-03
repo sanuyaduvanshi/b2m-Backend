@@ -27,6 +27,14 @@ public class CurrentUser : ICurrentUser
     public IReadOnlySet<string> Permissions => _permissions.Value;
     public bool IsAuthenticated => User?.Identity?.IsAuthenticated ?? false;
     public bool RestrictToOwnRecords => bool.TryParse(User?.FindFirstValue("restrict_own"), out var v) && v;
+    // The JWT carries "role", but ASP.NET's token handler remaps that to ClaimTypes.Role, so the
+    // raw name only survives on tokens read before mapping — check both.
+    public string? RoleName => User?.FindFirstValue("role") ?? User?.FindFirstValue(ClaimTypes.Role);
+    // Behind nginx the socket address is the proxy, so prefer the forwarded client address.
+    public string? IpAddress =>
+        _accessor.HttpContext?.Request.Headers["X-Forwarded-For"].FirstOrDefault()?.Split(',')[0].Trim()
+        ?? _accessor.HttpContext?.Connection.RemoteIpAddress?.ToString();
+    public string? UserAgent => _accessor.HttpContext?.Request.Headers.UserAgent.ToString() is { Length: > 0 } ua ? ua : null;
     public bool Has(string permission) => Permissions.Contains(permission);
 
     private Guid? GuidClaim(string type)

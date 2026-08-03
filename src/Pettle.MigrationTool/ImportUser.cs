@@ -17,5 +17,8 @@ public class ImportUser : ICurrentUser
     public IReadOnlySet<string> Permissions { get; } = new HashSet<string>();
     public bool IsAuthenticated => true;
     public bool RestrictToOwnRecords => false;
+    public string? RoleName => null;
+    public string? IpAddress => null;
+    public string? UserAgent => null;
     public bool Has(string permission) => true; // bypass for the importer
 }

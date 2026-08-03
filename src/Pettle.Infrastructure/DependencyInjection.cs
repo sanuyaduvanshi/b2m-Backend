@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.IdentityModel.Tokens;
+using Pettle.Application.Audit;
 using Pettle.Application.Auth;
 using Pettle.Application.BookingRequests;
 using Pettle.Application.Bookings;
@@ -96,6 +97,7 @@ public static class DependencyInjection
         services.AddScoped<IMessageTemplateService, MessageTemplateService>();
         services.AddScoped<IMessageService, MessageService>();
         services.AddScoped<ICalendarService, CalendarService>();
+        services.AddScoped<IAuditService, Pettle.Infrastructure.Audit.AuditService>();
 
         services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             .AddJwtBearer(opt =>

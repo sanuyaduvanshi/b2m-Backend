@@ -6,7 +6,9 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
+using Pettle.Application.Audit;
 using Pettle.Application.Auth;
+using Pettle.Domain.Audit;
 using Pettle.Domain.Identity;
 using Pettle.Infrastructure.Identity;
 using Pettle.Infrastructure.Persistence;
@@ -18,12 +20,14 @@ public class AuthService : IAuthService
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly PettleDbContext _db;
     private readonly JwtOptions _jwt;
+    private readonly IAuditService _audit;
 
-    public AuthService(UserManager<ApplicationUser> userManager, PettleDbContext db, IOptions<JwtOptions> jwt)
+    public AuthService(UserManager<ApplicationUser> userManager, PettleDbContext db, IOptions<JwtOptions> jwt, IAuditService audit)
     {
         _userManager = userManager;
         _db = db;
         _jwt = jwt.Value;
+        _audit = audit;
     }
 
     public async Task<AuthResult> LoginAsync(string email, string password, CancellationToken ct = default)
@@ -40,6 +44,13 @@ public class AuthService : IAuthService
             return new AuthResult(false, null, null, null, null, "No tenant access");
 
         var defaultContext = PickDefault(contexts, user.DefaultTenantId, user.DefaultBranchId);
+
+        // Logged explicitly: a sign-in writes no business row for the save interceptor to notice,
+        // and there's no authenticated principal yet, so the actor has to be passed in.
+        await _audit.RecordAsync(AuditAction.Login, "Access", "User", user.Id.ToString(),
+            $"Signed in as {defaultContext.RoleName}",
+            actorUserId: user.Id, actorName: user.DisplayName, actorRole: defaultContext.RoleName,
+            tenantId: defaultContext.TenantId, ct: ct);
 
         return await IssueTokenAsync(user, defaultContext, contexts, ct);
     }
@@ -69,6 +80,10 @@ public class AuthService : IAuthService
         if (entry is null) return;
         entry.RevokedAt = DateTimeOffset.UtcNow;
         await _db.SaveChangesAsync(ct);
+
+        var user = await _db.Users.FindAsync(new object?[] { userId }, ct);
+        await _audit.RecordAsync(AuditAction.Logout, "Access", "User", userId.ToString(), "Signed out",
+            actorUserId: userId, actorName: user?.DisplayName, ct: ct);
     }
 
     public async Task<AuthResult> SwitchContextAsync(Guid userId, Guid tenantId, Guid branchId, Guid? roleId = null, CancellationToken ct = default)
@@ -86,6 +101,13 @@ public class AuthService : IAuthService
         user.DefaultTenantId = tenantId;
         user.DefaultBranchId = branchId;
         await _db.SaveChangesAsync(ct);
+
+        // Worth its own entry: everything this session does afterwards is attributed to the new
+        // role, and the log would otherwise show the switch as an unexplained change of hat.
+        await _audit.RecordAsync(AuditAction.Login, "Access", "User", user.Id.ToString(),
+            $"Switched role to {target.RoleName} ({target.BranchName})",
+            actorUserId: user.Id, actorName: user.DisplayName, actorRole: target.RoleName,
+            tenantId: target.TenantId, ct: ct);
 
         return await IssueTokenAsync(user, target, contexts, ct);
     }
