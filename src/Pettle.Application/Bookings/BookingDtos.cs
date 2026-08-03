@@ -25,7 +25,11 @@ public record BookingListItem(
     // page group bookings under the plan that paid for them and show what each session consumed,
     // without a per-booking detail fetch.
     Guid? IssuedSubscriptionId = null,
-    decimal SubscriptionCoveredAmount = 0
+    decimal SubscriptionCoveredAmount = 0,
+    // The actual service names booked, not just their verticals. A package lists what it covers by
+    // service name, so this is what lets a client's page say how many of each covered service have
+    // been used and how many are still owed — without a detail fetch per booking.
+    string ServiceNames = ""
 );
 
 public record BookingDetail(

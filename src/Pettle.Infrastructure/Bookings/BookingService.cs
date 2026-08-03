@@ -93,7 +93,8 @@ public class BookingServiceImpl : IBookingService
                 // Both filled by the batched subscription lookup below — spelled out here because
                 // an EF projection can't leave optional constructor arguments to their defaults.
                 null,
-                0m
+                0m,
+                string.Join(", ", b.Services.Select(s => s.ServiceName).Distinct())
             )).ToListAsync(ct);
 
         // Second pass: which of this page's invoices were (at least partly) paid via a
