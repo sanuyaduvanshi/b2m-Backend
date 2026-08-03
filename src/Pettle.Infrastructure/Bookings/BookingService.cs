@@ -696,6 +696,109 @@ public class BookingServiceImpl : IBookingService
         return true;
     }
 
+    public async Task<bool> DeleteAsync(Guid id, string? reason, CancellationToken ct = default)
+    {
+        if (_user.TenantId is null) return false;
+        var tid = _user.TenantId.Value;
+
+        var booking = await _db.Bookings
+            .Include(b => b.Services)
+            .Include(b => b.AddOns)
+            .Include(b => b.InventoryItems)
+            .Include(b => b.EstimateLines)
+            .Include(b => b.ChangeRequests)
+            .FirstOrDefaultAsync(b => b.Id == id && b.TenantId == tid, ct);
+        if (booking is null) return false;
+
+        var invoice = await _db.Invoices.Include(i => i.Lines).Include(i => i.Payments)
+            .FirstOrDefaultAsync(i => i.BookingId == id && i.TenantId == tid, ct);
+
+        // Money already taken doesn't stop the delete, but it does have to be explained: removing
+        // the booking removes that revenue from every report, and the reason is what the audit
+        // entry will carry when somebody asks later why a day's takings changed.
+        var paid = invoice?.Paid ?? 0m;
+        if (paid > 0 && string.IsNullOrWhiteSpace(reason))
+            throw AppException.Validation("Reason required",
+                new Dictionary<string, string[]>
+                {
+                    ["reason"] = new[] { $"This booking has ₹{paid:F2} collected against it — give a reason for deleting it." },
+                });
+
+        // Give back whatever the booking consumed, in the order it was taken.
+        var skuIds = booking.Services.Where(s => s.SkuId.HasValue).Select(s => s.SkuId!.Value)
+            .Concat(booking.InventoryItems.Select(i => i.SkuId))
+            .Distinct().ToList();
+        if (skuIds.Count > 0)
+        {
+            var skus = await _db.Skus.Where(s => skuIds.Contains(s.Id) && s.TenantId == tid).ToListAsync(ct);
+            void Restore(Guid skuId, int qty, string note)
+            {
+                var sku = skus.FirstOrDefault(s => s.Id == skuId);
+                if (sku is null || qty <= 0) return;
+                sku.StockOnHand += qty;
+                _db.SkuBatches.Add(new SkuBatch
+                {
+                    TenantId = sku.TenantId, SkuId = sku.Id, QtyRemaining = qty,
+                    LandingCost = sku.CostPrice, Source = "Return", ReceivedAt = DateTimeOffset.UtcNow,
+                });
+                _db.StockMovements.Add(new StockMovement
+                {
+                    SkuId = sku.Id, Reason = StockMovementReason.Return,
+                    QuantityChange = qty, StockAfter = sku.StockOnHand, Note = note,
+                });
+            }
+            foreach (var s in booking.Services.Where(s => s.SkuId.HasValue))
+                Restore(s.SkuId!.Value, s.SkuQuantity, "Deleted booking (service SKU)");
+            foreach (var i in booking.InventoryItems)
+                Restore(i.SkuId, i.Quantity, "Deleted booking (inventory item)");
+        }
+
+        // A subscription that part-paid this booking gets its session and balance back — otherwise
+        // deleting the booking would quietly cost the client a session they never used.
+        foreach (var group in (invoice?.Payments ?? new List<Payment>())
+                     .Where(p => p.IssuedSubscriptionId.HasValue)
+                     .GroupBy(p => p.IssuedSubscriptionId!.Value))
+        {
+            var sub = await _db.IssuedSubscriptions.FirstOrDefaultAsync(s => s.Id == group.Key && s.TenantId == tid, ct);
+            if (sub is null) continue;
+            sub.BalanceUsed = Math.Max(0, sub.BalanceUsed - group.Sum(p => p.Amount));
+            if (sub.RemainingSessions < sub.TotalSessions) sub.RemainingSessions++;
+        }
+
+        // Booking is soft-deletable but its children aren't, so removing the Booking alone won't
+        // cascade (the interceptor turns that Remove into an UPDATE, which never fires the DB's
+        // ON DELETE CASCADE) — each child table goes explicitly, same as the invoice delete path.
+        var serviceIds = booking.Services.Select(s => s.Id).ToList();
+        if (serviceIds.Count > 0)
+        {
+            _db.BoardingDetails.RemoveRange(await _db.BoardingDetails.Where(d => serviceIds.Contains(d.BookingServiceId)).ToListAsync(ct));
+            _db.GroomingDetails.RemoveRange(await _db.GroomingDetails.Where(d => serviceIds.Contains(d.BookingServiceId)).ToListAsync(ct));
+            _db.VetDetails.RemoveRange(await _db.VetDetails.Where(d => serviceIds.Contains(d.BookingServiceId)).ToListAsync(ct));
+            _db.DayCareDetails.RemoveRange(await _db.DayCareDetails.Where(d => serviceIds.Contains(d.BookingServiceId)).ToListAsync(ct));
+            _db.BookingServiceAddOns.RemoveRange(await _db.BookingServiceAddOns.Where(a => serviceIds.Contains(a.BookingServiceId)).ToListAsync(ct));
+        }
+        _db.BookingAddOns.RemoveRange(booking.AddOns);
+        _db.BookingInventoryItems.RemoveRange(booking.InventoryItems);
+        _db.BookingEstimateLines.RemoveRange(booking.EstimateLines);
+        _db.BookingChangeRequests.RemoveRange(booking.ChangeRequests);
+        _db.BookingServices.RemoveRange(booking.Services);
+
+        if (invoice is not null)
+        {
+            _db.Payments.RemoveRange(invoice.Payments);
+            _db.InvoiceLineItems.RemoveRange(invoice.Lines);
+            _db.Invoices.Remove(invoice); // soft-delete interceptor sets IsDeleted = true
+        }
+
+        // Left on the row so the audit entry's before/after carries the explanation with it.
+        if (!string.IsNullOrWhiteSpace(reason))
+            booking.Notes = (booking.Notes is null ? "" : booking.Notes + " | ") + $"Deleted: {reason.Trim()}";
+        _db.Bookings.Remove(booking); // soft-delete interceptor sets IsDeleted = true
+
+        await _db.SaveChangesAsync(ct);
+        return true;
+    }
+
     public async Task<bool> ApplyDiscountAsync(Guid bookingId, decimal discountPercent, CancellationToken ct = default)
     {
         if (_user.TenantId is null) return false;

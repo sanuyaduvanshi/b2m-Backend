@@ -48,6 +48,15 @@ public class BookingsController : ControllerBase
     public async Task<IActionResult> Cancel(Guid id, [FromBody] CancelRequest req, CancellationToken ct)
         => await _svc.CancelAsync(id, req.Reason, ct) ? NoContent() : NotFound();
 
+    /// <summary>Removes the booking entirely — its invoice, payments, the stock it took and any
+    /// subscription session it used. Cancel is for a booking that won't happen; this is for one
+    /// that shouldn't exist. Delete is its own permission, so the staff who cancel bookings can't
+    /// erase them.</summary>
+    [HttpDelete("{id:guid}")]
+    [HasPermission(Modules.BookingRecords, Actions.Delete)]
+    public async Task<IActionResult> Delete(Guid id, [FromQuery] string? reason, CancellationToken ct)
+        => await _svc.DeleteAsync(id, reason, ct) ? NoContent() : NotFound();
+
     [HttpPut("{id:guid}/discount")]
     [HasPermission(Modules.BookingRecords, Actions.Edit)]
     public async Task<IActionResult> ApplyDiscount(Guid id, [FromBody] ApplyDiscountRequest req, CancellationToken ct)
