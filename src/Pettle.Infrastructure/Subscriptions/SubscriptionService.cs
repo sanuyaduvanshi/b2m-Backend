@@ -162,7 +162,7 @@ public class SubscriptionService : ISubscriptionService
             .Select(i => new IssuedListItem(
                 i.Id, i.Package!.Name, i.PetParentId, i.PetParent!.Name, i.PetParent!.Phone,
                 i.IssuedOn, i.ValidUntil, i.RemainingSessions, i.TotalSessions,
-                i.Status, i.PaymentStatus, i.AmountPaid, i.AmountDue, i.BalanceUsed, i.Package!.Description))
+                i.Status, i.PaymentStatus, i.AmountPaid, i.AmountDue, i.BalanceUsed, i.Package!.Description, i.PackageId))
             .ToListAsync(ct);
         return new PagedResult<IssuedListItem>(items, total, p, sz);
     }
@@ -203,7 +203,7 @@ public class SubscriptionService : ISubscriptionService
             .Select(i => new IssuedListItem(
                 i.Id, i.Package!.Name, i.PetParentId, i.PetParent!.Name, i.PetParent!.Phone,
                 i.IssuedOn, i.ValidUntil, i.RemainingSessions, i.TotalSessions,
-                i.Status, i.PaymentStatus, i.AmountPaid, i.AmountDue, i.BalanceUsed, i.Package!.Description))
+                i.Status, i.PaymentStatus, i.AmountPaid, i.AmountDue, i.BalanceUsed, i.Package!.Description, i.PackageId))
             .ToListAsync(ct);
     }
 
@@ -259,7 +259,7 @@ public class SubscriptionService : ISubscriptionService
         await _db.SaveChangesAsync(ct);
         return new IssuedListItem(issued.Id, pkg.Name, parent.Id, parent.Name, parent.Phone,
             issued.IssuedOn, issued.ValidUntil, issued.RemainingSessions, issued.TotalSessions,
-            issued.Status, issued.PaymentStatus, issued.AmountPaid, issued.AmountDue, issued.BalanceUsed, pkg.Description);
+            issued.Status, issued.PaymentStatus, issued.AmountPaid, issued.AmountDue, issued.BalanceUsed, pkg.Description, pkg.Id);
     }
 
     public async Task<bool> FreezeAsync(Guid id, CancellationToken ct = default)

@@ -38,7 +38,10 @@ public record IssuedListItem(
     Guid Id, string PackageName, Guid PetParentId, string ParentName, string Phone,
     DateOnly IssuedOn, DateOnly ValidUntil, int RemainingSessions, int TotalSessions,
     IssuedSubscriptionStatus Status, IssuedPaymentStatus PaymentStatus, decimal AmountPaid, decimal AmountDue,
-    decimal BalanceUsed = 0, string? PackageDescription = null
+    decimal BalanceUsed = 0, string? PackageDescription = null,
+    // Lets a caller cross-reference the package's catalogue rows (which services/SKUs the plan
+    // actually covers) without matching on the package name, which isn't unique.
+    Guid PackageId = default
 );
 
 public record IssueSubscriptionRequest(Guid PackageId, Guid PetParentId, int TotalSessions, DateOnly? IssuedOn, decimal AmountPaid, PaymentMode Mode = PaymentMode.Cash);
