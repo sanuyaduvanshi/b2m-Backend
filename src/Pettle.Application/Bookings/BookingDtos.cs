@@ -20,7 +20,12 @@ public record BookingListItem(
     // lets the list show a "Subscription" badge without a per-row detail fetch.
     string? SubscriptionPackageName = null,
     decimal InvoicePaid = 0,
-    decimal InvoiceDue = 0
+    decimal InvoiceDue = 0,
+    // Which subscription was drawn on, and how much of this booking it absorbed — lets a client's
+    // page group bookings under the plan that paid for them and show what each session consumed,
+    // without a per-booking detail fetch.
+    Guid? IssuedSubscriptionId = null,
+    decimal SubscriptionCoveredAmount = 0
 );
 
 public record BookingDetail(

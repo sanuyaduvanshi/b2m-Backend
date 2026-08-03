@@ -89,7 +89,11 @@ public class BookingServiceImpl : IBookingService
                 _db.Invoices.Where(i => i.BookingId == b.Id && i.TenantId == _user.TenantId)
                     .Select(i => (decimal?)i.Paid).FirstOrDefault() ?? 0m,
                 _db.Invoices.Where(i => i.BookingId == b.Id && i.TenantId == _user.TenantId)
-                    .Select(i => (decimal?)i.Due).FirstOrDefault() ?? 0m
+                    .Select(i => (decimal?)i.Due).FirstOrDefault() ?? 0m,
+                // Both filled by the batched subscription lookup below — spelled out here because
+                // an EF projection can't leave optional constructor arguments to their defaults.
+                null,
+                0m
             )).ToListAsync(ct);
 
         // Second pass: which of this page's invoices were (at least partly) paid via a
@@ -99,7 +103,7 @@ public class BookingServiceImpl : IBookingService
         {
             var subPayments = await _db.Payments.AsNoTracking()
                 .Where(p => p.TenantId == _user.TenantId && p.InvoiceId != null && invoiceIds.Contains(p.InvoiceId.Value) && p.IssuedSubscriptionId != null)
-                .Select(p => new { InvoiceId = p.InvoiceId!.Value, SubId = p.IssuedSubscriptionId!.Value })
+                .Select(p => new { InvoiceId = p.InvoiceId!.Value, SubId = p.IssuedSubscriptionId!.Value, p.Amount })
                 .ToListAsync(ct);
             if (subPayments.Count > 0)
             {
@@ -108,12 +112,23 @@ public class BookingServiceImpl : IBookingService
                     .Where(s => subIds.Contains(s.Id))
                     .Select(s => new { s.Id, PackageName = s.Package!.Name })
                     .ToDictionaryAsync(s => s.Id, s => s.PackageName, ct);
-                var invoiceToPackageName = subPayments
+                var invoiceToSub = subPayments
                     .Where(x => subNames.ContainsKey(x.SubId))
                     .GroupBy(x => x.InvoiceId)
-                    .ToDictionary(g => g.Key, g => subNames[g.First().SubId]);
-                items = items.Select(it => it.InvoiceId.HasValue && invoiceToPackageName.TryGetValue(it.InvoiceId.Value, out var name)
-                    ? it with { SubscriptionPackageName = name }
+                    .ToDictionary(g => g.Key, g => new
+                    {
+                        SubId = g.First().SubId,
+                        Name = subNames[g.First().SubId],
+                        // One invoice can take more than one subscription-funded payment row.
+                        Covered = g.Sum(x => x.Amount),
+                    });
+                items = items.Select(it => it.InvoiceId.HasValue && invoiceToSub.TryGetValue(it.InvoiceId.Value, out var sub)
+                    ? it with
+                    {
+                        SubscriptionPackageName = sub.Name,
+                        IssuedSubscriptionId = sub.SubId,
+                        SubscriptionCoveredAmount = sub.Covered,
+                    }
                     : it).ToList();
             }
         }
