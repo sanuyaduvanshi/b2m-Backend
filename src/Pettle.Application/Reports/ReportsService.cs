@@ -16,7 +16,7 @@ public record RevenueReport(
     int Count,
     IReadOnlyDictionary<string, int> CountByType);
 public record BookingsReport(int Total, int Completed, int Cancelled, int NoShow, IReadOnlyList<BookingsBreakdown> ByServiceType);
-public record ClientsReport(int Active, int Archived, int NewInRange, IReadOnlyList<TopClient> TopClients);
+public record ClientsReport(int Active, int Archived, int NewInRange, IReadOnlyList<TopClient> TopClients, int Blacklisted = 0);
 public record TopClient(Guid Id, string Name, string Phone, int Bookings, decimal Spend);
 public record InventoryReport(int TotalSkus, int LowStock, int ExpiringSoon, decimal InventoryValue, IReadOnlyList<ExpenseSlice> ByCategory, int OutOfStock, int ListedInApp);
 

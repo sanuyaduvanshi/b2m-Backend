@@ -28,6 +28,9 @@ public class ClientService : IClientService
         if (query.Status.HasValue)
             q = q.Where(p => p.Status == query.Status.Value);
 
+        if (query.HasDues == true)
+            q = q.Where(p => p.OutstandingBalance > 0);
+
         if (!string.IsNullOrWhiteSpace(query.Search))
         {
             var s = query.Search.Trim().ToLower();
@@ -69,7 +72,8 @@ public class ClientService : IClientService
                 p.OnboardingDate,
                 null,
                 p.Tags.Select(t => t.ClientTag!.Name).ToList(),
-                p.Pets.Where(pet => pet.Breed != null).Select(pet => pet.Breed!).Distinct().ToList()
+                p.Pets.Where(pet => pet.Breed != null).Select(pet => pet.Breed!).Distinct().ToList(),
+                p.AddressLine1
             )).ToListAsync(ct);
 
         var ids = items.Select(i => i.Id).ToList();
@@ -118,7 +122,8 @@ public class ClientService : IClientService
                 p.OnboardingDate,
                 null,
                 p.Tags.Select(t => t.ClientTag!.Name).ToList(),
-                p.Pets.Where(pet => pet.Breed != null).Select(pet => pet.Breed!).Distinct().ToList()
+                p.Pets.Where(pet => pet.Breed != null).Select(pet => pet.Breed!).Distinct().ToList(),
+                p.AddressLine1
             )).ToListAsync(ct);
 
         var ids = items.Select(i => i.Id).ToList();

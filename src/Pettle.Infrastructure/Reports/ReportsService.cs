@@ -165,6 +165,9 @@ public class ReportsService : IReportsService
 
         var active = await _db.PetParents.CountAsync(p => p.TenantId == tid && p.Status == ClientStatus.Active, ct);
         var archived = await _db.PetParents.IgnoreQueryFilters().CountAsync(p => p.TenantId == tid && p.Status == ClientStatus.Archived, ct);
+        // Counted separately so callers summing "all clients" don't silently drop blacklisted ones
+        // (Active + Archived alone under-reports the total the Clients list actually shows).
+        var blacklisted = await _db.PetParents.IgnoreQueryFilters().CountAsync(p => p.TenantId == tid && p.Status == ClientStatus.Blacklisted, ct);
         var newClients = await _db.PetParents.CountAsync(p => p.TenantId == tid && p.OnboardingDate >= range.From && p.OnboardingDate <= range.To, ct);
 
         // Pull rows then aggregate in-memory: the GroupBy + nullable-unwrap projection
@@ -183,7 +186,7 @@ public class ReportsService : IReportsService
             .Take(10)
             .ToList();
 
-        return new ClientsReport(active, archived, newClients, top);
+        return new ClientsReport(active, archived, newClients, top, blacklisted);
     }
 
     public async Task<ExpensesReport> ExpensesAsync(DateRange range, CancellationToken ct = default)

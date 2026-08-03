@@ -16,7 +16,11 @@ public record PetParentListItem(
     DateOnly? OnboardingDate,
     DateOnly? LatestBookingDate,
     IReadOnlyList<string> Tags,
-    IReadOnlyList<string> PetBreeds
+    IReadOnlyList<string> PetBreeds,
+    // The imported B2M data put the locality ("Kukatpally", "Moosapet", …) in AddressLine1 and
+    // left City entirely null, so a City-only column renders blank for every row — the list needs
+    // both to be able to fall back.
+    string? AddressLine1 = null
 );
 
 public record PetParentDetail(
@@ -114,7 +118,10 @@ public record ClientListQuery(
     int Page = 1,
     int PageSize = 50,
     string? Sort = "name",
-    bool Desc = false
+    bool Desc = false,
+    /// <summary>Only clients who still owe money — server-side so it holds across pages, unlike
+    /// filtering the current page's rows in the UI.</summary>
+    bool? HasDues = null
 );
 
 public record PagedResult<T>(IReadOnlyList<T> Items, int Total, int Page, int PageSize);
