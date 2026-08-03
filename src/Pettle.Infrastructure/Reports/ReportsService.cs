@@ -17,20 +17,31 @@ public class ReportsService : IReportsService
     private (DateTimeOffset from, DateTimeOffset to) RangeAsUtc(DateRange r)
         => (BusinessClock.StartOfDayUtc(r.From), BusinessClock.EndOfDayUtc(r.To));
 
+    /// <summary>Roles flagged <see cref="Pettle.Domain.Identity.Role.RestrictToOwnRecords"/>
+    /// (Receptionist) only see records they created — the same scoping the Bookings/Invoices lists
+    /// and the dashboard already apply. Mirrored across every money figure here so the KPI cards
+    /// can't report tenant-wide takings to someone whose lists show only their own rows.
+    /// Client counts are deliberately left tenant-wide: the Client Database itself is not scoped,
+    /// so scoping its KPI cards would contradict the list right below them.</summary>
+    private (bool own, Guid? uid) Scope => (_user.RestrictToOwnRecords, _user.UserId);
+
     public async Task<ReportsOverview> OverviewAsync(DateRange range, CancellationToken ct = default)
     {
         if (_user.TenantId is null) return new ReportsOverview(0, 0, 0, 0);
         var tid = _user.TenantId.Value;
         var (from, to) = RangeAsUtc(range);
+        var (own, uid) = Scope;
 
-        var revenue = await _db.Payments.RealRevenue().Where(p => p.TenantId == tid && p.PaymentTime >= from && p.PaymentTime <= to)
+        var revenue = await _db.Payments.RealRevenue().Where(p => p.TenantId == tid && p.PaymentTime >= from && p.PaymentTime <= to
+            && (!own || p.CreatedById == uid))
             .SumAsync(p => (decimal?)p.Amount, ct) ?? 0m;
-        var bookings = await _db.Bookings.CountAsync(b => b.TenantId == tid && b.BookingDate >= range.From && b.BookingDate <= range.To, ct);
+        var bookings = await _db.Bookings.CountAsync(b => b.TenantId == tid && b.BookingDate >= range.From && b.BookingDate <= range.To
+            && (!own || b.CreatedById == uid), ct);
         var newClients = await _db.PetParents.CountAsync(p => p.TenantId == tid && p.OnboardingDate >= range.From && p.OnboardingDate <= range.To, ct);
         // Credit notes are a return/liability record, not a new sale — counting them here would
         // inflate "invoices raised" with entries that generated no new revenue.
         var invoices = await _db.Invoices.CountAsync(i => i.TenantId == tid && i.InvoiceDate >= range.From && i.InvoiceDate <= range.To
-            && i.InvoiceType != InvoiceType.CreditNote, ct);
+            && i.InvoiceType != InvoiceType.CreditNote && (!own || i.CreatedById == uid), ct);
         return new ReportsOverview(revenue, bookings, newClients, invoices);
     }
 
@@ -39,9 +50,11 @@ public class ReportsService : IReportsService
         if (_user.TenantId is null) return new RevenueReport(0, 0, 0, Array.Empty<RevenuePoint>(), new Dictionary<string, decimal>(), Array.Empty<ExpenseSlice>(), Array.Empty<ExpenseSlice>(), 0, new Dictionary<string, int>());
         var tid = _user.TenantId.Value;
         var (from, to) = RangeAsUtc(range);
+        var (own, uid) = Scope;
 
         var invoices = await _db.Invoices.AsNoTracking()
-            .Where(i => i.TenantId == tid && i.InvoiceDate >= range.From && i.InvoiceDate <= range.To)
+            .Where(i => i.TenantId == tid && i.InvoiceDate >= range.From && i.InvoiceDate <= range.To
+                        && (!own || i.CreatedById == uid))
             .Select(i => new { i.Revenue, i.Paid, i.Due, i.InvoiceType, i.PaymentStatus })
             .ToListAsync(ct);
 
@@ -64,7 +77,8 @@ public class ReportsService : IReportsService
 
         // Pull raw rows then group in-memory: DateOnly.FromDateTime() doesn't translate to PostgreSQL.
         var rawPayments = await _db.Payments.AsNoTracking().RealRevenue()
-            .Where(p => p.TenantId == tid && p.PaymentTime >= from && p.PaymentTime <= to)
+            .Where(p => p.TenantId == tid && p.PaymentTime >= from && p.PaymentTime <= to
+                        && (!own || p.CreatedById == uid))
             .Select(p => new { p.PaymentTime, p.Amount, p.Mode })
             .ToListAsync(ct);
 
@@ -95,13 +109,16 @@ public class ReportsService : IReportsService
         if (_user.TenantId is null) return Array.Empty<MonthlyPoint>();
         var tid = _user.TenantId.Value;
         var (from, to) = RangeAsUtc(range);
+        var (own, uid) = Scope;
 
         var rawPayments = await _db.Payments.AsNoTracking().RealRevenue()
-            .Where(p => p.TenantId == tid && p.PaymentTime >= from && p.PaymentTime <= to)
+            .Where(p => p.TenantId == tid && p.PaymentTime >= from && p.PaymentTime <= to
+                        && (!own || p.CreatedById == uid))
             .Select(p => new { p.PaymentTime, p.Amount })
             .ToListAsync(ct);
         var rawExpenses = await _db.Expenses.AsNoTracking()
-            .Where(e => e.TenantId == tid && e.Time >= from && e.Time <= to)
+            .Where(e => e.TenantId == tid && e.Time >= from && e.Time <= to
+                        && (!own || e.CreatedById == uid))
             .Select(e => new { e.Time, e.AmountIncTax })
             .ToListAsync(ct);
 
@@ -128,9 +145,11 @@ public class ReportsService : IReportsService
     {
         if (_user.TenantId is null) return new BookingsReport(0, 0, 0, 0, Array.Empty<BookingsBreakdown>());
         var tid = _user.TenantId.Value;
+        var (own, uid) = Scope;
 
         var services = await _db.BookingServices.AsNoTracking()
-            .Where(s => s.TenantId == tid && s.Booking!.BookingDate >= range.From && s.Booking.BookingDate <= range.To)
+            .Where(s => s.TenantId == tid && s.Booking!.BookingDate >= range.From && s.Booking.BookingDate <= range.To
+                        && (!own || s.CreatedById == uid))
             .Select(s => new {
                 s.BookingId, s.ServiceType, s.Status, s.FinalAmount,
                 s.Booking!.GrossBillingAmount, s.Booking.TotalBillingAmount,
@@ -172,10 +191,12 @@ public class ReportsService : IReportsService
 
         // Pull rows then aggregate in-memory: the GroupBy + nullable-unwrap projection
         // doesn't translate to PostgreSQL cleanly.
+        var (own, uid) = Scope;
         var rawInvoices = await _db.Invoices.AsNoTracking()
             .Where(i => i.TenantId == tid && i.PetParentId.HasValue
                         && i.InvoiceDate >= range.From && i.InvoiceDate <= range.To
-                        && i.InvoiceType != InvoiceType.CreditNote)
+                        && i.InvoiceType != InvoiceType.CreditNote
+                        && (!own || i.CreatedById == uid))
             .Select(i => new { ParentId = i.PetParentId!.Value, i.ParentNameSnapshot, i.PhoneSnapshot, i.Revenue })
             .ToListAsync(ct);
 
@@ -195,8 +216,10 @@ public class ReportsService : IReportsService
         var tid = _user.TenantId.Value;
         var (from, to) = RangeAsUtc(range);
 
+        var (own, uid) = Scope;
         var rows = await _db.Expenses.AsNoTracking()
-            .Where(e => e.TenantId == tid && e.Time >= from && e.Time <= to)
+            .Where(e => e.TenantId == tid && e.Time >= from && e.Time <= to
+                        && (!own || e.CreatedById == uid))
             .Select(e => new { e.AmountIncTax, e.PaymentMode, Category = e.CategoryName ?? (e.Category != null ? e.Category.Name : null) })
             .ToListAsync(ct);
 
@@ -216,9 +239,12 @@ public class ReportsService : IReportsService
         var tid = _user.TenantId.Value;
         var (from, to) = RangeAsUtc(range);
 
-        var collected = await _db.Payments.RealRevenue().Where(p => p.TenantId == tid && p.PaymentTime >= from && p.PaymentTime <= to)
+        var (own, uid) = Scope;
+        var collected = await _db.Payments.RealRevenue().Where(p => p.TenantId == tid && p.PaymentTime >= from && p.PaymentTime <= to
+            && (!own || p.CreatedById == uid))
             .SumAsync(p => (decimal?)p.Amount, ct) ?? 0m;
-        var expenses = await _db.Expenses.Where(e => e.TenantId == tid && e.Time >= from && e.Time <= to)
+        var expenses = await _db.Expenses.Where(e => e.TenantId == tid && e.Time >= from && e.Time <= to
+            && (!own || e.CreatedById == uid))
             .SumAsync(e => (decimal?)e.AmountIncTax, ct) ?? 0m;
         return new ProfitReport(collected, expenses, collected - expenses);
     }
@@ -231,9 +257,11 @@ public class ReportsService : IReportsService
 
         // Sale/Booking revenue come from invoices (what was actually billed for that vertical),
         // kept separate per-type so a walk-in sale never gets blended into booking revenue.
+        var (own, uid) = Scope;
         var invoicesByType = await _db.Invoices.AsNoTracking()
             .Where(i => i.TenantId == tid && i.InvoiceDate >= range.From && i.InvoiceDate <= range.To
-                        && (i.InvoiceType == InvoiceType.Sale || i.InvoiceType == InvoiceType.Booking))
+                        && (i.InvoiceType == InvoiceType.Sale || i.InvoiceType == InvoiceType.Booking)
+                        && (!own || i.CreatedById == uid))
             .Select(i => new { i.InvoiceType, i.Revenue, i.Due })
             .ToListAsync(ct);
         var salesRevenue = invoicesByType.Where(i => i.InvoiceType == InvoiceType.Sale).Sum(i => i.Revenue);
@@ -243,10 +271,12 @@ public class ReportsService : IReportsService
         var bookingsDue = invoicesByType.Where(i => i.InvoiceType == InvoiceType.Booking).Sum(i => i.Due);
 
         var totalBookings = await _db.Bookings.CountAsync(
-            b => b.TenantId == tid && b.BookingDate >= range.From && b.BookingDate <= range.To, ct);
+            b => b.TenantId == tid && b.BookingDate >= range.From && b.BookingDate <= range.To
+                 && (!own || b.CreatedById == uid), ct);
 
         var subsIssuedCount = await _db.IssuedSubscriptions.CountAsync(
-            s => s.TenantId == tid && s.IssuedOn >= range.From && s.IssuedOn <= range.To, ct);
+            s => s.TenantId == tid && s.IssuedOn >= range.From && s.IssuedOn <= range.To
+                 && (!own || s.CreatedById == uid), ct);
 
         // Cash actually collected against subscriptions in the period - not "AmountPaid at issue
         // for subscriptions issued in this period", which silently ignored any balance payment
@@ -255,19 +285,22 @@ public class ReportsService : IReportsService
         // payment BookingService writes when a subscription auto-covers a booking, since that cash
         // was already recognized when the subscription itself was purchased.
         var subsRevenue = await _db.Payments.RealRevenue()
-            .Where(p => p.TenantId == tid && p.IssuedSubscriptionId != null && p.PaymentTime >= from && p.PaymentTime <= to)
+            .Where(p => p.TenantId == tid && p.IssuedSubscriptionId != null && p.PaymentTime >= from && p.PaymentTime <= to
+                        && (!own || p.CreatedById == uid))
             .SumAsync(p => (decimal?)p.Amount, ct) ?? 0m;
 
         // How much is still outstanding across subscriptions issued in this period specifically —
         // paired with subsRevenue (all-time cash collected) to show a paid-vs-due split on the card.
         var subsDue = await _db.IssuedSubscriptions.AsNoTracking()
-            .Where(s => s.TenantId == tid && s.IssuedOn >= range.From && s.IssuedOn <= range.To)
+            .Where(s => s.TenantId == tid && s.IssuedOn >= range.From && s.IssuedOn <= range.To
+                        && (!own || s.CreatedById == uid))
             .SumAsync(s => (decimal?)s.AmountDue, ct) ?? 0m;
 
         // Purchase Orders are money spent (cost), not revenue — kept in its own field so it's
         // never mistaken for income when the frontend labels/sums these cards.
         var poRows = await _db.PurchaseOrders.AsNoTracking()
-            .Where(p => p.TenantId == tid && p.PurchaseDate >= range.From && p.PurchaseDate <= range.To)
+            .Where(p => p.TenantId == tid && p.PurchaseDate >= range.From && p.PurchaseDate <= range.To
+                        && (!own || p.CreatedById == uid))
             .Select(p => new { p.Total, p.Due })
             .ToListAsync(ct);
         var poTotals = poRows.Select(p => p.Total).ToList();

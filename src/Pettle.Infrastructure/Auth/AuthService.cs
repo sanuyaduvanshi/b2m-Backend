@@ -149,7 +149,7 @@ public class AuthService : IAuthService
         var session = new UserSession(
             user.Id, user.Email ?? string.Empty, user.DisplayName,
             context.TenantId, context.TenantName, context.BranchId, context.BranchName, context.RoleName, context.RoleId,
-            all, perms);
+            all, perms, role.RestrictToOwnRecords);
 
         return new AuthResult(true, accessToken, refresh, exp, session, null);
     }

@@ -157,7 +157,12 @@ public static class Seeder
             (Modules.BookingRecords, new[] { Actions.View, Actions.Create, Actions.Edit }),
             (Modules.ClientDatabase, new[] { Actions.View, Actions.Create, Actions.Edit }),
             (Modules.Kennels, new[] { Actions.View }),
-            (Modules.Invoices, new[] { Actions.View, Actions.Create, Actions.Edit })
+            (Modules.Invoices, new[] { Actions.View, Actions.Create, Actions.Edit }),
+            // The KPI cards on Dashboard/Bookings/Clients/Invoices are all backed by /api/reports/*
+            // — without this the receptionist saw every card as ₹0 or "—", which reads as "no
+            // business today" rather than "no access". ReportsService scopes its figures to the
+            // user's own records for this role, so the cards agree with the lists underneath them.
+            (Modules.Reports, new[] { Actions.View })
         });
         var accountant = AllowFor(all, new[]
         {

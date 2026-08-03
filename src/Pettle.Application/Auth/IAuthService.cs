@@ -32,7 +32,11 @@ public record UserSession(
     string RoleName,
     Guid RoleId,
     IReadOnlyList<TenantBranchOption> AvailableContexts,
-    IReadOnlyList<string> Permissions
+    IReadOnlyList<string> Permissions,
+    /// <summary>True when this role only sees records the user personally created (Receptionist).
+    /// The UI needs it to suppress figures that mix own-scoped money with tenant-wide counts —
+    /// "revenue ÷ all clients" is meaningless when the revenue half is only your own.</summary>
+    bool RestrictToOwnRecords = false
 );
 
 public record TenantBranchOption(Guid TenantId, string TenantName, Guid BranchId, string BranchName, string RoleName, Guid RoleId, bool IsPrimary);

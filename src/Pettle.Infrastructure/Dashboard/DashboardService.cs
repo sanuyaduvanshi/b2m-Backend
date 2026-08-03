@@ -74,7 +74,8 @@ public class DashboardService : IDashboardService
         // ---------- Revenue trend (last 14 days, fill gaps with zero) ----------
         var fromUtc = BusinessClock.StartOfDayUtc(today.AddDays(-13));
         var rawPayments = await _db.Payments.AsNoTracking().RealRevenue()
-            .Where(p => p.TenantId == tid && p.PaymentTime >= fromUtc && p.PaymentTime <= todayEnd)
+            .Where(p => p.TenantId == tid && p.PaymentTime >= fromUtc && p.PaymentTime <= todayEnd
+                && (!restrictOwn || p.CreatedById == uid))
             .Select(p => new { p.PaymentTime, p.Amount })
             .ToListAsync(ct);
         var byDay = rawPayments
