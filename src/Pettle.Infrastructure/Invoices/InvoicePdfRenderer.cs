@@ -103,8 +103,19 @@ public static class InvoicePdfRenderer
                         static IContainer BodyCell(IContainer c) => c.PaddingVertical(6).BorderBottom(0.5f).BorderColor(Colors.Grey.Lighten3);
                     });
 
+                    // A booking settled by the customer's package showed only "Paid ₹2,149" — from
+                    // the bill alone there was no way to tell the money came off their plan rather
+                    // than out of their pocket. Split it out so the deduction is visible.
+                    var subPayments = inv.Payments
+                        .Where(p => !string.IsNullOrWhiteSpace(p.SubscriptionPackageName)
+                                    && p.Status == PaymentRecordStatus.Success)
+                        .ToList();
+                    var subCovered = subPayments.Sum(p => p.Amount);
+                    var subName = subPayments.Select(p => p.SubscriptionPackageName).FirstOrDefault();
+                    var paidOtherwise = inv.Paid - subCovered;
+
                     var taxTotal = inv.IgstAmount + inv.CgstAmount + inv.SgstAmount;
-                    col.Item().PaddingTop(15).AlignRight().Width(220).Column(c =>
+                    col.Item().PaddingTop(15).AlignRight().Width(260).Column(c =>
                     {
                         TotalsRow(c, "Base amount", inv.BaseAmount);
                         if (inv.AddOnAmount > 0) TotalsRow(c, "Add-ons", inv.AddOnAmount);
@@ -115,9 +126,45 @@ public static class InvoicePdfRenderer
                         if (inv.IgstAmount > 0) TotalsRow(c, "IGST", inv.IgstAmount);
                         c.Item().PaddingTop(4).LineHorizontal(1).LineColor(Colors.Grey.Lighten2);
                         TotalsRow(c, "Total", inv.Revenue, bold: true);
-                        TotalsRow(c, "Paid", inv.Paid);
+                        if (subCovered > 0)
+                        {
+                            // Shown as a minus so it reads as money coming off the bill, which is
+                            // what actually happened to the customer's balance.
+                            TotalsRow(c, "Less: paid by subscription", -subCovered, color: Colors.Green.Darken2);
+                            if (paidOtherwise > 0.01m) TotalsRow(c, "Paid now", paidOtherwise);
+                        }
+                        else
+                        {
+                            TotalsRow(c, "Paid", inv.Paid);
+                        }
                         TotalsRow(c, "Due", inv.Due, bold: true, danger: inv.Due > 0);
                     });
+
+                    // Spelled out as its own panel, the way a statement shows what a deduction left
+                    // behind: the customer's next question after "it came off my package" is
+                    // always "so what's left on it".
+                    if (inv.Subscription is { } plan)
+                    {
+                        col.Item().PaddingTop(14).Background(Colors.Green.Lighten5)
+                            .Border(1).BorderColor(Colors.Green.Lighten3).Padding(12).Column(c =>
+                            {
+                                c.Item().Text("Paid from your subscription")
+                                    .Bold().FontColor(Colors.Green.Darken3);
+                                c.Item().PaddingTop(1).Text(plan.PackageName)
+                                    .FontSize(11).FontColor(Colors.Grey.Darken3);
+                                c.Item().PaddingTop(8).Row(r =>
+                                {
+                                    PlanFact(r, "Deducted from plan", $"{Rupee}{plan.CoveredAmount:0.00}");
+                                    PlanFact(r, "Sessions left",
+                                        plan.TotalSessions > 0 ? $"{plan.RemainingSessions} of {plan.TotalSessions}" : "—");
+                                    PlanFact(r, "Balance left", $"{Rupee}{plan.RemainingBalance:0.00}");
+                                    PlanFact(r, "Valid till", plan.ValidUntil.ToString("dd MMM yyyy"));
+                                });
+                                c.Item().PaddingTop(8).Text(
+                                    $"No cash was collected for {Rupee}{plan.CoveredAmount:0.00} — it came off your package balance.")
+                                    .FontSize(9).FontColor(Colors.Green.Darken1);
+                            });
+                    }
 
                     if (!string.IsNullOrWhiteSpace(inv.Notes))
                     {
@@ -140,13 +187,25 @@ public static class InvoicePdfRenderer
         return doc.GeneratePdf();
     }
 
-    private static void TotalsRow(ColumnDescriptor col, string label, decimal amount, bool bold = false, bool danger = false)
+    /// <summary>One labelled figure inside the subscription panel.</summary>
+    private static void PlanFact(RowDescriptor row, string label, string value)
     {
+        row.RelativeItem().Column(c =>
+        {
+            c.Item().Text(label).FontSize(8).FontColor(Colors.Grey.Darken1);
+            c.Item().Text(value).FontSize(11).Bold().FontColor(Colors.Grey.Darken4);
+        });
+    }
+
+    private static void TotalsRow(ColumnDescriptor col, string label, decimal amount,
+        bool bold = false, bool danger = false, Color? color = null)
+    {
+        Color tone = danger ? Colors.Red.Darken1 : (color ?? Colors.Black);
         col.Item().Row(row =>
         {
-            var labelText = row.RelativeItem().Text(label).FontColor(danger ? Colors.Red.Darken1 : Colors.Black);
-            var amountText = row.ConstantItem(100).AlignRight().Text($"{Rupee}{amount:0.00}")
-                .FontColor(danger ? Colors.Red.Darken1 : Colors.Black);
+            var labelText = row.RelativeItem().Text(label).FontColor(tone);
+            var text = amount < 0 ? $"-{Rupee}{-amount:0.00}" : $"{Rupee}{amount:0.00}";
+            var amountText = row.ConstantItem(100).AlignRight().Text(text).FontColor(tone);
             if (bold)
             {
                 labelText.Bold();

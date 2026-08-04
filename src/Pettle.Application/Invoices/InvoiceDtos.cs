@@ -74,8 +74,20 @@ public record InvoiceDetail(
     string? AdditionalChargesReason = null,
     Guid? BookingId = null,
     // Set when any payment on this invoice was auto-debited from a subscription.
-    string? SubscriptionPackageName = null
+    string? SubscriptionPackageName = null,
+    // The plan that settled this bill, and what it has left afterwards — printed on the invoice so
+    // the customer can see the charge came off their package rather than out of their pocket.
+    InvoiceSubscriptionInfo? Subscription = null
 );
+
+public record InvoiceSubscriptionInfo(
+    string PackageName,
+    decimal CoveredAmount,
+    int RemainingSessions,
+    int TotalSessions,
+    DateOnly ValidUntil,
+    decimal RemainingBalance,
+    string Status);
 
 public record InvoiceListQuery(
     string? Search = null,

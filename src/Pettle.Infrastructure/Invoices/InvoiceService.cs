@@ -66,10 +66,23 @@ public class InvoiceService : IInvoiceService
         // Which subscription (if any) paid for which payment row — resolved as one small
         // follow-up query rather than per-row, since a payment only carries the subscription's id.
         var subIds = i.Payments.Where(p => p.IssuedSubscriptionId.HasValue).Select(p => p.IssuedSubscriptionId!.Value).Distinct().ToList();
-        var subNames = subIds.Count == 0 ? new Dictionary<Guid, string>() : await _db.IssuedSubscriptions.AsNoTracking()
+        var subRows = subIds.Count == 0 ? new List<IssuedSubscriptionSummaryRow>() : await _db.IssuedSubscriptions.AsNoTracking()
             .Where(s => subIds.Contains(s.Id))
-            .Select(s => new { s.Id, PackageName = s.Package!.Name })
-            .ToDictionaryAsync(s => s.Id, s => s.PackageName, ct);
+            .Select(s => new IssuedSubscriptionSummaryRow(
+                s.Id, s.Package!.Name, s.RemainingSessions, s.TotalSessions,
+                s.ValidUntil, s.Package!.Price - s.BalanceUsed, s.Status.ToString()))
+            .ToListAsync(ct);
+        var subNames = subRows.ToDictionary(s => s.Id, s => s.PackageName);
+
+        // What the plan actually absorbed on this bill, and where it stands afterwards — the
+        // invoice prints both so "Paid" doesn't read as cash the customer handed over.
+        var coveredBySub = i.Payments
+            .Where(p => p.IssuedSubscriptionId.HasValue && p.Status == PaymentRecordStatus.Success)
+            .Sum(p => p.Amount);
+        var primarySub = subRows.FirstOrDefault();
+        var subscriptionInfo = primarySub is null || coveredBySub <= 0 ? null : new InvoiceSubscriptionInfo(
+            primarySub.PackageName, coveredBySub, primarySub.RemainingSessions, primarySub.TotalSessions,
+            primarySub.ValidUntil, Math.Max(0, primarySub.RemainingBalance), primarySub.Status);
 
         return new InvoiceDetail(
             i.Id, i.InvoiceNumber, i.InvoiceType, i.InvoiceDate, i.PetParentId,
@@ -83,9 +96,16 @@ public class InvoiceService : IInvoiceService
             i.Notes,
             i.AdditionalChargesReason,
             i.BookingId,
-            subIds.Count > 0 ? subNames.Values.FirstOrDefault() : null
+            subIds.Count > 0 ? subNames.Values.FirstOrDefault() : null,
+            subscriptionInfo
         );
     }
+
+    /// <summary>Flat shape for the subscription lookup — EF can project into it, and it keeps the
+    /// anonymous type out of the surrounding logic.</summary>
+    private sealed record IssuedSubscriptionSummaryRow(
+        Guid Id, string PackageName, int RemainingSessions, int TotalSessions,
+        DateOnly ValidUntil, decimal RemainingBalance, string Status);
 
     public async Task<byte[]?> GeneratePdfAsync(Guid id, CancellationToken ct = default)
     {
