@@ -285,6 +285,11 @@ public class PettleDbContext : IdentityDbContext<ApplicationUser, ApplicationRol
             b.HasIndex(x => new { x.TenantId, x.PurchaseDate });
             b.HasIndex(x => x.LegacyPoNumber);
             b.HasMany(x => x.Lines).WithOne(x => x.PurchaseOrder!).HasForeignKey(x => x.PurchaseOrderId).OnDelete(DeleteBehavior.Cascade);
+            // Purchases and debit notes share this table, so nearly every read filters on it.
+            b.HasIndex(x => new { x.TenantId, x.DocType, x.PurchaseDate });
+            // Restrict, not cascade: deleting a bill must not silently take its debit notes with it.
+            b.HasOne(x => x.ReturnAgainstPurchaseOrder).WithMany()
+                .HasForeignKey(x => x.ReturnAgainstPurchaseOrderId).OnDelete(DeleteBehavior.Restrict);
             b.HasQueryFilter(x => !x.IsDeleted);
             foreach (var prop in new[] { nameof(PurchaseOrder.SubTotal), nameof(PurchaseOrder.TaxAmount), nameof(PurchaseOrder.Adjustment),
                 nameof(PurchaseOrder.Total), nameof(PurchaseOrder.Paid), nameof(PurchaseOrder.Due),

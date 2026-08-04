@@ -3,6 +3,7 @@ using Pettle.Application.Common;
 using Pettle.Application.Reports;
 using Pettle.Domain.Bookings;
 using Pettle.Domain.Clients;
+using Pettle.Domain.Inventory;
 using Pettle.Domain.Invoices;
 using Pettle.Infrastructure.Persistence;
 
@@ -301,16 +302,19 @@ public class ReportsService : IReportsService
         var poRows = await _db.PurchaseOrders.AsNoTracking()
             .Where(p => p.TenantId == tid && p.PurchaseDate >= range.From && p.PurchaseDate <= range.To
                         && (!own || p.CreatedById == uid))
-            .Select(p => new { p.Total, p.Due })
+            .Select(p => new { p.Total, p.Due, p.DocType })
             .ToListAsync(ct);
-        var poTotals = poRows.Select(p => p.Total).ToList();
-        var poDue = poRows.Sum(p => p.Due);
+        var poTotals = poRows.Where(p => p.DocType == PurchaseDocType.Purchase).Select(p => p.Total).ToList();
+        // Goods sent back were never really bought, so the return comes off the spend — and off what
+        // is owed, since the supplier's bill is settled net of it.
+        var returned = poRows.Where(p => p.DocType == PurchaseDocType.DebitNote).Sum(p => p.Total);
+        var poDue = poRows.Where(p => p.DocType == PurchaseDocType.Purchase).Sum(p => p.Due) - returned;
 
         return new PeriodSummary(
             salesRevenue, salesCount,
             totalBookings, bookingsRevenue,
             subsIssuedCount, subsRevenue,
-            poTotals.Count, poTotals.Sum(),
+            poTotals.Count, poTotals.Sum() - returned,
             salesDue, bookingsDue, subsDue, poDue);
     }
 

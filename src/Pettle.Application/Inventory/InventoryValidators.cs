@@ -95,6 +95,53 @@ public class CreatePoLineValidator : AbstractValidator<CreatePoLine>
     }
 }
 
+public class CreateDebitNoteValidator : AbstractValidator<CreateDebitNoteRequest>
+{
+    public CreateDebitNoteValidator()
+    {
+        RuleFor(x => x.VendorId).NotEqual(Guid.Empty).WithMessage("Supplier is required.");
+        RuleFor(x => x.DebitNoteDate)
+            .NotEqual(default(DateOnly)).WithMessage("Debit note date is required.")
+            .LessThanOrEqualTo(_ => DateOnly.FromDateTime(DateTime.UtcNow).AddDays(1))
+            .WithMessage("Debit note date cannot be in the future.");
+        RuleFor(x => x.Reason)
+            .NotEmpty().WithMessage("Say why the goods are going back — damaged, expired, wrong item.")
+            .MaximumLength(500);
+        RuleFor(x => x.ReferenceBillNumber).MaximumLength(60);
+        RuleFor(x => x.PaymentTerm).MaximumLength(60);
+        RuleFor(x => x.TaxType).MaximumLength(20);
+        RuleFor(x => x.AccountLedger).MaximumLength(60);
+        RuleFor(x => x.FlatDiscountPercent).InclusiveBetween(0, 100).WithMessage("Flat discount must be between 0 and 100%.");
+        RuleFor(x => x.AdditionalCharges).NonNegativeAmount();
+        RuleFor(x => x.DueDate).GreaterThanOrEqualTo(x => x.DebitNoteDate)
+            .When(x => x.DueDate.HasValue).WithMessage("Due date cannot be before the debit note date.");
+        RuleFor(x => x.Notes).MaximumLength(1000);
+        RuleFor(x => x.Lines).NotEmpty().WithMessage("Add at least one item to return.")
+            .Must(l => l.Count <= 200).WithMessage("Maximum 200 line items per debit note.");
+        RuleForEach(x => x.Lines).SetValidator(new DebitNoteLineValidator());
+    }
+}
+
+/// <summary>Same shape as a purchase line, minus the "expiry is in the past" warning — returning
+/// expired stock is the whole point of most debit notes.</summary>
+public class DebitNoteLineValidator : AbstractValidator<CreatePoLine>
+{
+    public DebitNoteLineValidator()
+    {
+        RuleFor(x => x.ItemName).NotEmpty().WithMessage("Item name is required.").MaximumLength(160);
+        RuleFor(x => x.ItemCode).MaximumLength(60);
+        RuleFor(x => x.Unit).MaximumLength(16);
+        RuleFor(x => x.Quantity).PositiveAmount();
+        RuleFor(x => x.UnitCost).NonNegativeAmount();
+        RuleFor(x => x.Mrp).NonNegativeAmount();
+        RuleFor(x => x.SellingPrice).NonNegativeAmount();
+        RuleFor(x => x.PurDisc1Percent).InclusiveBetween(0, 100).WithMessage("Discount 1 must be between 0 and 100%.");
+        RuleFor(x => x.PurDisc2Percent).InclusiveBetween(0, 100).WithMessage("Discount 2 must be between 0 and 100%.");
+        RuleFor(x => x.TaxPercent).ValidTaxPercent();
+        RuleFor(x => x.BatchNumber).MaximumLength(60);
+    }
+}
+
 public class ReceivePoValidator : AbstractValidator<ReceivePoRequest>
 {
     public ReceivePoValidator()

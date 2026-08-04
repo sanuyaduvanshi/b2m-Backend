@@ -58,6 +58,18 @@ public class PurchaseOrder : SoftDeletableTenantEntity
 {
     public string? LegacyPoNumber { get; set; }
     public string PoNumber { get; set; } = string.Empty;
+
+    /// <summary>Purchase or debit note. A debit note is the same document in reverse — goods going
+    /// back to the supplier — so it reuses this table rather than duplicating twenty identical
+    /// columns, and is told apart by this one field everywhere it matters (numbering, stock
+    /// direction, purchase totals).</summary>
+    public PurchaseDocType DocType { get; set; } = PurchaseDocType.Purchase;
+    /// <summary>The bill this debit note returns against. Free-text ReferenceBillNumber records
+    /// what the supplier calls it; this is the row we can actually check the quantities against.</summary>
+    public Guid? ReturnAgainstPurchaseOrderId { get; set; }
+    public PurchaseOrder? ReturnAgainstPurchaseOrder { get; set; }
+    /// <summary>Why the goods went back — damaged, expired, wrong item. Required on a debit note.</summary>
+    public string? ReturnReason { get; set; }
     public Guid VendorId { get; set; }
     public Vendor? Vendor { get; set; }
     public PoStatus Status { get; set; } = PoStatus.Draft;
@@ -97,6 +109,7 @@ public class PurchaseOrder : SoftDeletableTenantEntity
 }
 
 public enum PoStatus { Draft = 0, Sent = 1, Received = 2, PartiallyReceived = 3, Closed = 4, Cancelled = 5 }
+public enum PurchaseDocType { Purchase = 0, DebitNote = 1 }
 public enum PoPaymentStatus { Unpaid = 0, PartiallyPaid = 1, Paid = 2 }
 
 public class PurchaseOrderLine : TenantEntity
@@ -138,7 +151,9 @@ public class StockMovement : TenantEntity
     public string? Note { get; set; }
 }
 
-public enum StockMovementReason { Sale = 0, PoReceipt = 1, Adjustment = 2, Return = 3, Wastage = 4, Transfer = 5, SelfConsumption = 6, Procurement = 7, Damage = 8 }
+// Return (3) is stock coming back from a customer, so it adds. PurchaseReturn is stock going the
+// other way — back to the supplier — and always removes.
+public enum StockMovementReason { Sale = 0, PoReceipt = 1, Adjustment = 2, Return = 3, Wastage = 4, Transfer = 5, SelfConsumption = 6, Procurement = 7, Damage = 8, PurchaseReturn = 9 }
 
 /// <summary>One physical batch of stock received. FIFO deduction uses ReceivedAt (see FifoBatchDeductor).</summary>
 public class SkuBatch : TenantEntity

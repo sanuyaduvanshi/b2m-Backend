@@ -141,6 +141,36 @@ public class InventoryController : ControllerBase
     public async Task<IActionResult> DeletePo(Guid id, [FromQuery] bool force = false, CancellationToken ct = default)
         => await _svc.DeletePoAsync(id, force, ct) ? NoContent() : NotFound();
 
+    // --- Debit notes (purchase returns) ---
+
+    [HttpGet("debit-notes")]
+    [HasPermission(Modules.Inventory, Actions.View)]
+    public async Task<IActionResult> DebitNotes([FromQuery] string? search, [FromQuery] int page = 1, [FromQuery] int pageSize = 50, CancellationToken ct = default)
+        => Ok(await _svc.ListDebitNotesAsync(search, page, pageSize, ct));
+
+    [HttpGet("debit-notes/{id:guid}")]
+    [HasPermission(Modules.Inventory, Actions.View)]
+    public async Task<IActionResult> DebitNote(Guid id, CancellationToken ct)
+    {
+        var r = await _svc.GetDebitNoteAsync(id, ct);
+        return r is null ? NotFound() : Ok(r);
+    }
+
+    [HttpPost("debit-notes")]
+    [HasPermission(Modules.Inventory, Actions.Create)]
+    public async Task<IActionResult> CreateDebitNote([FromBody] CreateDebitNoteRequest req, CancellationToken ct)
+        => Ok(await _svc.CreateDebitNoteAsync(req, ct));
+
+    [HttpGet("returnable-purchases")]
+    [HasPermission(Modules.Inventory, Actions.View)]
+    public async Task<IActionResult> ReturnablePurchases([FromQuery] Guid vendorId, CancellationToken ct)
+        => Ok(await _svc.ListReturnablePurchasesAsync(vendorId, ct));
+
+    [HttpGet("vendor-balances")]
+    [HasPermission(Modules.Inventory, Actions.View)]
+    public async Task<IActionResult> VendorBalances(CancellationToken ct)
+        => Ok(await _svc.VendorBalancesAsync(ct));
+
     [HttpPost("adjustments")]
     [HasPermission(Modules.Inventory, Actions.Edit)]
     public async Task<IActionResult> CreateAdjustment([FromBody] CreateStockAdjustmentRequest req, CancellationToken ct)

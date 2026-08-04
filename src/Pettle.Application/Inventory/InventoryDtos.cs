@@ -38,7 +38,10 @@ public record CreateOrUpdateVendorRequest(string Name, string? ContactPerson, st
 public record PoListItem(
     Guid Id, string? LegacyPoNumber, string PoNumber, string VendorName,
     PoStatus Status, DateOnly PurchaseDate, string? VendorInvoiceNumber,
-    PoPaymentStatus PaymentStatus, int NumberOfItems, decimal Total, decimal Paid, decimal Due
+    PoPaymentStatus PaymentStatus, int NumberOfItems, decimal Total, decimal Paid, decimal Due,
+    PurchaseDocType DocType = PurchaseDocType.Purchase,
+    string? ReturnReason = null,
+    string? AgainstPoNumber = null
 );
 
 public record PoLineDto(
@@ -76,6 +79,39 @@ public record CreatePoLine(
 );
 
 public record RecordPoPaymentRequest(decimal Amount, string Mode, string? Notes);
+
+// --- Debit note (purchase return) ---
+
+/// <summary>Goods going back to the supplier, raised against the bill they came in on.
+/// Deliberately mirrors CreatePoRequest field for field — it is the same document in reverse, and
+/// the supplier expects to see the same numbers on it — with the return's own extras on the end.</summary>
+public record CreateDebitNoteRequest(
+    Guid VendorId, DateOnly DebitNoteDate, string? ReferenceBillNumber,
+    string? PaymentTerm, DateOnly? DueDate, DateOnly? ShippingDate,
+    bool ReverseCharge, bool ExportSez, string? TaxType, string? AccountLedger,
+    decimal FlatDiscountPercent, decimal AdditionalCharges, decimal Adjustment, string? Notes,
+    string Reason,
+    Guid? AgainstPurchaseOrderId,
+    List<CreatePoLine> Lines
+);
+
+/// <summary>A bill this supplier has, with what each line still has left to return — the picker
+/// needs both to stop someone returning more than ever came in.</summary>
+public record ReturnablePurchase(
+    Guid Id, string PoNumber, DateOnly PurchaseDate, string? VendorInvoiceNumber,
+    string? ReferenceBillNumber, decimal Total, IReadOnlyList<ReturnableLine> Lines);
+
+public record ReturnableLine(
+    Guid? SkuId, string? ItemCode, string ItemName, string? Unit,
+    decimal ReceivedQuantity, decimal AlreadyReturned, decimal ReturnableQuantity,
+    decimal UnitCost, decimal Mrp, decimal SellingPrice,
+    decimal PurDisc1Percent, decimal PurDisc2Percent, decimal TaxPercent,
+    DateOnly? ExpiryDate, string? BatchNumber, decimal StockOnHand);
+
+/// <summary>What a supplier is owed once returns are taken off — bills outstanding minus the debit
+/// notes raised against them. Negative means the supplier owes us.</summary>
+public record VendorBalance(
+    Guid VendorId, string VendorName, decimal BillsDue, decimal DebitNotes, decimal NetPayable);
 
 public record ReceivePoRequest(List<ReceivePoLine> Lines);
 public record ReceivePoLine(Guid LineId, decimal ReceivedQuantity);

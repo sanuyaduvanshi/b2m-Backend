@@ -40,6 +40,18 @@ public interface IInventoryService
     Task<bool> RecordPoPaymentAsync(Guid id, RecordPoPaymentRequest req, CancellationToken ct = default);
     Task<bool> DeletePoAsync(Guid id, bool force = false, CancellationToken ct = default);
 
+    // --- Debit notes (purchase returns) ---
+    Task<PagedResult<PoListItem>> ListDebitNotesAsync(string? search, int page, int pageSize, CancellationToken ct = default);
+    Task<PoDetail?> GetDebitNoteAsync(Guid id, CancellationToken ct = default);
+    /// <summary>Raises the return. Takes the stock back out — from the batch it came in on where
+    /// one is named — and never lets more go back than actually came in and is still on hand.</summary>
+    Task<PoDetail> CreateDebitNoteAsync(CreateDebitNoteRequest req, CancellationToken ct = default);
+    /// <summary>Bills for this supplier that still have something returnable, with per-line
+    /// quantities already net of earlier returns — backs the "Select Purchase" picker.</summary>
+    Task<IReadOnlyList<ReturnablePurchase>> ListReturnablePurchasesAsync(Guid vendorId, CancellationToken ct = default);
+    /// <summary>What each supplier is owed once debit notes are taken off.</summary>
+    Task<IReadOnlyList<VendorBalance>> VendorBalancesAsync(CancellationToken ct = default);
+
     Task<bool> CreateStockAdjustmentAsync(CreateStockAdjustmentRequest req, CancellationToken ct = default);
     Task<PagedResult<StockMovementDto>> ListMovementsAsync(Guid skuId, string? reason, int page, int pageSize, CancellationToken ct = default);
     /// <summary>Every stock movement across all SKUs within the date range, oldest first (the
