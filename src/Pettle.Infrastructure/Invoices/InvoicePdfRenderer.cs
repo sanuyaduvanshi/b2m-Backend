@@ -157,7 +157,6 @@ public static class InvoicePdfRenderer
                                     PlanFact(r, "Deducted from plan", $"{Rupee}{plan.CoveredAmount:0.00}");
                                     PlanFact(r, "Sessions left",
                                         plan.TotalSessions > 0 ? $"{plan.RemainingSessions} of {plan.TotalSessions}" : "—");
-                                    PlanFact(r, "Balance left", $"{Rupee}{plan.RemainingBalance:0.00}");
                                     PlanFact(r, "Valid till", plan.ValidUntil.ToString("dd MMM yyyy"));
                                 });
                                 c.Item().PaddingTop(8).Text(
