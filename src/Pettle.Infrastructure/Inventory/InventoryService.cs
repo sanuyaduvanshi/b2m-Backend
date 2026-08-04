@@ -3,6 +3,7 @@ using Pettle.Application.Clients;
 using Pettle.Application.Common;
 using Pettle.Application.Common.Errors;
 using Pettle.Application.Inventory;
+using Pettle.Application.Invoices;
 using Pettle.Domain.Expenses;
 using Pettle.Domain.Inventory;
 using Pettle.Infrastructure.Persistence;
@@ -579,11 +580,28 @@ public partial class InventoryService : IInventoryService
         if (req.Amount > po.Due + 0.01m)
             throw AppException.Validation("Payment exceeds due",
                 new Dictionary<string, string[]> { ["amount"] = new[] { $"Payment ₹{req.Amount:F2} exceeds amount due ₹{po.Due:F2}." } });
+        // Payments get recorded after the fact — someone pays the supplier and enters it the next
+        // morning. The date the money left is what the expense must carry, or the cash-flow report
+        // shows the spend on the wrong day.
+        var paidOn = req.PaidOn ?? BusinessClock.TodayIst();
+        if (!InvoiceDateWindow.IsAllowed(paidOn))
+            throw AppException.Validation("Invalid payment date",
+                new Dictionary<string, string[]> { ["paidOn"] = new[] { InvoiceDateWindow.PaymentMessage } });
+        // Midday rather than midnight — 00:00 IST is the previous day in UTC, so anything showing
+        // the raw timestamp would render the wrong date.
+        var paidAt = paidOn == BusinessClock.TodayIst()
+            ? DateTimeOffset.UtcNow
+            : BusinessClock.StartOfDayUtc(paidOn).AddHours(12);
+
         po.Paid += req.Amount;
         po.Due = Math.Max(0, po.Total - po.Paid);
         po.PaymentStatus = po.Due == 0 ? PoPaymentStatus.Paid : PoPaymentStatus.PartiallyPaid;
-        if (!string.IsNullOrWhiteSpace(req.Notes))
-            po.Notes = (po.Notes is null ? "" : po.Notes + " | ") + $"Paid ₹{req.Amount:F2} via {req.Mode}: {req.Notes}";
+        if (!string.IsNullOrWhiteSpace(req.Notes) || paidOn != BusinessClock.TodayIst())
+        {
+            var when = paidOn == BusinessClock.TodayIst() ? "" : $" on {paidOn:dd MMM yyyy}";
+            var why = string.IsNullOrWhiteSpace(req.Notes) ? "" : $": {req.Notes}";
+            po.Notes = (po.Notes is null ? "" : po.Notes + " | ") + $"Paid ₹{req.Amount:F2} via {req.Mode}{when}{why}";
+        }
 
         // Cash-basis expense recognition: money only actually leaves the business when a PO
         // payment is made (not when the PO/bill is merely created), so each payment against a
@@ -593,7 +611,7 @@ public partial class InventoryService : IInventoryService
         var purchaseCategoryId = await GetOrCreatePurchaseExpenseCategoryAsync(ct);
         _db.Expenses.Add(new Expense
         {
-            Time = DateTimeOffset.UtcNow,
+            Time = paidAt,
             Description = $"Purchase — PO {po.PoNumber}" + (vendorName is null ? "" : $" ({vendorName})"),
             CategoryId = purchaseCategoryId,
             PaymentMode = req.Mode,

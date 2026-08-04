@@ -78,7 +78,9 @@ public record CreatePoLine(
     DateOnly? ExpiryDate, string? BatchNumber
 );
 
-public record RecordPoPaymentRequest(decimal Amount, string Mode, string? Notes);
+/// <summary>PaidOn is when the money actually left, which is often not when someone got round to
+/// recording it — null means today.</summary>
+public record RecordPoPaymentRequest(decimal Amount, string Mode, string? Notes, DateOnly? PaidOn = null);
 
 // --- Debit note (purchase return) ---
 

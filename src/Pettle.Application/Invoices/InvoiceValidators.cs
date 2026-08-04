@@ -25,6 +25,10 @@ public static class InvoiceDateWindow
 
     public static string Message =>
         $"Invoice date must be today or within the last {MaxBackdateDays} days — future dates aren't allowed.";
+
+    /// <summary>Same window, worded for a payment being caught up on rather than a bill.</summary>
+    public static string PaymentMessage =>
+        $"Payment date must be today or within the last {MaxBackdateDays} days — future dates aren't allowed.";
 }
 
 // CreateSaleRequest/UpdateInvoiceRequest previously had no registered validator at all - only the

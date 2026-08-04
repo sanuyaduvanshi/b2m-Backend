@@ -1,4 +1,5 @@
 using FluentValidation;
+using Pettle.Application.Invoices;
 using Pettle.Application.Validation;
 
 namespace Pettle.Application.Inventory;
@@ -139,6 +140,23 @@ public class DebitNoteLineValidator : AbstractValidator<CreatePoLine>
         RuleFor(x => x.PurDisc2Percent).InclusiveBetween(0, 100).WithMessage("Discount 2 must be between 0 and 100%.");
         RuleFor(x => x.TaxPercent).ValidTaxPercent();
         RuleFor(x => x.BatchNumber).MaximumLength(60);
+    }
+}
+
+public class RecordPoPaymentValidator : AbstractValidator<RecordPoPaymentRequest>
+{
+    public RecordPoPaymentValidator()
+    {
+        RuleFor(x => x.Amount).PositiveAmount();
+        RuleFor(x => x.Mode).NotEmpty().WithMessage("Payment mode is required.").MaximumLength(40);
+        RuleFor(x => x.Notes).MaximumLength(1000);
+        // Same window the POS uses: yesterday's payment can be caught up on, but the books can't
+        // be rewritten weeks back or dated into the future. Validated on the nullable property
+        // itself so the error comes back keyed "paidOn" — keying it "paidOn.Value" would leave the
+        // message stranded at the top of the form instead of under the date field.
+        RuleFor(x => x.PaidOn)
+            .Must(d => !d.HasValue || InvoiceDateWindow.IsAllowed(d.Value))
+            .WithMessage(InvoiceDateWindow.PaymentMessage);
     }
 }
 
