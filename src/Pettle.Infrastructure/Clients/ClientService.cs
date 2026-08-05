@@ -125,6 +125,26 @@ public class ClientService : IClientService
             .ToList();
     }
 
+    public async Task<byte[]> ExportWorkbookAsync(ClientListQuery query, CancellationToken ct = default)
+    {
+        var rows = await ExportAsync(query, ct);
+        var tenantName = await _db.Tenants.AsNoTracking()
+            .Where(t => t.Id == _user.TenantId)
+            .Select(t => t.Name)
+            .FirstOrDefaultAsync(ct) ?? "Business";
+        return ClientWorkbookBuilder.Build(rows, tenantName, DescribeFilters(query));
+    }
+
+    /// <summary>Says which slice of the database the workbook holds, so a saved file still explains
+    /// itself weeks later. Only what actually narrows the rows is listed.</summary>
+    private static string DescribeFilters(ClientListQuery q)
+    {
+        var bits = new List<string> { q.Status.HasValue ? $"Status: {q.Status}" : "All statuses" };
+        if (!string.IsNullOrWhiteSpace(q.Search)) bits.Add($"Search: \"{q.Search.Trim()}\"");
+        if (q.HasDues == true) bits.Add("With dues only");
+        return string.Join(" · ", bits);
+    }
+
     public async Task<PetParentDetail?> GetAsync(Guid id, CancellationToken ct = default)
     {
         if (_user.TenantId is null) return null;

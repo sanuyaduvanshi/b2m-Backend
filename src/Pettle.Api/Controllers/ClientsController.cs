@@ -3,6 +3,7 @@ using Pettle.Api.Authorization;
 using Pettle.Application.Clients;
 using Pettle.Domain.Clients;
 using Pettle.Domain.Identity;
+using Pettle.Infrastructure.Clients;
 
 namespace Pettle.Api.Controllers;
 
@@ -22,6 +23,12 @@ public class ClientsController : ControllerBase
     [HasPermission(Modules.ClientDatabase, Actions.Export)]
     public async Task<IActionResult> Export([FromQuery] ClientListQuery query, CancellationToken ct)
         => Ok(await _service.ExportAsync(query, ct));
+
+    [HttpGet("export.xlsx")]
+    [HasPermission(Modules.ClientDatabase, Actions.Export)]
+    public async Task<IActionResult> ExportWorkbook([FromQuery] ClientListQuery query, CancellationToken ct)
+        => File(await _service.ExportWorkbookAsync(query, ct),
+                ClientWorkbookBuilder.ContentType, ClientWorkbookBuilder.FileName());
 
     [HttpGet("{id:guid}")]
     [HasPermission(Modules.ClientDatabase, Actions.View)]
