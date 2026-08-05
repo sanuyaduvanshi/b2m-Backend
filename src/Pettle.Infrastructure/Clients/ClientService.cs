@@ -101,7 +101,8 @@ public class ClientService : IClientService
             null,
             p.Tags.Select(t => t.ClientTag!.Name).ToList(),
             p.Pets.Where(pet => pet.Breed != null).Select(pet => pet.Breed!).Distinct().ToList(),
-            p.AddressLine1
+            p.AddressLine1,
+            p.Pets.OrderBy(pet => pet.Name).Select(pet => pet.Name).ToList()
         ));
 
     /// <summary>Fills in each client's most recent booking date — a separate round trip because a

@@ -20,7 +20,10 @@ public record PetParentListItem(
     // The imported B2M data put the locality ("Kukatpally", "Moosapet", …) in AddressLine1 and
     // left City entirely null, so a City-only column renders blank for every row — the list needs
     // both to be able to fall back.
-    string? AddressLine1 = null
+    string? AddressLine1 = null,
+    /// <summary>The pets by name. A breed list answers "what kind of animal"; on a client report
+    /// the name is what staff and the owner actually recognise the pet by.</summary>
+    IReadOnlyList<string>? PetNames = null
 );
 
 public record PetParentDetail(

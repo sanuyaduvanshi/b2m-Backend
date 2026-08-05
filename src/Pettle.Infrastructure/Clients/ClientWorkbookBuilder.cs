@@ -159,7 +159,7 @@ public static class ClientWorkbookBuilder
     {
         var ws = wb.AddWorksheet("Clients");
 
-        string[] headers = { "Client", "Phone", "Email", "Location", "Pets", "Breeds",
+        string[] headers = { "Client", "Phone", "Email", "Location", "Pets", "Pet names", "Breeds",
                              "Outstanding", "Wallet", "Registered", "Last booking", "Status" };
         for (var i = 0; i < headers.Length; i++)
         {
@@ -181,9 +181,10 @@ public static class ClientWorkbookBuilder
             ws.Cell(r, 3).Value = c.Email ?? "";
             ws.Cell(r, 4).Value = string.IsNullOrWhiteSpace(c.City) ? (c.AddressLine1 ?? "") : c.City;
             ws.Cell(r, 5).Value = c.PetCount;
-            ws.Cell(r, 6).Value = string.Join(", ", c.PetBreeds);
+            ws.Cell(r, 6).Value = string.Join(", ", c.PetNames ?? Array.Empty<string>());
+            ws.Cell(r, 7).Value = string.Join(", ", c.PetBreeds);
 
-            var due = ws.Cell(r, 7);
+            var due = ws.Cell(r, 8);
             due.Value = c.OutstandingBalance;
             due.Style.NumberFormat.Format = Money;
             // Red when owed, green when the client is in credit — the sign alone is easy to miss
@@ -191,22 +192,22 @@ public static class ClientWorkbookBuilder
             if (c.OutstandingBalance > 0) { due.Style.Font.FontColor = Danger; due.Style.Font.Bold = true; }
             else if (c.OutstandingBalance < 0) due.Style.Font.FontColor = Good;
 
-            ws.Cell(r, 8).Value = c.WalletBalance;
-            ws.Cell(r, 8).Style.NumberFormat.Format = Money;
+            ws.Cell(r, 9).Value = c.WalletBalance;
+            ws.Cell(r, 9).Style.NumberFormat.Format = Money;
 
             // Written as real dates, not text, so Excel can sort and filter them by date.
             if (c.OnboardingDate is { } on)
             {
-                ws.Cell(r, 9).Value = on.ToDateTime(TimeOnly.MinValue);
-                ws.Cell(r, 9).Style.DateFormat.Format = "dd-MMM-yyyy";
+                ws.Cell(r, 10).Value = on.ToDateTime(TimeOnly.MinValue);
+                ws.Cell(r, 10).Style.DateFormat.Format = "dd-MMM-yyyy";
             }
             if (c.LatestBookingDate is { } lb)
             {
-                ws.Cell(r, 10).Value = lb.ToDateTime(TimeOnly.MinValue);
-                ws.Cell(r, 10).Style.DateFormat.Format = "dd-MMM-yyyy";
+                ws.Cell(r, 11).Value = lb.ToDateTime(TimeOnly.MinValue);
+                ws.Cell(r, 11).Style.DateFormat.Format = "dd-MMM-yyyy";
             }
 
-            var st = ws.Cell(r, 11);
+            var st = ws.Cell(r, 12);
             st.Value = c.Status.ToString();
             st.Style.Font.Bold = true;
             st.Style.Font.FontColor = c.Status switch
@@ -229,10 +230,10 @@ public static class ClientWorkbookBuilder
             var t = r + 1;
             ws.Cell(t, 1).Value = $"Total — {rows.Count} client{(rows.Count == 1 ? "" : "s")}";
             ws.Cell(t, 5).Value = rows.Sum(x => x.PetCount);
-            ws.Cell(t, 7).Value = rows.Sum(x => Math.Max(0, x.OutstandingBalance));
-            ws.Cell(t, 7).Style.NumberFormat.Format = Money;
-            ws.Cell(t, 8).Value = rows.Sum(x => x.WalletBalance);
+            ws.Cell(t, 8).Value = rows.Sum(x => Math.Max(0, x.OutstandingBalance));
             ws.Cell(t, 8).Style.NumberFormat.Format = Money;
+            ws.Cell(t, 9).Value = rows.Sum(x => x.WalletBalance);
+            ws.Cell(t, 9).Style.NumberFormat.Format = Money;
             var trow = ws.Range(t, 1, t, headers.Length);
             trow.Style.Font.Bold = true;
             trow.Style.Fill.BackgroundColor = XLColor.FromHtml("#F3EDE8");
@@ -243,7 +244,8 @@ public static class ClientWorkbookBuilder
         ws.SheetView.FreezeRows(1);
         ws.Range(1, 1, last, headers.Length).SetAutoFilter();
         ws.Columns(1, headers.Length).AdjustToContents(1, 200, 8, 42);
-        ws.Column(6).Width = Math.Min(ws.Column(6).Width, 30);
+        ws.Column(6).Width = Math.Min(ws.Column(6).Width, 28);
+        ws.Column(7).Width = Math.Min(ws.Column(7).Width, 28);
     }
 
     /// <summary>Filename Excel and the browser both accept, stamped so successive downloads don't
