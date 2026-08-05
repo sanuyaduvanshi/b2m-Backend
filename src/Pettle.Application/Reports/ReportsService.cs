@@ -1,6 +1,14 @@
 namespace Pettle.Application.Reports;
 
-public record DateRange(DateOnly From, DateOnly To);
+public record DateRange(DateOnly From, DateOnly To)
+{
+    /// <summary>Unbounded. Expressed as the widest possible dates rather than nulls so every
+    /// existing `>= From && <= To` filter keeps working untouched — there is no "all time" branch
+    /// to forget in one query and remember in another.</summary>
+    public static DateRange AllTime => new(DateOnly.MinValue, DateOnly.MaxValue);
+
+    public bool IsAllTime => From == DateOnly.MinValue && To == DateOnly.MaxValue;
+}
 
 public record RevenuePoint(DateOnly Date, decimal Amount);
 public record BookingsBreakdown(string ServiceType, int Count, decimal Revenue);
@@ -16,7 +24,11 @@ public record RevenueReport(
     int Count,
     IReadOnlyDictionary<string, int> CountByType);
 public record BookingsReport(int Total, int Completed, int Cancelled, int NoShow, IReadOnlyList<BookingsBreakdown> ByServiceType);
-public record ClientsReport(int Active, int Archived, int NewInRange, IReadOnlyList<TopClient> TopClients, int Blacklisted = 0);
+/// <summary>FirstOnboarding/LastOnboarding are the dates the client data itself actually spans —
+/// what "all time" resolves to in practice, so the figure can name its own period instead of
+/// leaving the reader to guess how far back it reaches. Null when there are no clients yet.</summary>
+public record ClientsReport(int Active, int Archived, int NewInRange, IReadOnlyList<TopClient> TopClients, int Blacklisted = 0,
+    DateOnly? FirstOnboarding = null, DateOnly? LastOnboarding = null);
 public record TopClient(Guid Id, string Name, string Phone, int Bookings, decimal Spend);
 public record InventoryReport(int TotalSkus, int LowStock, int ExpiringSoon, decimal InventoryValue, IReadOnlyList<ExpenseSlice> ByCategory, int OutOfStock, int ListedInApp);
 

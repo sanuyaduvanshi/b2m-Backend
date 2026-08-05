@@ -208,7 +208,12 @@ public class ReportsService : IReportsService
             .Take(10)
             .ToList();
 
-        return new ClientsReport(active, archived, newClients, top, blacklisted);
+        // The span of the client base itself, so "All time" can state the period it covers.
+        var onboarded = _db.PetParents.IgnoreQueryFilters().Where(p => p.TenantId == tid && p.OnboardingDate != null);
+        var firstOnboarding = await onboarded.MinAsync(p => p.OnboardingDate, ct);
+        var lastOnboarding = await onboarded.MaxAsync(p => p.OnboardingDate, ct);
+
+        return new ClientsReport(active, archived, newClients, top, blacklisted, firstOnboarding, lastOnboarding);
     }
 
     public async Task<ExpensesReport> ExpensesAsync(DateRange range, CancellationToken ct = default)

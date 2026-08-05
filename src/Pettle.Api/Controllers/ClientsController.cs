@@ -20,8 +20,8 @@ public class ClientsController : ControllerBase
 
     [HttpGet("export")]
     [HasPermission(Modules.ClientDatabase, Actions.Export)]
-    public async Task<IActionResult> Export([FromQuery] string? search, [FromQuery] ClientStatus? status, CancellationToken ct)
-        => Ok(await _service.ExportAsync(search, status, ct));
+    public async Task<IActionResult> Export([FromQuery] ClientListQuery query, CancellationToken ct)
+        => Ok(await _service.ExportAsync(query, ct));
 
     [HttpGet("{id:guid}")]
     [HasPermission(Modules.ClientDatabase, Actions.View)]

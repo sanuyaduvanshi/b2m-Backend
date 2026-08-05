@@ -32,8 +32,11 @@ public class ReportsController : ControllerBase
         => Ok(await _svc.BookingsAsync(ResolveRange(from, to), ct));
 
     [HttpGet("clients")] [HasPermission(Modules.Reports, Actions.View)]
-    public async Task<IActionResult> Clients([FromQuery] DateOnly? from, [FromQuery] DateOnly? to, CancellationToken ct)
-        => Ok(await _svc.ClientsAsync(ResolveRange(from, to), ct));
+    public async Task<IActionResult> Clients([FromQuery] DateOnly? from, [FromQuery] DateOnly? to,
+        [FromQuery] bool allTime = false, CancellationToken ct = default)
+        // Omitted dates default to the last 30 days, so "all time" has to say so explicitly —
+        // sending blank from/to would quietly give a month's figure under an "All Time" label.
+        => Ok(await _svc.ClientsAsync(allTime ? DateRange.AllTime : ResolveRange(from, to), ct));
 
     [HttpGet("inventory")] [HasPermission(Modules.Reports, Actions.View)]
     public async Task<IActionResult> Inventory(CancellationToken ct) => Ok(await _svc.InventoryAsync(ct));

@@ -23,6 +23,30 @@ public class ClientService : IClientService
     {
         if (_user.TenantId is null) return new PagedResult<PetParentListItem>(Array.Empty<PetParentListItem>(), 0, 1, query.PageSize);
 
+        var q = FilteredQuery(query);
+        var total = await q.CountAsync(ct);
+        var page = Math.Max(query.Page, 1);
+        var size = Math.Clamp(query.PageSize, 1, 200);
+
+        var items = await Project(q.Skip((page - 1) * size).Take(size)).ToListAsync(ct);
+        return new PagedResult<PetParentListItem>(await WithLatestBookingAsync(items, ct), total, page, size);
+    }
+
+    public async Task<IReadOnlyList<PetParentListItem>> ExportAsync(ClientListQuery query, CancellationToken ct = default)
+    {
+        if (_user.TenantId is null) return Array.Empty<PetParentListItem>();
+        var items = await Project(FilteredQuery(query)).ToListAsync(ct);
+        return await WithLatestBookingAsync(items, ct);
+    }
+
+    /// <summary>The list's filters and ordering in one place.
+    ///
+    /// Export used to repeat this and had drifted: it ignored the "with dues" toggle and always
+    /// sorted by name, so a download could hold rows the table wasn't showing, in a different
+    /// order. Sharing the builder is what makes "what I see is what I get" true rather than
+    /// something that has to be maintained twice.</summary>
+    private IQueryable<PetParent> FilteredQuery(ClientListQuery query)
+    {
         var q = _db.PetParents.AsNoTracking().Where(p => p.TenantId == _user.TenantId);
 
         if (query.Status.HasValue)
@@ -41,7 +65,7 @@ public class ClientService : IClientService
                 p.Pets.Any(pet => pet.Name.ToLower().Contains(s)));
         }
 
-        q = (query.Sort?.ToLowerInvariant(), query.Desc) switch
+        var ordered = (query.Sort?.ToLowerInvariant(), query.Desc) switch
         {
             ("phone", true) => q.OrderByDescending(p => p.Phone),
             ("phone", false) => q.OrderBy(p => p.Phone),
@@ -53,79 +77,38 @@ public class ClientService : IClientService
             _ => q.OrderBy(p => p.Name)
         };
 
-        var total = await q.CountAsync(ct);
-        var page = Math.Max(query.Page, 1);
-        var size = Math.Clamp(query.PageSize, 1, 200);
-
-        var items = await q.Skip((page - 1) * size).Take(size)
-            .Select(p => new PetParentListItem(
-                p.Id,
-                p.LegacyClientId,
-                p.Name,
-                p.Phone,
-                p.Email,
-                p.City,
-                p.Pets.Count,
-                p.OutstandingBalance,
-                p.WalletBalance,
-                p.Status,
-                p.OnboardingDate,
-                null,
-                p.Tags.Select(t => t.ClientTag!.Name).ToList(),
-                p.Pets.Where(pet => pet.Breed != null).Select(pet => pet.Breed!).Distinct().ToList(),
-                p.AddressLine1
-            )).ToListAsync(ct);
-
-        var ids = items.Select(i => i.Id).ToList();
-        var latestByParent = await _db.Bookings.AsNoTracking()
-            .Where(b => b.TenantId == _user.TenantId && b.PetParentId != null && ids.Contains(b.PetParentId.Value))
-            .GroupBy(b => b.PetParentId!.Value)
-            .Select(g => new { ParentId = g.Key, Latest = g.Max(b => b.BookingDate) })
-            .ToDictionaryAsync(x => x.ParentId, x => x.Latest, ct);
-
-        items = items.Select(i => i with { LatestBookingDate = latestByParent.GetValueOrDefault(i.Id) }).ToList();
-
-        return new PagedResult<PetParentListItem>(items, total, page, size);
+        // Every sort key here has ties — most clients share an outstanding balance of 0, and plenty
+        // share an onboarding date. Postgres gives tied rows no guaranteed order, so without a
+        // tiebreaker the same client can appear on two pages while another is skipped entirely,
+        // and a download can't reproduce the order the table was showing. Id is arbitrary but
+        // stable, which is all that is needed.
+        return ordered.ThenBy(p => p.Id);
     }
 
-    public async Task<IReadOnlyList<PetParentListItem>> ExportAsync(string? search, ClientStatus? status, CancellationToken ct = default)
+    private static IQueryable<PetParentListItem> Project(IQueryable<PetParent> q) =>
+        q.Select(p => new PetParentListItem(
+            p.Id,
+            p.LegacyClientId,
+            p.Name,
+            p.Phone,
+            p.Email,
+            p.City,
+            p.Pets.Count,
+            p.OutstandingBalance,
+            p.WalletBalance,
+            p.Status,
+            p.OnboardingDate,
+            null,
+            p.Tags.Select(t => t.ClientTag!.Name).ToList(),
+            p.Pets.Where(pet => pet.Breed != null).Select(pet => pet.Breed!).Distinct().ToList(),
+            p.AddressLine1
+        ));
+
+    /// <summary>Fills in each client's most recent booking date — a separate round trip because a
+    /// correlated Max() per row makes the list query markedly slower.</summary>
+    private async Task<List<PetParentListItem>> WithLatestBookingAsync(List<PetParentListItem> items, CancellationToken ct)
     {
-        if (_user.TenantId is null) return Array.Empty<PetParentListItem>();
-
-        var q = _db.PetParents.AsNoTracking().Where(p => p.TenantId == _user.TenantId);
-
-        if (status.HasValue)
-            q = q.Where(p => p.Status == status.Value);
-
-        if (!string.IsNullOrWhiteSpace(search))
-        {
-            var s = search.Trim().ToLower();
-            q = q.Where(p =>
-                p.Name.ToLower().Contains(s) ||
-                p.Phone.Contains(s) ||
-                (p.Email != null && p.Email.ToLower().Contains(s)) ||
-                p.Pets.Any(pet => pet.Name.ToLower().Contains(s)));
-        }
-
-        var items = await q.OrderBy(p => p.Name)
-            .Select(p => new PetParentListItem(
-                p.Id,
-                p.LegacyClientId,
-                p.Name,
-                p.Phone,
-                p.Email,
-                p.City,
-                p.Pets.Count,
-                p.OutstandingBalance,
-                p.WalletBalance,
-                p.Status,
-                p.OnboardingDate,
-                null,
-                p.Tags.Select(t => t.ClientTag!.Name).ToList(),
-                p.Pets.Where(pet => pet.Breed != null).Select(pet => pet.Breed!).Distinct().ToList(),
-                p.AddressLine1
-            )).ToListAsync(ct);
-
+        if (items.Count == 0) return items;
         var ids = items.Select(i => i.Id).ToList();
         var latestByParent = await _db.Bookings.AsNoTracking()
             .Where(b => b.TenantId == _user.TenantId && b.PetParentId != null && ids.Contains(b.PetParentId.Value))
@@ -133,7 +116,13 @@ public class ClientService : IClientService
             .Select(g => new { ParentId = g.Key, Latest = g.Max(b => b.BookingDate) })
             .ToDictionaryAsync(x => x.ParentId, x => x.Latest, ct);
 
-        return items.Select(i => i with { LatestBookingDate = latestByParent.GetValueOrDefault(i.Id) }).ToList();
+        // TryGetValue, not GetValueOrDefault: the dictionary holds DateOnly, so a miss yields
+        // default(DateOnly) — 0001-01-01 — which lands in a DateOnly? as a real date rather than
+        // null. The list page doesn't render this column so it went unnoticed; the export printed
+        // "0001-01-01" against every client who has never booked.
+        return items
+            .Select(i => i with { LatestBookingDate = latestByParent.TryGetValue(i.Id, out var d) ? d : null })
+            .ToList();
     }
 
     public async Task<PetParentDetail?> GetAsync(Guid id, CancellationToken ct = default)
