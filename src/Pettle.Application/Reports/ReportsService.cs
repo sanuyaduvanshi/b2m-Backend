@@ -56,7 +56,21 @@ public record PeriodSummary(
     int TotalSubscriptions, decimal SubscriptionsRevenue,
     int TotalPurchaseOrders, decimal PurchaseOrdersValue,
     decimal SalesDue = 0, decimal BookingsDue = 0, decimal SubscriptionsDue = 0,
-    decimal PurchaseOrdersDue = 0
+    decimal PurchaseOrdersDue = 0,
+    /// <summary>Cash actually received in the period — the headline "Revenue".</summary>
+    decimal RevenueCollected = 0,
+    /// <summary>The part of RevenueCollected that settled bills raised *in* this period.</summary>
+    decimal RevenueForPeriodBills = 0,
+    /// <summary>The part that settled bills raised *before* this period.
+    ///
+    /// Without this split Revenue looks broken: it rarely equals Sales + Bookings, because those
+    /// cards report what was *billed* in the period while Revenue reports what was *received*.
+    /// Cash arrives against older bills, this period's bills get paid on later days, and some of
+    /// them are not paid at all. Reporting the buckets separately is what turns an apparent
+    /// mismatch into an explanation. RevenueForPeriodBills + RevenueFromEarlierBills need not
+    /// equal RevenueCollected — the remainder is cash with no invoice behind it, i.e. a
+    /// subscription purchase.</summary>
+    decimal RevenueFromEarlierBills = 0
 );
 
 public interface IReportsService

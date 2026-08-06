@@ -315,12 +315,40 @@ public class ReportsService : IReportsService
         var returned = poRows.Where(p => p.DocType == PurchaseDocType.DebitNote).Sum(p => p.Total);
         var poDue = poRows.Where(p => p.DocType == PurchaseDocType.Purchase).Sum(p => p.Due) - returned;
 
+        // Revenue is cash received, while the Sales/Bookings cards are amounts billed, so the two
+        // rarely tie out. Splitting the cash by whether it settled a bill raised in this period or
+        // an older one lets the dashboard show why instead of leaving it looking like an error.
+        var collected = await _db.Payments.AsNoTracking().RealRevenue()
+            .Where(p => p.TenantId == tid && p.PaymentTime >= from && p.PaymentTime <= to
+                        && (!own || p.CreatedById == uid))
+            .Select(p => new
+            {
+                p.Amount,
+                InvoiceDate = p.Invoice != null ? (DateOnly?)p.Invoice.InvoiceDate : null,
+                InvoiceType = p.Invoice != null ? (InvoiceType?)p.Invoice.InvoiceType : null,
+            })
+            .ToListAsync(ct);
+        var revenueCollected = collected.Sum(x => x.Amount);
+
+        // Only Sale and Booking invoices, because those are the two cards this split exists to
+        // reconcile against. Counting subscription or adjustment invoices here would put cash in
+        // the "for this period's bills" bucket that no billed figure on screen accounts for, and
+        // the leftover "paid on another day" would come out negative.
+        bool Billable(InvoiceType? t) => t == InvoiceType.Sale || t == InvoiceType.Booking;
+        var revenueForPeriod = collected
+            .Where(x => Billable(x.InvoiceType) && x.InvoiceDate >= range.From && x.InvoiceDate <= range.To)
+            .Sum(x => x.Amount);
+        var revenueFromEarlier = collected
+            .Where(x => Billable(x.InvoiceType) && x.InvoiceDate < range.From)
+            .Sum(x => x.Amount);
+
         return new PeriodSummary(
             salesRevenue, salesCount,
             totalBookings, bookingsRevenue,
             subsIssuedCount, subsRevenue,
             poTotals.Count, poTotals.Sum() - returned,
-            salesDue, bookingsDue, subsDue, poDue);
+            salesDue, bookingsDue, subsDue, poDue,
+            revenueCollected, revenueForPeriod, revenueFromEarlier);
     }
 
     public async Task<InventoryReport> InventoryAsync(CancellationToken ct = default)
