@@ -13,6 +13,14 @@ public class SubscriptionPackage : SoftDeletableTenantEntity
     public bool IsTaxInclusive { get; set; }
     public decimal TaxPercent { get; set; }
     public bool IsActive { get; set; } = true;
+    /// <summary>Whether a plan sold from this package belongs to one animal or to the household.
+    ///
+    /// A vaccination course or a grooming card is bought for a particular pet — letting a sibling
+    /// eat the sessions is wrong both medically and commercially. A boarding package is often
+    /// genuinely household-level, since the parent may board whichever animal that week. Only the
+    /// business knows which of its packages is which, so it is recorded per package rather than
+    /// guessed at issue time.</summary>
+    public SubscriptionScope AppliesTo { get; set; } = SubscriptionScope.PerCustomer;
     public ICollection<SubscriptionPackageService> Services { get; set; } = new List<SubscriptionPackageService>();
 }
 
@@ -37,6 +45,10 @@ public class SubscriptionPackageService : TenantEntity
     public Guid? AddOnCatalogueId { get; set; }
 }
 
+// PerCustomer = 0 so every package that existed before this field keeps its old, household-wide
+// behaviour on migration; the ones that should be per-pet are set explicitly.
+public enum SubscriptionScope { PerCustomer = 0, PerPet = 1 }
+
 public enum DiscountType { Percentage = 0, FlatAmount = 1 }
 // Boarding = 0 so existing packages (created before this field existed) default to Boarding —
 // the most reasonable fallback for legacy data, and matches SubscriptionPackage.Type's own default.
@@ -49,6 +61,11 @@ public class IssuedSubscription : SoftDeletableTenantEntity
     public SubscriptionPackage? Package { get; set; }
     public Guid PetParentId { get; set; }
     public PetParent? PetParent { get; set; }
+    /// <summary>Which animal this plan is for. Null means the whole household may use it — the
+    /// only behaviour that existed before this field, so every plan issued until now keeps working
+    /// exactly as it did.</summary>
+    public Guid? PetId { get; set; }
+    public Pet? Pet { get; set; }
     public DateOnly IssuedOn { get; set; }
     public DateOnly ValidUntil { get; set; }
     public int RemainingSessions { get; set; }

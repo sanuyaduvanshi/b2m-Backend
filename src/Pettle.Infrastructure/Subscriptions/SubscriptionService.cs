@@ -1,3 +1,4 @@
+using Pettle.Domain.Clients;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Http;
 using Pettle.Application.Clients;
@@ -61,7 +62,8 @@ public class SubscriptionService : ISubscriptionService
         {
             Name = req.Name, Description = req.Description, ValidityDays = req.ValidityDays,
             Type = Enum.TryParse<SubscriptionPackageType>(req.Type, true, out var pt) ? pt : SubscriptionPackageType.Boarding,
-            Price = req.Price, TaxPercent = req.TaxPercent, IsTaxInclusive = req.IsTaxInclusive, IsActive = req.IsActive
+            Price = req.Price, TaxPercent = req.TaxPercent, IsTaxInclusive = req.IsTaxInclusive, IsActive = req.IsActive,
+            AppliesTo = ParseScope(req.AppliesTo)
         };
         if (req.Services != null)
             foreach (var s in req.Services)
@@ -81,6 +83,7 @@ public class SubscriptionService : ISubscriptionService
         p.Name = req.Name; p.Description = req.Description; p.ValidityDays = req.ValidityDays;
         p.Type = Enum.TryParse<SubscriptionPackageType>(req.Type, true, out var pt) ? pt : SubscriptionPackageType.Boarding;
         p.Price = req.Price; p.TaxPercent = req.TaxPercent; p.IsTaxInclusive = req.IsTaxInclusive; p.IsActive = req.IsActive;
+        p.AppliesTo = ParseScope(req.AppliesTo);
         // ExecuteDelete bypasses change tracker — then add new via DbSet (not nav prop)
         await _db.SubscriptionPackageServices.Where(s => s.PackageId == id).ExecuteDeleteAsync(ct);
         if (req.Services != null)
@@ -96,6 +99,9 @@ public class SubscriptionService : ISubscriptionService
             .FirstAsync(x => x.Id == id, ct);
         return await ToListItemWithSkuNamesAsync(updated, ct);
     }
+
+    private static SubscriptionScope ParseScope(string? v) =>
+        Enum.TryParse<SubscriptionScope>(v, true, out var sc) ? sc : SubscriptionScope.PerCustomer;
 
     private static SubscriptionPackageService MapService(PackageServiceItem s) => new()
     {
@@ -126,7 +132,7 @@ public class SubscriptionService : ISubscriptionService
             s.DaysOrSessions, s.BoardingType, s.SkuCategory, s.SkuSubCategory, s.SkuId,
             s.SkuId.HasValue && skuNames.TryGetValue(s.SkuId.Value, out var n) ? n : null,
             s.ItemKind.ToString(), s.AddOnCatalogueId)).ToList(),
-        p.Type.ToString(), p.Description);
+        p.Type.ToString(), p.Description, p.AppliesTo.ToString());
 
     public async Task<bool> DeletePackageAsync(Guid id, CancellationToken ct = default)
     {
@@ -162,7 +168,8 @@ public class SubscriptionService : ISubscriptionService
             .Select(i => new IssuedListItem(
                 i.Id, i.Package!.Name, i.PetParentId, i.PetParent!.Name, i.PetParent!.Phone,
                 i.IssuedOn, i.ValidUntil, i.RemainingSessions, i.TotalSessions,
-                i.Status, i.PaymentStatus, i.AmountPaid, i.AmountDue, i.BalanceUsed, i.Package!.Description, i.PackageId))
+                i.Status, i.PaymentStatus, i.AmountPaid, i.AmountDue, i.BalanceUsed, i.Package!.Description, i.PackageId,
+                i.PetId, i.Pet != null ? i.Pet.Name : null))
             .ToListAsync(ct);
         return new PagedResult<IssuedListItem>(items, total, p, sz);
     }
@@ -203,7 +210,8 @@ public class SubscriptionService : ISubscriptionService
             .Select(i => new IssuedListItem(
                 i.Id, i.Package!.Name, i.PetParentId, i.PetParent!.Name, i.PetParent!.Phone,
                 i.IssuedOn, i.ValidUntil, i.RemainingSessions, i.TotalSessions,
-                i.Status, i.PaymentStatus, i.AmountPaid, i.AmountDue, i.BalanceUsed, i.Package!.Description, i.PackageId))
+                i.Status, i.PaymentStatus, i.AmountPaid, i.AmountDue, i.BalanceUsed, i.Package!.Description, i.PackageId,
+                i.PetId, i.Pet != null ? i.Pet.Name : null))
             .ToListAsync(ct);
     }
 
@@ -225,10 +233,33 @@ public class SubscriptionService : ISubscriptionService
             throw AppException.Validation("Amount paid exceeds package price",
                 new Dictionary<string, string[]> { ["amountPaid"] = new[] { $"Amount paid Rs.{req.AmountPaid:F2} > price Rs.{pkg.Price:F2}." } });
 
+        Pet? chosenPet = null;
+        // A per-pet package must name its animal, or the plan is indistinguishable from the
+        // customer's other plans the moment they own more than one pet — which is exactly the
+        // situation staff were working around by issuing two identical plans and hoping.
+        Guid? petId = null;
+        if (req.PetId is { } requestedPetId)
+        {
+            var pet = await _db.Pets.FirstOrDefaultAsync(x => x.Id == requestedPetId && x.TenantId == _user.TenantId, ct)
+                ?? throw AppException.Validation("Invalid pet",
+                    new Dictionary<string, string[]> { ["petId"] = new[] { "Pet not found in this business." } });
+            if (pet.PetParentId != parent.Id)
+                throw AppException.Validation("Pet belongs to another client",
+                    new Dictionary<string, string[]> { ["petId"] = new[] { $"{pet.Name} is not {parent.Name}'s pet." } });
+            petId = pet.Id;
+            chosenPet = pet;
+        }
+        else if (pkg.AppliesTo == SubscriptionScope.PerPet)
+        {
+            throw AppException.Validation("Pet required",
+                new Dictionary<string, string[]> { ["petId"] = new[] { $"\"{pkg.Name}\" is issued per pet — choose which pet it is for." } });
+        }
+
         var issued = new IssuedSubscription
         {
             PackageId = pkg.Id,
             PetParentId = parent.Id,
+            PetId = petId,
             IssuedOn = req.IssuedOn ?? DateOnly.FromDateTime(DateTime.UtcNow),
             ValidUntil = (req.IssuedOn ?? DateOnly.FromDateTime(DateTime.UtcNow)).AddDays(pkg.ValidityDays),
             TotalSessions = req.TotalSessions,
@@ -259,7 +290,8 @@ public class SubscriptionService : ISubscriptionService
         await _db.SaveChangesAsync(ct);
         return new IssuedListItem(issued.Id, pkg.Name, parent.Id, parent.Name, parent.Phone,
             issued.IssuedOn, issued.ValidUntil, issued.RemainingSessions, issued.TotalSessions,
-            issued.Status, issued.PaymentStatus, issued.AmountPaid, issued.AmountDue, issued.BalanceUsed, pkg.Description, pkg.Id);
+            issued.Status, issued.PaymentStatus, issued.AmountPaid, issued.AmountDue, issued.BalanceUsed, pkg.Description, pkg.Id,
+            issued.PetId, chosenPet?.Name);
     }
 
     public async Task<bool> FreezeAsync(Guid id, CancellationToken ct = default)
@@ -430,7 +462,7 @@ public class SubscriptionService : ISubscriptionService
         // type, this picked whichever was issued most recently regardless of type, so a Boarding
         // booking could surface a Vet-only plan that then covers nothing when applied.
         var sub = await _db.IssuedSubscriptions.AsNoTracking()
-            .Include(s => s.Package)
+            .Include(s => s.Package).Include(s => s.Pet)
             .Where(s => s.TenantId == _user.TenantId && s.PetParentId == petParentId
                 && s.Status == IssuedSubscriptionStatus.Active && s.ValidUntil >= today
                 && s.RemainingSessions > 0
@@ -441,7 +473,8 @@ public class SubscriptionService : ISubscriptionService
         var remaining = sub.AmountPaid - sub.BalanceUsed;
         return new ActiveSubscriptionSummary(
             sub.Id, sub.Package!.Name, sub.AmountPaid, sub.BalanceUsed, Math.Max(0, remaining),
-            sub.RemainingSessions, sub.TotalSessions, sub.ValidUntil, sub.Status.ToString(), sub.PackageId);
+            sub.RemainingSessions, sub.TotalSessions, sub.ValidUntil, sub.Status.ToString(), sub.PackageId,
+            sub.PetId, sub.Pet?.Name);
     }
 
     public async Task<IReadOnlyList<ActiveSubscriptionSummary>> GetActiveSubscriptionsByClientAsync(Guid petParentId, string? packageType = null, CancellationToken ct = default)
@@ -452,7 +485,7 @@ public class SubscriptionService : ISubscriptionService
             ? pt
             : null;
         var subs = await _db.IssuedSubscriptions.AsNoTracking()
-            .Include(s => s.Package)
+            .Include(s => s.Package).Include(s => s.Pet)
             .Where(s => s.TenantId == _user.TenantId && s.PetParentId == petParentId
                 && s.Status == IssuedSubscriptionStatus.Active && s.ValidUntil >= today
                 && s.RemainingSessions > 0
@@ -461,7 +494,8 @@ public class SubscriptionService : ISubscriptionService
             .ToListAsync(ct);
         return subs.Select(sub => new ActiveSubscriptionSummary(
             sub.Id, sub.Package!.Name, sub.AmountPaid, sub.BalanceUsed, Math.Max(0, sub.AmountPaid - sub.BalanceUsed),
-            sub.RemainingSessions, sub.TotalSessions, sub.ValidUntil, sub.Status.ToString(), sub.PackageId)).ToList();
+            sub.RemainingSessions, sub.TotalSessions, sub.ValidUntil, sub.Status.ToString(), sub.PackageId,
+            sub.PetId, sub.Pet?.Name)).ToList();
     }
 
     // Deliberately not scoped by _user.TenantId — this backs the public, unauthenticated invoice

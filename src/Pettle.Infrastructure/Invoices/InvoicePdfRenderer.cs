@@ -150,7 +150,9 @@ public static class InvoicePdfRenderer
                             {
                                 c.Item().Text("Paid from your subscription")
                                     .Bold().FontColor(Colors.Green.Darken3);
-                                c.Item().PaddingTop(1).Text(plan.PackageName)
+                                c.Item().PaddingTop(1).Text(plan.PetName is null
+                                        ? plan.PackageName
+                                        : $"{plan.PackageName} · for {plan.PetName}")
                                     .FontSize(11).FontColor(Colors.Grey.Darken3);
                                 c.Item().PaddingTop(8).Row(r =>
                                 {

@@ -87,7 +87,11 @@ public record InvoiceSubscriptionInfo(
     int TotalSessions,
     DateOnly ValidUntil,
     decimal RemainingBalance,
-    string Status);
+    string Status,
+    /// <summary>Which pet the plan was sold for, when it was sold for one. The customer's own
+    /// question on seeing a deduction is "off which pet's plan?", and with two pets the package
+    /// name alone doesn't answer it.</summary>
+    string? PetName = null);
 
 public record InvoiceListQuery(
     string? Search = null,

@@ -490,6 +490,25 @@ public class BookingServiceImpl : IBookingService
             // check here too, a subscription past its own validity date with sessions still left
             // kept covering bookings indefinitely, since Status alone stayed "Active" forever.
             if (sub is not null && sub.ValidUntil < BusinessClock.TodayIst()) sub = null;
+            // A plan bought for one animal must not be spent on its sibling. Staff were already
+            // working around the missing link by issuing two identical plans for a two-pet
+            // household and picking from cards that looked exactly alike — so this is refused
+            // loudly rather than silently ignored, otherwise the wrong pet's sessions disappear
+            // with nothing on screen to show it happened.
+            if (sub?.PetId is { } lockedPetId)
+            {
+                var bookingPetIds = req.Services.Where(x => x.PetId.HasValue).Select(x => x.PetId!.Value).ToHashSet();
+                if (!bookingPetIds.Contains(lockedPetId))
+                {
+                    var petName = await _db.Pets.AsNoTracking().Where(x => x.Id == lockedPetId)
+                        .Select(x => x.Name).FirstOrDefaultAsync(ct) ?? "another pet";
+                    throw AppException.Validation("Plan belongs to a different pet",
+                        new Dictionary<string, string[]>
+                        {
+                            ["useSubscriptionId"] = new[] { $"That plan was issued for {petName} and can't be used for this booking." },
+                        });
+                }
+            }
             // A subscription with no sessions left is exhausted regardless of Status/ValidUntil —
             // without this the client's own request body deciding whether to auto-debit meant an
             // already-used-up plan kept covering bookings for free indefinitely.

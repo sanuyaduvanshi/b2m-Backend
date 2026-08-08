@@ -24,15 +24,22 @@ public record PackageServiceItem(
 
 public record PackageListItem(
     Guid Id, string Name, int ValidityDays, decimal Price, decimal TaxPercent, bool IsTaxInclusive, bool IsActive,
-    IReadOnlyList<PackageServiceItem>? Services = null, string Type = "Boarding", string? Description = null);
+    IReadOnlyList<PackageServiceItem>? Services = null, string Type = "Boarding", string? Description = null,
+    string AppliesTo = "PerCustomer");
 
 public record CreateOrUpdatePackageRequest(
     string Name, string? Description, int ValidityDays, decimal Price, decimal TaxPercent, bool IsTaxInclusive, bool IsActive,
-    List<PackageServiceItem>? Services = null, string Type = "Boarding");
+    List<PackageServiceItem>? Services = null, string Type = "Boarding",
+    /// <summary>"PerPet" or "PerCustomer" — whether a plan sold from this package is tied to one
+    /// animal or usable by the whole household.</summary>
+    string AppliesTo = "PerCustomer");
 
 public record ActiveSubscriptionSummary(
     Guid Id, string PackageName, decimal PackagePrice, decimal BalanceUsed, decimal RemainingBalance,
-    int RemainingSessions, int TotalSessions, DateOnly ValidUntil, string Status, Guid PackageId = default);
+    int RemainingSessions, int TotalSessions, DateOnly ValidUntil, string Status, Guid PackageId = default,
+    // Which animal the plan is for, so the booking screen can label otherwise-identical cards and
+    // refuse one that belongs to a different pet. Null = the whole household may use it.
+    Guid? PetId = null, string? PetName = null);
 
 public record IssuedListItem(
     Guid Id, string PackageName, Guid PetParentId, string ParentName, string Phone,
@@ -41,10 +48,14 @@ public record IssuedListItem(
     decimal BalanceUsed = 0, string? PackageDescription = null,
     // Lets a caller cross-reference the package's catalogue rows (which services/SKUs the plan
     // actually covers) without matching on the package name, which isn't unique.
-    Guid PackageId = default
+    Guid PackageId = default,
+    Guid? PetId = null, string? PetName = null
 );
 
-public record IssueSubscriptionRequest(Guid PackageId, Guid PetParentId, int TotalSessions, DateOnly? IssuedOn, decimal AmountPaid, PaymentMode Mode = PaymentMode.Cash);
+public record IssueSubscriptionRequest(Guid PackageId, Guid PetParentId, int TotalSessions, DateOnly? IssuedOn, decimal AmountPaid,
+    PaymentMode Mode = PaymentMode.Cash,
+    /// <summary>Required when the package applies per pet; ignored otherwise.</summary>
+    Guid? PetId = null);
 
 /// <summary>Live (not date-ranged) count of issued subscriptions per lifecycle status — backs the
 /// Subscriptions page's status breakdown cards, since "how many are Active right now" is a

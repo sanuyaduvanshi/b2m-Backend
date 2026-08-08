@@ -357,6 +357,9 @@ public class PettleDbContext : IdentityDbContext<ApplicationUser, ApplicationRol
             b.HasIndex(x => new { x.TenantId, x.PetParentId, x.ValidUntil });
             b.HasOne(x => x.Package).WithMany().HasForeignKey(x => x.PackageId).OnDelete(DeleteBehavior.Restrict);
             b.HasOne(x => x.PetParent).WithMany().HasForeignKey(x => x.PetParentId).OnDelete(DeleteBehavior.Restrict);
+            // Restrict, not cascade: a plan is a paid-for record. Deleting a pet must not silently
+            // take the customer's remaining sessions with it.
+            b.HasOne(x => x.Pet).WithMany().HasForeignKey(x => x.PetId).OnDelete(DeleteBehavior.Restrict);
             b.HasQueryFilter(x => !x.IsDeleted);
             b.Property(x => x.AmountPaid).HasPrecision(12, 2);
             b.Property(x => x.AmountDue).HasPrecision(12, 2);

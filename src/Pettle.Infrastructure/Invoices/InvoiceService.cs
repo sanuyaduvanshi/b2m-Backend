@@ -70,7 +70,8 @@ public class InvoiceService : IInvoiceService
             .Where(s => subIds.Contains(s.Id))
             .Select(s => new IssuedSubscriptionSummaryRow(
                 s.Id, s.Package!.Name, s.RemainingSessions, s.TotalSessions,
-                s.ValidUntil, s.Package!.Price - s.BalanceUsed, s.Status.ToString()))
+                s.ValidUntil, s.Package!.Price - s.BalanceUsed, s.Status.ToString(),
+                s.Pet != null ? s.Pet.Name : null))
             .ToListAsync(ct);
         var subNames = subRows.ToDictionary(s => s.Id, s => s.PackageName);
 
@@ -82,7 +83,7 @@ public class InvoiceService : IInvoiceService
         var primarySub = subRows.FirstOrDefault();
         var subscriptionInfo = primarySub is null || coveredBySub <= 0 ? null : new InvoiceSubscriptionInfo(
             primarySub.PackageName, coveredBySub, primarySub.RemainingSessions, primarySub.TotalSessions,
-            primarySub.ValidUntil, Math.Max(0, primarySub.RemainingBalance), primarySub.Status);
+            primarySub.ValidUntil, Math.Max(0, primarySub.RemainingBalance), primarySub.Status, primarySub.PetName);
 
         return new InvoiceDetail(
             i.Id, i.InvoiceNumber, i.InvoiceType, i.InvoiceDate, i.PetParentId,
@@ -105,7 +106,7 @@ public class InvoiceService : IInvoiceService
     /// anonymous type out of the surrounding logic.</summary>
     private sealed record IssuedSubscriptionSummaryRow(
         Guid Id, string PackageName, int RemainingSessions, int TotalSessions,
-        DateOnly ValidUntil, decimal RemainingBalance, string Status);
+        DateOnly ValidUntil, decimal RemainingBalance, string Status, string? PetName);
 
     public async Task<byte[]?> GeneratePdfAsync(Guid id, CancellationToken ct = default)
     {
