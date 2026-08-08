@@ -505,14 +505,14 @@ public class SubscriptionService : ISubscriptionService
     public async Task<PublicSubscriptionInvoice?> GetPublicInvoiceAsync(Guid issuedId, CancellationToken ct = default)
     {
         var sub = await _db.IssuedSubscriptions.AsNoTracking()
-            .Include(s => s.Package).Include(s => s.PetParent)
+            .Include(s => s.Package).Include(s => s.PetParent).Include(s => s.Pet)
             .FirstOrDefaultAsync(s => s.Id == issuedId, ct);
         if (sub is null) return null;
         var tenant = await _db.Tenants.AsNoTracking()
             .Where(t => t.Id == sub.TenantId).Select(t => new { t.Name, t.LogoUrl }).FirstOrDefaultAsync(ct);
         return new PublicSubscriptionInvoice(
             tenant?.Name ?? "", sub.PetParent!.Name, sub.Package!.Name, sub.Package.Description,
-            sub.Package.Price, sub.AmountPaid, sub.IssuedOn, sub.ValidUntil, tenant?.LogoUrl);
+            sub.Package.Price, sub.AmountPaid, sub.IssuedOn, sub.ValidUntil, tenant?.LogoUrl, sub.Pet?.Name);
     }
 
     public async Task<byte[]?> GeneratePublicInvoicePdfAsync(Guid issuedId, CancellationToken ct = default)

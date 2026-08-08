@@ -67,7 +67,10 @@ public record SubscriptionStatusSummary(int Active, int Frozen, int Expired, int
 // without logging in, so it only exposes what a customer should see (no internal ids/statuses).
 public record PublicSubscriptionInvoice(
     string TenantName, string ParentName, string PackageName, string? PackageDescription,
-    decimal Price, decimal AmountPaid, DateOnly IssuedOn, DateOnly ValidUntil, string? TenantLogoUrl = null);
+    decimal Price, decimal AmountPaid, DateOnly IssuedOn, DateOnly ValidUntil, string? TenantLogoUrl = null,
+    /// <summary>Which pet the plan covers. Safe to expose — it is the customer's own animal, and
+    /// it is the one thing that tells two identically-named plans apart on their own receipt.</summary>
+    string? PetName = null);
 
 public interface ISubscriptionService
 {
