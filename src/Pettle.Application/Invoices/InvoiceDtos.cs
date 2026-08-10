@@ -64,6 +64,9 @@ public record InvoiceDetail(
     decimal IgstAmount,
     decimal CgstAmount,
     decimal SgstAmount,
+    /// <summary>Paise dropped or added to reach a whole-rupee total; printed as its own line so
+    /// the bill adds up.</summary>
+    decimal RoundOff,
     decimal Revenue,
     decimal Paid,
     decimal Due,

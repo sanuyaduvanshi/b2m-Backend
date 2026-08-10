@@ -89,7 +89,7 @@ public class InvoiceService : IInvoiceService
             i.Id, i.InvoiceNumber, i.InvoiceType, i.InvoiceDate, i.PetParentId,
             i.ParentNameSnapshot, i.PhoneSnapshot, i.PetNameSnapshot,
             i.BaseAmount, i.AddOnAmount, i.AdditionalAmount, i.DiscountAmount,
-            i.IgstAmount, i.CgstAmount, i.SgstAmount,
+            i.IgstAmount, i.CgstAmount, i.SgstAmount, i.RoundOff,
             i.Revenue, i.Paid, i.Due, i.PaymentStatus,
             i.Lines.Select(l => new InvoiceLineDto(l.Id, l.BillItemName, l.Category, l.Description, l.Quantity, l.UnitAmount, l.Discount, l.Subtotal, l.Total, l.BatchNumber)).ToList(),
             i.Payments.OrderByDescending(p => p.PaymentTime).Select(p => new PaymentDto(p.Id, p.PaymentTime, p.Amount, p.Mode, p.Source, p.TransactionId, p.Type, p.Status, p.Notes,
@@ -208,7 +208,7 @@ public class InvoiceService : IInvoiceService
         var finalTax = sumTaxable > 0 ? sumTax * (finalTaxable / sumTaxable) : 0m;
 
         var rawTotal = finalTaxable + finalTax + req.AdditionalCharges;
-        var rounded = Math.Round(rawTotal, MidpointRounding.AwayFromZero);
+        var (rounded, saleRoundOff) = BillRounding.ToWholeRupee(rawTotal);
 
         invoice.BaseAmount = R(sumTaxable);
         invoice.DiscountAmount = R(sumLineDiscount + flatDiscountAmount);
@@ -217,6 +217,7 @@ public class InvoiceService : IInvoiceService
         invoice.CgstAmount = R(finalTax / 2m);
         invoice.SgstAmount = R(finalTax / 2m);
         invoice.IgstAmount = 0;
+        invoice.RoundOff = saleRoundOff;
         invoice.Revenue = R(rounded);
 
         // Credit-note redemption — applied like a payment (Mode=Credit), tied back to the
@@ -522,7 +523,7 @@ public class InvoiceService : IInvoiceService
         var finalTaxable = sumTaxable - flatDiscAmt;
         var finalTax = sumTaxable > 0 ? sumTax * (finalTaxable / sumTaxable) : 0m;
         var rawTotal = finalTaxable + finalTax + req.AdditionalCharges;
-        var rounded = Math.Round(rawTotal, MidpointRounding.AwayFromZero);
+        var (rounded, saleRoundOff) = BillRounding.ToWholeRupee(rawTotal);
 
         // Editing a line/discount can lower the total below what's already been collected - without
         // this check, Due just clamped to 0 and the invoice silently showed "Paid" while quietly
@@ -573,6 +574,7 @@ public class InvoiceService : IInvoiceService
         invoice.CgstAmount = R(finalTax / 2m);
         invoice.SgstAmount = R(finalTax / 2m);
         invoice.IgstAmount = 0;
+        invoice.RoundOff = saleRoundOff;
         invoice.Revenue = R(rounded);
         invoice.Due = Math.Max(0, R(rounded) - invoice.Paid);
         invoice.PaymentStatus = invoice.Due == 0 && invoice.Paid > 0

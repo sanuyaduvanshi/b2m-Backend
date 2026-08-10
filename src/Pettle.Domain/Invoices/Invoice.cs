@@ -27,6 +27,11 @@ public class Invoice : SoftDeletableTenantEntity
     public decimal IgstAmount { get; set; }
     public decimal CgstAmount { get; set; }
     public decimal SgstAmount { get; set; }
+    /// <summary>The paise dropped (or added) to bring the bill to a whole rupee. Positive when the
+    /// customer pays up to the next rupee, negative when it comes down. Kept as its own figure so
+    /// the printed invoice reconciles — base + tax − discount ± round off = total — rather than
+    /// leaving an unexplained few paise between the lines and the amount payable.</summary>
+    public decimal RoundOff { get; set; }
     public decimal Revenue { get; set; }
     public decimal Paid { get; set; }
     public decimal Due { get; set; }
@@ -97,6 +102,18 @@ public class Payment : TenantEntity
 
 public enum PaymentMode { Cash = 0, Card = 1, Upi = 2, NetBanking = 3, Wallet = 4, Cheque = 5, Credit = 6, Other = 99 }
 public enum PaymentSource { WalkIn = 0, Online = 1, Gateway = 2, App = 3 }
+
+/// <summary>Whole-rupee rounding for a bill, the way Indian invoices do it: the amount payable
+/// goes to the nearest rupee and the difference is disclosed on its own line. AwayFromZero, so
+/// ₹0.50 rounds up rather than to the nearest even rupee, which is what customers expect.</summary>
+public static class BillRounding
+{
+    public static (decimal Total, decimal RoundOff) ToWholeRupee(decimal rawTotal)
+    {
+        var total = Math.Round(rawTotal, MidpointRounding.AwayFromZero);
+        return (total, Math.Round(total - rawTotal, 2, MidpointRounding.AwayFromZero));
+    }
+}
 
 public static class PaymentQueryExtensions
 {

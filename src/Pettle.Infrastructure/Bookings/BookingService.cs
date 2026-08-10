@@ -332,6 +332,11 @@ public class BookingServiceImpl : IBookingService
         var inventoryAmount = req.InventoryItems?.Sum(i => i.FinalAmount) ?? 0m;
         var servicesAmount = req.Services.Sum(s => s.FinalAmount + (s.AddOns?.Sum(a => a.Price) ?? 0m));
 
+        // Whole-rupee bill, same as the POS already does — a booking that came to ₹1,098.18 was
+        // billed, collected and reported to the paisa, which no counter actually transacts in.
+        var rawTotal = servicesAmount + addOnsAmount + inventoryAmount;
+        var (bookingTotal, bookingRoundOff) = BillRounding.ToWholeRupee(rawTotal);
+
         var b = new Booking
         {
             PetParentId = req.PetParentId,
@@ -341,8 +346,8 @@ public class BookingServiceImpl : IBookingService
             Source = req.Source,
             Notes = req.Notes,
             AdditionalInstruction = req.AdditionalInstruction,
-            TotalBillingAmount = servicesAmount + addOnsAmount + inventoryAmount,
-            GrossBillingAmount = servicesAmount + addOnsAmount + inventoryAmount,
+            TotalBillingAmount = bookingTotal,
+            GrossBillingAmount = bookingTotal,
             InvoiceNumber = invNum,
         };
 
@@ -407,7 +412,10 @@ public class BookingServiceImpl : IBookingService
             ParentNameSnapshot = parent?.Name ?? b.GuestName ?? "",
             PhoneSnapshot = parent?.Phone ?? b.GuestPhone ?? "",
             Revenue = b.TotalBillingAmount,
-            BaseAmount = b.TotalBillingAmount,
+            // Base is what the lines actually add up to; RoundOff carries the difference, so the
+            // printed bill reconciles instead of showing lines that don't sum to the total.
+            BaseAmount = Math.Round(rawTotal, 2, MidpointRounding.AwayFromZero),
+            RoundOff = bookingRoundOff,
             Due = b.TotalBillingAmount,
             Paid = 0,
             PaymentStatus = InvoicePaymentStatus.Pending,
@@ -834,13 +842,16 @@ public class BookingServiceImpl : IBookingService
         if (b.GrossBillingAmount <= 0) b.GrossBillingAmount = b.TotalBillingAmount;
 
         b.DiscountPercent = discountPercent;
-        b.TotalBillingAmount = Math.Round(b.GrossBillingAmount * (1 - discountPercent / 100m), 2, MidpointRounding.AwayFromZero);
+        var discountedRaw = b.GrossBillingAmount * (1 - discountPercent / 100m);
+        var (discountedTotal, discountedRoundOff) = BillRounding.ToWholeRupee(discountedRaw);
+        b.TotalBillingAmount = discountedTotal;
 
         var invoice = await _db.Invoices.FirstOrDefaultAsync(i => i.BookingId == bookingId && i.TenantId == tid, ct);
         if (invoice is not null)
         {
-            invoice.DiscountAmount = Math.Round(b.GrossBillingAmount - b.TotalBillingAmount, 2, MidpointRounding.AwayFromZero);
+            invoice.DiscountAmount = Math.Round(b.GrossBillingAmount - discountedRaw, 2, MidpointRounding.AwayFromZero);
             invoice.BaseAmount = b.GrossBillingAmount;
+            invoice.RoundOff = discountedRoundOff;
             invoice.Revenue = b.TotalBillingAmount;
             invoice.Due = Math.Max(0, b.TotalBillingAmount - invoice.Paid);
             invoice.PaymentStatus = invoice.Due == 0 && invoice.Paid > 0

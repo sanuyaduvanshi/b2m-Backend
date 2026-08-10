@@ -124,6 +124,8 @@ public static class InvoicePdfRenderer
                         if (inv.CgstAmount > 0) TotalsRow(c, "CGST", inv.CgstAmount);
                         if (inv.SgstAmount > 0) TotalsRow(c, "SGST", inv.SgstAmount);
                         if (inv.IgstAmount > 0) TotalsRow(c, "IGST", inv.IgstAmount);
+                        // Only when it isn't zero — a "Round Off ₹0.00" line on every bill is noise.
+                        if (Math.Abs(inv.RoundOff) >= 0.005m) TotalsRow(c, "Round off", inv.RoundOff);
                         c.Item().PaddingTop(4).LineHorizontal(1).LineColor(Colors.Grey.Lighten2);
                         TotalsRow(c, "Total", inv.Revenue, bold: true);
                         if (subCovered > 0)
