@@ -57,7 +57,12 @@ public record PeriodSummary(
     int TotalPurchaseOrders, decimal PurchaseOrdersValue,
     decimal SalesDue = 0, decimal BookingsDue = 0, decimal SubscriptionsDue = 0,
     decimal PurchaseOrdersDue = 0,
-    /// <summary>Cash actually received in the period — the headline "Revenue".</summary>
+    /// <summary>What was billed in the period across all three revenue lines — Sales, Bookings
+    /// and Subscriptions. This is revenue in the ordinary accounting sense: earned when the work
+    /// is billed, not when the customer happens to pay. It is deliberately the sum of the three
+    /// cards beside it, so the figure can be checked by adding them up.</summary>
+    decimal RevenueBilled = 0,
+    /// <summary>Cash actually received in the period — collections, not revenue.</summary>
     decimal RevenueCollected = 0,
     /// <summary>The part of RevenueCollected that settled bills raised *in* this period.</summary>
     decimal RevenueForPeriodBills = 0,

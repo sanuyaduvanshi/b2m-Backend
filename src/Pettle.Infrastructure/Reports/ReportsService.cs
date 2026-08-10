@@ -284,16 +284,15 @@ public class ReportsService : IReportsService
             s => s.TenantId == tid && s.IssuedOn >= range.From && s.IssuedOn <= range.To
                  && (!own || s.CreatedById == uid), ct);
 
-        // Cash actually collected against subscriptions in the period - not "AmountPaid at issue
-        // for subscriptions issued in this period", which silently ignored any balance payment
-        // collected later (via Record Payment) on a subscription issued outside the range, and so
-        // undercounted real money received during the period. RealRevenue() drops the marker
-        // payment BookingService writes when a subscription auto-covers a booking, since that cash
-        // was already recognized when the subscription itself was purchased.
-        var subsRevenue = await _db.Payments.RealRevenue()
-            .Where(p => p.TenantId == tid && p.IssuedSubscriptionId != null && p.PaymentTime >= from && p.PaymentTime <= to
-                        && (!own || p.CreatedById == uid))
-            .SumAsync(p => (decimal?)p.Amount, ct) ?? 0m;
+        // What the plans sold in this period were worth, on the same basis as the Sales and
+        // Bookings figures beside it — billed, not collected. AmountPaid + AmountDue is the plan's
+        // price as agreed at issue, whether or not the customer has finished paying for it.
+        // (Cash received against plans is not lost: it falls out of RevenueCollected below, and
+        // the dashboard's reconciliation panel reports it separately.)
+        var subsRevenue = await _db.IssuedSubscriptions.AsNoTracking()
+            .Where(s => s.TenantId == tid && s.IssuedOn >= range.From && s.IssuedOn <= range.To
+                        && (!own || s.CreatedById == uid))
+            .SumAsync(s => (decimal?)(s.AmountPaid + s.AmountDue), ct) ?? 0m;
 
         // How much is still outstanding across subscriptions issued in this period specifically —
         // paired with subsRevenue (all-time cash collected) to show a paid-vs-due split on the card.
@@ -348,6 +347,7 @@ public class ReportsService : IReportsService
             subsIssuedCount, subsRevenue,
             poTotals.Count, poTotals.Sum() - returned,
             salesDue, bookingsDue, subsDue, poDue,
+            salesRevenue + bookingsRevenue + subsRevenue,
             revenueCollected, revenueForPeriod, revenueFromEarlier);
     }
 
