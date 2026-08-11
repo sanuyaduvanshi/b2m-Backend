@@ -482,6 +482,17 @@ public class InvoiceService : IInvoiceService
         // the invoice total rather than joining live — keep it in sync whenever the invoice's
         // total changes (editing lines/discount/additional charges), not just its payment state.
         booking.TotalBillingAmount = invoice.Revenue;
+
+        // GrossBillingAmount is the pre-discount basis every later discount is computed from
+        // (BookingService.ApplyDiscount does Gross × (1 − pct)). It was written only at booking
+        // creation, so adding a line to the invoice afterwards left it frozen at the original
+        // figure — and a discount applied after that recomputed the bill from a number far
+        // smaller than what the customer was actually billed, collapsing the total. A ₹9,696
+        // booking whose Gross still read ₹1,196 would drop to ₹1,076 on a 10% discount instead
+        // of ₹8,726. Derive it back out of the invoice so the two can't drift again:
+        // Revenue = (Gross − Discount) + RoundOff, so Gross = Revenue − RoundOff + Discount.
+        booking.GrossBillingAmount = Math.Round(
+            invoice.Revenue - invoice.RoundOff + invoice.DiscountAmount, 2, MidpointRounding.AwayFromZero);
     }
 
     public async Task<bool> UpdateAsync(Guid id, UpdateInvoiceRequest req, CancellationToken ct = default)
