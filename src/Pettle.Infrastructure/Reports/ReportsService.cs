@@ -268,12 +268,25 @@ public class ReportsService : IReportsService
             .Where(i => i.TenantId == tid && i.InvoiceDate >= range.From && i.InvoiceDate <= range.To
                         && (i.InvoiceType == InvoiceType.Sale || i.InvoiceType == InvoiceType.Booking)
                         && (!own || i.CreatedById == uid))
-            .Select(i => new { i.InvoiceType, i.Revenue, i.Due })
+            .Select(i => new
+            {
+                i.InvoiceType, i.Revenue, i.Due,
+                // The part of this bill a subscription auto-covered at booking time is already
+                // counted once, in subsRevenue below, on the day the plan itself was sold —
+                // Payments.RealRevenue() exists precisely to keep this same rupee out of the
+                // cash-collected figures, but nothing equivalent guarded the billed side until
+                // now, so redeeming a plan against a booking was inflating Revenue by the covered
+                // amount on top of the plan's own price, even though no new money or new sale
+                // happened that day.
+                SubscriptionCovered = i.Payments.Where(p => p.IssuedSubscriptionId != null).Sum(p => (decimal?)p.Amount) ?? 0m,
+            })
             .ToListAsync(ct);
-        var salesRevenue = invoicesByType.Where(i => i.InvoiceType == InvoiceType.Sale).Sum(i => i.Revenue);
+        var salesRevenue = invoicesByType.Where(i => i.InvoiceType == InvoiceType.Sale)
+            .Sum(i => Math.Max(0, i.Revenue - i.SubscriptionCovered));
         var salesCount = invoicesByType.Count(i => i.InvoiceType == InvoiceType.Sale);
         var salesDue = invoicesByType.Where(i => i.InvoiceType == InvoiceType.Sale).Sum(i => i.Due);
-        var bookingsRevenue = invoicesByType.Where(i => i.InvoiceType == InvoiceType.Booking).Sum(i => i.Revenue);
+        var bookingsRevenue = invoicesByType.Where(i => i.InvoiceType == InvoiceType.Booking)
+            .Sum(i => Math.Max(0, i.Revenue - i.SubscriptionCovered));
         var bookingsDue = invoicesByType.Where(i => i.InvoiceType == InvoiceType.Booking).Sum(i => i.Due);
 
         var totalBookings = await _db.Bookings.CountAsync(
