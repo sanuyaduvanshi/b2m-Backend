@@ -26,6 +26,17 @@ public class ReportsService : IReportsService
     /// so scoping its KPI cards would contradict the list right below them.</summary>
     private (bool own, Guid? uid) Scope => (_user.RestrictToOwnRecords, _user.UserId);
 
+    /// <summary>Cash refunds never become a Payments row (see InvoiceService.RefundAsync), so every
+    /// cash-basis figure built by summing Payments.RealRevenue() over a date range is structurally
+    /// blind to them — a refunded sale kept counting as collected revenue forever. Nets out whatever
+    /// was refunded within the same window, on the same cash-basis logic as the payment itself:
+    /// money that left the till during this range reduces this range's revenue, regardless of which
+    /// day the original sale happened.</summary>
+    private async Task<decimal> RefundedInRangeAsync(Guid tid, DateTimeOffset from, DateTimeOffset to, bool own, Guid? uid, CancellationToken ct)
+        => await _db.Invoices
+            .Where(i => i.TenantId == tid && i.RefundedAt >= from && i.RefundedAt <= to && (!own || i.CreatedById == uid))
+            .SumAsync(i => (decimal?)i.RefundedAmount, ct) ?? 0m;
+
     public async Task<ReportsOverview> OverviewAsync(DateRange range, CancellationToken ct = default)
     {
         if (_user.TenantId is null) return new ReportsOverview(0, 0, 0, 0);
@@ -36,6 +47,7 @@ public class ReportsService : IReportsService
         var revenue = await _db.Payments.RealRevenue().Where(p => p.TenantId == tid && p.PaymentTime >= from && p.PaymentTime <= to
             && (!own || p.CreatedById == uid))
             .SumAsync(p => (decimal?)p.Amount, ct) ?? 0m;
+        revenue -= await RefundedInRangeAsync(tid, from, to, own, uid, ct);
         var bookings = await _db.Bookings.CountAsync(b => b.TenantId == tid && b.BookingDate >= range.From && b.BookingDate <= range.To
             && (!own || b.CreatedById == uid), ct);
         var newClients = await _db.PetParents.CountAsync(p => p.TenantId == tid && p.OnboardingDate >= range.From && p.OnboardingDate <= range.To, ct);
@@ -168,17 +180,34 @@ public class ReportsService : IReportsService
         var cancelled = services.Count(s => s.Status == BookingStatus.Cancelled);
         var noshow = services.Count(s => s.Status == BookingStatus.NoShow);
 
+        // A refunded booking's invoice keeps its original TotalBillingAmount (that's the historical
+        // bill), so without this a refunded booking's services kept counting fully in the breakdown
+        // below forever, the same gap fixed for Sales/Bookings revenue on the dashboard. Booking has
+        // no direct Invoice nav property, so this is a second query joined in-memory by BookingId.
+        var bookingIds = services.Select(s => s.BookingId).Distinct().ToList();
+        var refundedByBooking = (await _db.Invoices.AsNoTracking()
+            .Where(i => i.TenantId == tid && i.BookingId != null && bookingIds.Contains(i.BookingId.Value) && i.RefundedAmount != null)
+            .Select(i => new { BookingId = i.BookingId!.Value, i.RefundedAmount })
+            .ToListAsync(ct))
+            .GroupBy(r => r.BookingId)
+            .ToDictionary(g => g.Key, g => g.Sum(r => r.RefundedAmount ?? 0m));
+
         // ApplyDiscountAsync only adjusts Booking.TotalBillingAmount/Invoice.Revenue, never each
         // line's own FinalAmount - summed straight, a discounted booking's services still added up
         // to the pre-discount gross, so this breakdown never reconciled with "Bookings Revenue"
         // elsewhere on the same page. Scale each line by the booking's actual discount ratio so the
         // two agree; bookings that never had a discount applied (GrossBillingAmount unset) pass
-        // through unchanged.
+        // through unchanged. `refundRatio` layers the same idea on top for a refund: it's 1 (no-op)
+        // whenever nothing was refunded, so an un-refunded booking's numbers are untouched either way.
         var breakdown = services.GroupBy(s => s.ServiceType)
             .Select(g => new BookingsBreakdown(g.Key.ToString(), g.Count(), g.Sum(x =>
-                x.GrossBillingAmount > 0.01m
-                    ? Math.Round(x.FinalAmount * (x.TotalBillingAmount / x.GrossBillingAmount), 2, MidpointRounding.AwayFromZero)
-                    : x.FinalAmount)))
+            {
+                var refunded = refundedByBooking.GetValueOrDefault(x.BookingId, 0m);
+                var refundRatio = x.TotalBillingAmount > 0.01m ? Math.Max(0, x.TotalBillingAmount - refunded) / x.TotalBillingAmount : 1m;
+                return x.GrossBillingAmount > 0.01m
+                    ? Math.Round(x.FinalAmount * (x.TotalBillingAmount / x.GrossBillingAmount) * refundRatio, 2, MidpointRounding.AwayFromZero)
+                    : Math.Round(x.FinalAmount * refundRatio, 2, MidpointRounding.AwayFromZero);
+            })))
             .ToList();
 
         return new BookingsReport(bookingsCount, completed, cancelled, noshow, breakdown);
@@ -257,6 +286,7 @@ public class ReportsService : IReportsService
         var collected = await _db.Payments.RealRevenue().Where(p => p.TenantId == tid && p.PaymentTime >= from && p.PaymentTime <= to
             && (!own || p.CreatedById == uid))
             .SumAsync(p => (decimal?)p.Amount, ct) ?? 0m;
+        collected -= await RefundedInRangeAsync(tid, from, to, own, uid, ct);
         var expenses = await _db.Expenses.Where(e => e.TenantId == tid && e.Time >= from && e.Time <= to
             && (!own || e.CreatedById == uid))
             .SumAsync(e => (decimal?)e.AmountIncTax, ct) ?? 0m;

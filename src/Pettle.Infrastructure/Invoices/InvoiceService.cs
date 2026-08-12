@@ -730,13 +730,44 @@ public class InvoiceService : IInvoiceService
         if (_user.TenantId is null) return false;
         var invoice = await _db.Invoices
             .Include(i => i.Lines)
+            .Include(i => i.Payments)
             .FirstOrDefaultAsync(i => i.Id == invoiceId && i.TenantId == _user.TenantId, ct);
         if (invoice is null) return false;
         if (invoice.PaymentStatus == InvoicePaymentStatus.Cancelled)
             throw AppException.BusinessRule("Cannot refund a cancelled invoice.");
+        // AddPaymentAsync and DeleteAsync both already refuse to touch an invoice once it's
+        // Refunded — this was the one place in the file that didn't, so a second refund call
+        // (a stray retry, two staff on the same invoice, or a direct API call bypassing the UI,
+        // which already hides the button once Refunded) could silently double-refund as long as
+        // the amount stayed under whatever Paid happened to be after the first one.
+        if (invoice.PaymentStatus == InvoicePaymentStatus.Refunded)
+            throw AppException.BusinessRule("This invoice has already been refunded.");
         if (req.Amount > invoice.Paid + 0.01m)
             throw AppException.Validation("Refund exceeds amount paid",
                 new Dictionary<string, string[]> { ["amount"] = new[] { $"Refund ₹{req.Amount:F2} exceeds amount paid ₹{invoice.Paid:F2}." } });
+
+        // A subscription-covered payment was never cash the business is holding — there's nothing
+        // to "give back". Refunding it here would mark the invoice Refunded while leaving the
+        // subscription's session/balance permanently spent (only DeletePaymentAsync restores that),
+        // so the customer would lose a session with no visible refund anywhere. Cap a cash refund at
+        // whatever portion of Paid was actually collected as cash/card/etc, and point staff at the
+        // correct undo path for the rest.
+        var subscriptionCoveredPaid = invoice.Payments
+            .Where(p => p.IssuedSubscriptionId.HasValue && p.Status == PaymentRecordStatus.Success)
+            .Sum(p => p.Amount);
+        if (!req.AsCreditNote && subscriptionCoveredPaid > 0 && req.Amount > invoice.Paid - subscriptionCoveredPaid + 0.01m)
+        {
+            var cashPortion = Math.Max(0, invoice.Paid - subscriptionCoveredPaid);
+            throw AppException.Validation("Refund includes a subscription-covered amount",
+                new Dictionary<string, string[]>
+                {
+                    ["amount"] = new[] {
+                        cashPortion > 0
+                            ? $"₹{subscriptionCoveredPaid:F2} of this invoice was settled from a subscription, not cash — you can refund up to ₹{cashPortion:F2} in cash. To undo the subscription-covered part and restore the session, delete that payment from the Payments list instead."
+                            : $"This invoice was settled entirely from a subscription (₹{subscriptionCoveredPaid:F2}), not cash — there's nothing to cash-refund. Delete the subscription payment from the Payments list instead to restore the session."
+                    },
+                });
+        }
 
         // 1. Cash refund (not a credit note) reduces the original invoice's balance — money left
         // the business. A credit note leaves the original invoice's Paid/Due untouched: it stays

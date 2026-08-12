@@ -142,6 +142,30 @@ public static class InvoicePdfRenderer
                         TotalsRow(c, "Due", inv.Due, bold: true, danger: inv.Due > 0);
                     });
 
+                    // A refunded invoice's Total/Due above still print the original bill (Total is
+                    // historical, Due is forced to 0 by RefundAsync) — nothing in that block says
+                    // money came back out, so a refunded invoice PDF looked identical to a normal
+                    // fully-paid one. Same treatment as the subscription panel below: a dedicated,
+                    // impossible-to-miss panel instead of relying on the freeform Notes text at the
+                    // bottom of the page.
+                    if (inv.RefundedAmount is { } refundedAmt && refundedAmt > 0)
+                    {
+                        col.Item().PaddingTop(14).Background(Colors.Red.Lighten5)
+                            .Border(1).BorderColor(Colors.Red.Lighten3).Padding(12).Column(c =>
+                            {
+                                c.Item().Text($"Refunded {Rupee}{refundedAmt:0.00}")
+                                    .Bold().FontColor(Colors.Red.Darken3);
+                                if (inv.RefundedAt is { } refundedAt)
+                                    c.Item().PaddingTop(1).Text(refundedAt.ToString("dd MMM yyyy"))
+                                        .FontSize(11).FontColor(Colors.Grey.Darken3);
+                                if (!string.IsNullOrWhiteSpace(inv.RefundReason))
+                                    c.Item().PaddingTop(4).Text(inv.RefundReason)
+                                        .FontSize(9).FontColor(Colors.Grey.Darken2);
+                                c.Item().PaddingTop(8).Text("Nothing further is owed on this bill.")
+                                    .FontSize(9).FontColor(Colors.Red.Darken1);
+                            });
+                    }
+
                     // Spelled out as its own panel, the way a statement shows what a deduction left
                     // behind: the customer's next question after "it came off my package" is
                     // always "so what's left on it".

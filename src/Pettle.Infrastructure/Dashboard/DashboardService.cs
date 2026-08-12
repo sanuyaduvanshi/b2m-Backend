@@ -53,6 +53,15 @@ public class DashboardService : IDashboardService
             .Where(p => p.TenantId == tid && p.PaymentTime >= todayStart && p.PaymentTime <= todayEnd
                 && (!restrictOwn || p.CreatedById == uid))
             .SumAsync(p => (decimal?)p.Amount, ct) ?? 0m;
+        // A cash refund never becomes a Payments row (see RefundAsync), so the sum above can't see
+        // it — a ₹200 sale collected and refunded on the same day kept reading as ₹200 "Cash today"
+        // forever. Net out whatever was refunded today, on the same cash-basis logic as the payment
+        // itself: money that left the till today reduces today's cash regardless of which day the
+        // original sale happened.
+        revenueToday -= await _db.Invoices
+            .Where(i => i.TenantId == tid && i.RefundedAt >= todayStart && i.RefundedAt <= todayEnd
+                && (!restrictOwn || i.CreatedById == uid))
+            .SumAsync(i => (decimal?)i.RefundedAmount, ct) ?? 0m;
 
         var pendingReminders = await _db.Reminders.CountAsync(r => r.TenantId == tid && r.Status == ReminderStatus.Pending && r.DueDate <= today, ct);
         var lowStock = await _db.Skus.CountAsync(s => s.TenantId == tid && s.IsActive && s.StockOnHand <= s.ReorderLevel, ct);
@@ -81,9 +90,19 @@ public class DashboardService : IDashboardService
         var byDay = rawPayments
             .GroupBy(p => BusinessClock.ToIstDate(p.PaymentTime))
             .ToDictionary(g => g.Key, g => g.Sum(p => p.Amount));
+        // Same refund-netting as revenueToday above, bucketed per day so a refund on day N only
+        // pulls day N's bar down rather than the day the original sale happened.
+        var rawRefunds = await _db.Invoices.AsNoTracking()
+            .Where(i => i.TenantId == tid && i.RefundedAt >= fromUtc && i.RefundedAt <= todayEnd
+                && (!restrictOwn || i.CreatedById == uid))
+            .Select(i => new { i.RefundedAt, i.RefundedAmount })
+            .ToListAsync(ct);
+        var refundsByDay = rawRefunds
+            .GroupBy(r => BusinessClock.ToIstDate(r.RefundedAt!.Value))
+            .ToDictionary(g => g.Key, g => g.Sum(r => r.RefundedAmount ?? 0m));
         var trend = Enumerable.Range(0, 14)
             .Select(i => today.AddDays(-(13 - i)))
-            .Select(d => new RevenueDay(d, byDay.GetValueOrDefault(d, 0m)))
+            .Select(d => new RevenueDay(d, byDay.GetValueOrDefault(d, 0m) - refundsByDay.GetValueOrDefault(d, 0m)))
             .ToList();
 
         // ---------- Recent bookings (last 5 by date, then created) ----------
