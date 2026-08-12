@@ -30,6 +30,16 @@ public class InvoiceService : IInvoiceService
         if (query.Mode.HasValue) q = q.Where(i => i.Payments.Any(p => p.Mode == query.Mode.Value));
         if (query.FromDate is { } f) q = q.Where(i => i.InvoiceDate >= f);
         if (query.ToDate is { } t) q = q.Where(i => i.InvoiceDate <= t);
+        if (query.SettledEarlierFrom is { } sf && query.SettledEarlierTo is { } st)
+        {
+            var paidFromUtc = BusinessClock.StartOfDayUtc(sf);
+            var paidToUtc = BusinessClock.EndOfDayUtc(st);
+            q = q.Where(i => (i.InvoiceType == InvoiceType.Sale || i.InvoiceType == InvoiceType.Booking)
+                && i.InvoiceDate < sf
+                && i.Payments.Any(p => p.PaymentTime >= paidFromUtc && p.PaymentTime <= paidToUtc
+                    && p.Status == PaymentRecordStatus.Success
+                    && !(p.InvoiceId != null && p.IssuedSubscriptionId != null)));
+        }
         if (!string.IsNullOrWhiteSpace(query.Search))
         {
             var s = query.Search.Trim().ToLower();

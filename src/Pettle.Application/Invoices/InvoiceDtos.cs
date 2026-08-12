@@ -109,6 +109,12 @@ public record InvoiceListQuery(
     PaymentMode? Mode = null,
     DateOnly? FromDate = null,
     DateOnly? ToDate = null,
+    // Drill-down for the dashboard's "+₹X today from earlier bookings" note: invoices billed
+    // before SettledEarlierFrom that received a payment within [SettledEarlierFrom, SettledEarlierTo].
+    // Mirrors ReportsService.PeriodSummaryAsync's revenueFromEarlierBills definition exactly, so the
+    // itemised list this returns always reconciles with the number that linked here.
+    DateOnly? SettledEarlierFrom = null,
+    DateOnly? SettledEarlierTo = null,
     int Page = 1,
     int PageSize = 50
 );
