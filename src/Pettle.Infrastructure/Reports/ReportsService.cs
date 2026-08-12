@@ -56,7 +56,7 @@ public class ReportsService : IReportsService
         var invoices = await _db.Invoices.AsNoTracking()
             .Where(i => i.TenantId == tid && i.InvoiceDate >= range.From && i.InvoiceDate <= range.To
                         && (!own || i.CreatedById == uid))
-            .Select(i => new { i.Revenue, i.Paid, i.Due, i.InvoiceType, i.PaymentStatus })
+            .Select(i => new { i.Revenue, i.Paid, i.Due, i.InvoiceType, i.PaymentStatus, i.RefundedAmount })
             .ToListAsync(ct);
 
         // A credit note only records a store-credit liability against a return — its Revenue/Paid
@@ -67,8 +67,14 @@ public class ReportsService : IReportsService
         // was issued" is legitimate — it just shouldn't inflate the combined totals.
         var revenueInvoices = invoices.Where(i => i.InvoiceType != InvoiceType.CreditNote).ToList();
 
+        // A cash-refunded sale/booking still has its original Revenue on the row (that's the
+        // historical bill), but counting the full gross figure here would report money as "revenue"
+        // that was handed straight back to the customer. Net it out the same way a credit note is
+        // already kept out of these totals — Due already goes to 0 on refund (see RefundAsync), so
+        // subtracting RefundedAmount here is what keeps Revenue = Paid + Due holding for a refunded
+        // row too, instead of only for one that was never refunded.
         var byType = invoices.GroupBy(i => i.InvoiceType.ToString())
-            .Select(g => new ExpenseSlice(g.Key, g.Sum(x => x.Revenue)))
+            .Select(g => new ExpenseSlice(g.Key, g.Sum(x => x.Revenue - (x.RefundedAmount ?? 0))))
             .OrderByDescending(s => s.Amount).ToList();
         var byStatus = invoices.GroupBy(i => i.PaymentStatus.ToString())
             .Select(g => new ExpenseSlice(g.Key, g.Count()))
@@ -94,7 +100,7 @@ public class ReportsService : IReportsService
             .ToDictionary(g => g.Key.ToString(), g => g.Sum(x => x.Amount));
 
         return new RevenueReport(
-            revenueInvoices.Sum(i => i.Revenue),
+            revenueInvoices.Sum(i => i.Revenue - (i.RefundedAmount ?? 0)),
             revenueInvoices.Sum(i => i.Paid),
             revenueInvoices.Sum(i => i.Due),
             daily,
@@ -198,12 +204,14 @@ public class ReportsService : IReportsService
                         && i.InvoiceDate >= range.From && i.InvoiceDate <= range.To
                         && i.InvoiceType != InvoiceType.CreditNote
                         && (!own || i.CreatedById == uid))
-            .Select(i => new { ParentId = i.PetParentId!.Value, i.ParentNameSnapshot, i.PhoneSnapshot, i.Revenue })
+            .Select(i => new { ParentId = i.PetParentId!.Value, i.ParentNameSnapshot, i.PhoneSnapshot, i.Revenue, i.RefundedAmount })
             .ToListAsync(ct);
 
+        // Same reasoning as the dashboard's Sales/Bookings cards — a fully refunded invoice
+        // shouldn't still count toward "top spender" ranking, since that money went back out.
         var top = rawInvoices
             .GroupBy(i => new { i.ParentId, i.ParentNameSnapshot, i.PhoneSnapshot })
-            .Select(g => new TopClient(g.Key.ParentId, g.Key.ParentNameSnapshot, g.Key.PhoneSnapshot, g.Count(), g.Sum(x => x.Revenue)))
+            .Select(g => new TopClient(g.Key.ParentId, g.Key.ParentNameSnapshot, g.Key.PhoneSnapshot, g.Count(), g.Sum(x => x.Revenue - (x.RefundedAmount ?? 0))))
             .OrderByDescending(x => x.Spend)
             .Take(10)
             .ToList();
@@ -270,7 +278,7 @@ public class ReportsService : IReportsService
                         && (!own || i.CreatedById == uid))
             .Select(i => new
             {
-                i.InvoiceType, i.Revenue, i.Due,
+                i.InvoiceType, i.Revenue, i.Due, i.RefundedAmount,
                 // The part of this bill a subscription auto-covered at booking time is already
                 // counted once, in subsRevenue below, on the day the plan itself was sold —
                 // Payments.RealRevenue() exists precisely to keep this same rupee out of the
@@ -281,12 +289,16 @@ public class ReportsService : IReportsService
                 SubscriptionCovered = i.Payments.Where(p => p.IssuedSubscriptionId != null).Sum(p => (decimal?)p.Amount) ?? 0m,
             })
             .ToListAsync(ct);
+        // Cash-refunded (RefundedAmount) money left the business, same reasoning as SubscriptionCovered
+        // above but going the other direction — a refunded sale still has its original Revenue on the
+        // row, but it isn't revenue anymore once the customer got it back. Without this, "Sales (POS)"
+        // and "Bookings" on the dashboard kept counting a refunded ₹200 sale as ₹200 of revenue forever.
         var salesRevenue = invoicesByType.Where(i => i.InvoiceType == InvoiceType.Sale)
-            .Sum(i => Math.Max(0, i.Revenue - i.SubscriptionCovered));
+            .Sum(i => Math.Max(0, i.Revenue - i.SubscriptionCovered - (i.RefundedAmount ?? 0)));
         var salesCount = invoicesByType.Count(i => i.InvoiceType == InvoiceType.Sale);
         var salesDue = invoicesByType.Where(i => i.InvoiceType == InvoiceType.Sale).Sum(i => i.Due);
         var bookingsRevenue = invoicesByType.Where(i => i.InvoiceType == InvoiceType.Booking)
-            .Sum(i => Math.Max(0, i.Revenue - i.SubscriptionCovered));
+            .Sum(i => Math.Max(0, i.Revenue - i.SubscriptionCovered - (i.RefundedAmount ?? 0)));
         var bookingsDue = invoicesByType.Where(i => i.InvoiceType == InvoiceType.Booking).Sum(i => i.Due);
 
         var totalBookings = await _db.Bookings.CountAsync(
