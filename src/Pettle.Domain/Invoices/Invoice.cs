@@ -129,9 +129,12 @@ public static class PaymentQueryExtensions
     /// can show which invoice a subscription's balance covered. That money was already recognized as
     /// revenue when the subscription itself was purchased (a separate Payment with only
     /// IssuedSubscriptionId set), so summing it again here would double-count the same cash. Apply
-    /// this to every query that sums Payments as "revenue collected".</summary>
+    /// this to every query that sums Payments as "revenue collected". Also excludes anything not
+    /// Success — a Pending or Failed row isn't cash the business actually holds, and none of the
+    /// callers of this filtered it themselves, so a payment recorded (say) as Pending from a
+    /// gateway integration would have counted as collected revenue before it ever settled.</summary>
     public static IQueryable<Payment> RealRevenue(this IQueryable<Payment> q) =>
-        q.Where(p => !(p.InvoiceId != null && p.IssuedSubscriptionId != null));
+        q.Where(p => !(p.InvoiceId != null && p.IssuedSubscriptionId != null) && p.Status == PaymentRecordStatus.Success);
 }
 public enum PaymentType { Advance = 0, Balance = 1 }
 public enum PaymentRecordStatus { Success = 0, Pending = 1, Failed = 2 }
