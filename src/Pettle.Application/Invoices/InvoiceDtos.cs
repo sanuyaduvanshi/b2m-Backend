@@ -80,7 +80,13 @@ public record InvoiceDetail(
     string? SubscriptionPackageName = null,
     // The plan that settled this bill, and what it has left afterwards — printed on the invoice so
     // the customer can see the charge came off their package rather than out of their pocket.
-    InvoiceSubscriptionInfo? Subscription = null
+    InvoiceSubscriptionInfo? Subscription = null,
+    // Set when a cash refund (not a credit note) was issued against this invoice — lets the detail
+    // page show what was refunded, when, and why instead of leaving staff to infer it from the
+    // "Refunded" status badge alone.
+    decimal? RefundedAmount = null,
+    DateTimeOffset? RefundedAt = null,
+    string? RefundReason = null
 );
 
 public record InvoiceSubscriptionInfo(

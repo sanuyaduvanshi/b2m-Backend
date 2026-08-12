@@ -98,7 +98,10 @@ public class InvoiceService : IInvoiceService
             i.AdditionalChargesReason,
             i.BookingId,
             subIds.Count > 0 ? subNames.Values.FirstOrDefault() : null,
-            subscriptionInfo
+            subscriptionInfo,
+            i.RefundedAmount,
+            i.RefundedAt,
+            i.RefundReason
         );
     }
 
@@ -741,9 +744,17 @@ public class InvoiceService : IInvoiceService
         if (!req.AsCreditNote)
         {
             invoice.Paid = Math.Max(0, invoice.Paid - req.Amount);
-            invoice.Due = Math.Max(0, invoice.Revenue - invoice.Paid);
+            // NOT Revenue - Paid: a refunded invoice is closed, not awaiting collection (record-payment
+            // is already blocked once PaymentStatus is Refunded — see AddPaymentAsync). The old formula
+            // re-inflated Due back up to the refunded amount, showing e.g. "Due ₹200" in red right next
+            // to a "Refunded" badge, and that same wrong Due fed every Outstanding total downstream
+            // (Reports, the Invoices list KPI, Bookings' balance column) since they all just sum this field.
+            invoice.Due = 0;
             invoice.PaymentStatus = InvoicePaymentStatus.Refunded;
             invoice.Notes = (invoice.Notes is null ? "" : invoice.Notes + " | ") + $"Refund ₹{req.Amount:F2}: {req.Reason}";
+            invoice.RefundedAmount = (invoice.RefundedAmount ?? 0) + req.Amount;
+            invoice.RefundedAt = DateTimeOffset.UtcNow;
+            invoice.RefundReason = req.Reason;
             await SyncBookingStatusAsync(invoice, ct);
         }
         else

@@ -38,6 +38,12 @@ public class Invoice : SoftDeletableTenantEntity
 
     public InvoicePaymentStatus PaymentStatus { get; set; } = InvoicePaymentStatus.Pending;
     public string? Notes { get; set; }
+    /// <summary>Total cash refunded against this invoice (credit notes don't count — they don't
+    /// touch these fields). Set alongside RefundedAt/RefundReason so the invoice detail page can
+    /// show staff and the customer what actually happened, instead of just a status badge.</summary>
+    public decimal? RefundedAmount { get; set; }
+    public DateTimeOffset? RefundedAt { get; set; }
+    public string? RefundReason { get; set; }
     /// <summary>Only meaningful when InvoiceType == CreditNote: how much of this credit note's
     /// value is still unredeemed. Set to the full amount at issue time, decremented as it's
     /// applied toward future sales via a Credit-mode Payment.</summary>
