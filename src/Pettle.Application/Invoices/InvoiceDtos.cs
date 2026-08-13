@@ -3,7 +3,10 @@ using Pettle.Domain.Invoices;
 
 namespace Pettle.Application.Invoices;
 
-public record PaymentBrief(PaymentMode Mode, decimal Amount, PaymentRecordStatus Status);
+// Time included so the Invoices list can show each payment's own date next to the invoice's Date
+// column — without it, a booking billed on one day and settled days later (an advance up front,
+// balance at checkout) looked no different from one paid the same day it was raised.
+public record PaymentBrief(PaymentMode Mode, decimal Amount, PaymentRecordStatus Status, DateTimeOffset Time);
 
 public record InvoiceListItem(
     Guid Id,

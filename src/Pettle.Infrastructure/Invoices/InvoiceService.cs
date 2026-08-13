@@ -58,7 +58,7 @@ public class InvoiceService : IInvoiceService
                 i.Id, i.LegacyInvoiceNo, i.InvoiceNumber, i.InvoiceType, i.InvoiceDate,
                 i.ParentNameSnapshot, i.PhoneSnapshot, i.PetNameSnapshot, i.Revenue, i.Paid, i.Due, i.PaymentStatus,
                 i.Payments.OrderByDescending(p => p.PaymentTime)
-                    .Select(p => new PaymentBrief(p.Mode, p.Amount, p.Status)).ToList()))
+                    .Select(p => new PaymentBrief(p.Mode, p.Amount, p.Status, p.PaymentTime)).ToList()))
             .ToListAsync(ct);
 
         return new PagedResult<InvoiceListItem>(items, total, page, size);
