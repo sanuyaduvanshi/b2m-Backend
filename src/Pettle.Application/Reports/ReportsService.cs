@@ -22,7 +22,14 @@ public record RevenueReport(
     IReadOnlyList<ExpenseSlice> ByType,
     IReadOnlyList<ExpenseSlice> ByStatus,
     int Count,
-    IReadOnlyDictionary<string, int> CountByType);
+    IReadOnlyDictionary<string, int> CountByType,
+    // How much of Paid, within this range, settled a bill on a *different* calendar day (IST) than
+    // the bill's own invoice date — an advance-then-balance booking, or any payment collected after
+    // the day it was raised. Surfaced so a report scoped to "the last 12 months" can show that not
+    // everything in Paid was same-day cash, the same way the dashboard's Payments card does for
+    // "today" specifically.
+    decimal PaidOnDifferentDay = 0,
+    int PaidOnDifferentDayCount = 0);
 public record BookingsReport(int Total, int Completed, int Cancelled, int NoShow, IReadOnlyList<BookingsBreakdown> ByServiceType);
 /// <summary>FirstOnboarding/LastOnboarding are the dates the client data itself actually spans —
 /// what "all time" resolves to in practice, so the figure can name its own period instead of

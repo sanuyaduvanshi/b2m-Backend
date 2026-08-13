@@ -98,7 +98,7 @@ public class ReportsService : IReportsService
         var rawPayments = await _db.Payments.AsNoTracking().RealRevenue()
             .Where(p => p.TenantId == tid && p.PaymentTime >= from && p.PaymentTime <= to
                         && (!own || p.CreatedById == uid))
-            .Select(p => new { p.PaymentTime, p.Amount, p.Mode })
+            .Select(p => new { p.PaymentTime, p.Amount, p.Mode, InvoiceDate = p.Invoice != null ? (DateOnly?)p.Invoice.InvoiceDate : null })
             .ToListAsync(ct);
 
         var daily = rawPayments
@@ -111,6 +111,11 @@ public class ReportsService : IReportsService
             .GroupBy(p => p.Mode)
             .ToDictionary(g => g.Key.ToString(), g => g.Sum(x => x.Amount));
 
+        // Same idea as the Invoices list's per-payment date highlight, rolled up into one figure —
+        // how much of everything collected in this range wasn't collected the same day its bill
+        // was raised.
+        var paidDifferentDay = rawPayments.Where(p => p.InvoiceDate.HasValue && BusinessClock.ToIstDate(p.PaymentTime) != p.InvoiceDate.Value).ToList();
+
         return new RevenueReport(
             revenueInvoices.Sum(i => i.Revenue - (i.RefundedAmount ?? 0)),
             revenueInvoices.Sum(i => i.Paid),
@@ -120,7 +125,9 @@ public class ReportsService : IReportsService
             byType,
             byStatus,
             revenueInvoices.Count,
-            countByType);
+            countByType,
+            paidDifferentDay.Sum(p => p.Amount),
+            paidDifferentDay.Count);
     }
 
     public async Task<IReadOnlyList<MonthlyPoint>> MonthlyAsync(DateRange range, CancellationToken ct = default)
