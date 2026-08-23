@@ -15,7 +15,7 @@ namespace Pettle.Application.Invoices;
 /// </summary>
 public static class InvoiceDateWindow
 {
-    public const int MaxBackdateDays = 7;
+    public const int MaxBackdateDays = 30;
 
     public static bool IsAllowed(DateOnly date)
     {
