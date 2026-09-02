@@ -112,6 +112,9 @@ public record InvoiceListQuery(
     PaymentMode? Mode = null,
     DateOnly? FromDate = null,
     DateOnly? ToDate = null,
+    /// <summary>Scopes to one client — used by the POS "last bill" lookup for the customer
+    /// currently selected in a new sale, since Search alone can't target an exact client.</summary>
+    Guid? PetParentId = null,
     // Drill-down for the dashboard's "+₹X today from earlier bookings" note: invoices billed
     // before SettledEarlierFrom that received a payment within [SettledEarlierFrom, SettledEarlierTo].
     // Mirrors ReportsService.PeriodSummaryAsync's revenueFromEarlierBills definition exactly, so the
