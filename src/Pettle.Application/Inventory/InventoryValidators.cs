@@ -25,6 +25,21 @@ public class CreateOrUpdateSkuValidator : AbstractValidator<CreateOrUpdateSkuReq
     }
 }
 
+public class CreateOrUpdateProductValidator : AbstractValidator<CreateOrUpdateProductRequest>
+{
+    public CreateOrUpdateProductValidator()
+    {
+        RuleFor(x => x.Code).NotEmpty().MaximumLength(60);
+        RuleFor(x => x.Name).NotEmpty().MaximumLength(200);
+        RuleFor(x => x.Category).MaximumLength(120);
+        RuleFor(x => x.Brand).MaximumLength(120);
+        RuleFor(x => x.HsnCode).MaximumLength(30);
+        RuleFor(x => x.MrpPrice).NonNegativeAmount();
+        RuleFor(x => x.SellingPrice).NonNegativeAmount();
+        RuleFor(x => x.Quantity).GreaterThanOrEqualTo(0);
+    }
+}
+
 public class CreateOrUpdateCategoryValidator : AbstractValidator<CreateOrUpdateCategoryRequest>
 {
     public CreateOrUpdateCategoryValidator()

@@ -72,6 +72,7 @@ public class PettleDbContext : IdentityDbContext<ApplicationUser, ApplicationRol
     public DbSet<SkuCategory> SkuCategories => Set<SkuCategory>();
     public DbSet<SkuBrand> SkuBrands => Set<SkuBrand>();
     public DbSet<Sku> Skus => Set<Sku>();
+    public DbSet<Product> Products => Set<Product>();
     public DbSet<Vendor> Vendors => Set<Vendor>();
     public DbSet<PurchaseOrder> PurchaseOrders => Set<PurchaseOrder>();
     public DbSet<PurchaseOrderLine> PurchaseOrderLines => Set<PurchaseOrderLine>();
@@ -260,6 +261,15 @@ public class PettleDbContext : IdentityDbContext<ApplicationUser, ApplicationRol
             b.HasQueryFilter(x => !x.IsDeleted);
             foreach (var prop in new[] { nameof(Sku.MrpPrice), nameof(Sku.SellingPrice), nameof(Sku.CostPrice), nameof(Sku.TaxPercent) })
                 b.Property(prop).HasPrecision(12, 2);
+        });
+
+        builder.Entity<Product>(b =>
+        {
+            b.HasIndex(x => new { x.TenantId, x.Code }).IsUnique();
+            b.HasQueryFilter(x => !x.IsDeleted);
+            b.Property(x => x.MrpPrice).HasPrecision(12, 2);
+            b.Property(x => x.SellingPrice).HasPrecision(12, 2);
+            b.Property(x => x.Quantity).HasPrecision(12, 2);
         });
 
         builder.Entity<SkuCategory>(b =>

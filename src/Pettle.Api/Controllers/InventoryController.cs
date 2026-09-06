@@ -72,6 +72,29 @@ public class InventoryController : ControllerBase
     public async Task<IActionResult> DeleteSku(Guid id, CancellationToken ct)
         => await _svc.DeleteSkuAsync(id, ct) ? NoContent() : NotFound();
 
+    [HttpGet("products")]
+    [HasPermission(Modules.Inventory, Actions.View)]
+    public async Task<IActionResult> Products([FromQuery] string? search, [FromQuery] int page = 1, [FromQuery] int pageSize = 50, CancellationToken ct = default)
+        => Ok(await _svc.ListProductsAsync(search, page, pageSize, ct));
+
+    [HttpPost("products")]
+    [HasPermission(Modules.Inventory, Actions.Create)]
+    public async Task<IActionResult> CreateProduct([FromBody] CreateOrUpdateProductRequest req, CancellationToken ct)
+        => Ok(await _svc.CreateProductAsync(req, ct));
+
+    [HttpPut("products/{id:guid}")]
+    [HasPermission(Modules.Inventory, Actions.Edit)]
+    public async Task<IActionResult> UpdateProduct(Guid id, [FromBody] CreateOrUpdateProductRequest req, CancellationToken ct)
+    {
+        var r = await _svc.UpdateProductAsync(id, req, ct);
+        return r is null ? NotFound() : Ok(r);
+    }
+
+    [HttpDelete("products/{id:guid}")]
+    [HasPermission(Modules.Inventory, Actions.Delete)]
+    public async Task<IActionResult> DeleteProduct(Guid id, CancellationToken ct)
+        => await _svc.DeleteProductAsync(id, ct) ? NoContent() : NotFound();
+
     [HttpGet("vendors")]
     [HasPermission(Modules.Inventory, Actions.View)]
     public async Task<IActionResult> Vendors([FromQuery] string? search, [FromQuery] int page = 1, [FromQuery] int pageSize = 50, CancellationToken ct = default)

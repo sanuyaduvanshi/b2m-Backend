@@ -26,6 +26,16 @@ public record CreateOrUpdateSkuRequest(
 
 public record UpdateSkuListingRequest(bool IsListedInApp, string? AppImageUrl);
 
+public record ProductListItem(
+    Guid Id, string Code, string Name, string? Category, string? Brand,
+    decimal MrpPrice, decimal SellingPrice, string? HsnCode, decimal Quantity,
+    bool IsActive, bool ShowOnline);
+
+public record CreateOrUpdateProductRequest(
+    string Code, string Name, string? Category, string? Brand,
+    decimal MrpPrice, decimal SellingPrice, string? HsnCode, decimal Quantity,
+    bool IsActive, bool ShowOnline);
+
 public record SkuCategoryDto(Guid Id, string Name, Guid? ParentId, string? ParentName, int SkuCount);
 public record CreateOrUpdateCategoryRequest(string Name, Guid? ParentId);
 

@@ -41,6 +41,22 @@ public class Sku : SoftDeletableTenantEntity
     public string? AppImageUrl { get; set; }
 }
 
+/// <summary>Standalone product catalogue imported from the legacy product master.
+/// Products deliberately do not participate in SKU stock movements, batches, POs or sales.</summary>
+public class Product : SoftDeletableTenantEntity
+{
+    public string Code { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
+    public string? Category { get; set; }
+    public string? Brand { get; set; }
+    public decimal MrpPrice { get; set; }
+    public decimal SellingPrice { get; set; }
+    public string? HsnCode { get; set; }
+    public decimal Quantity { get; set; }
+    public bool IsActive { get; set; } = true;
+    public bool ShowOnline { get; set; }
+}
+
 public class Vendor : SoftDeletableTenantEntity
 {
     public string Name { get; set; } = string.Empty;

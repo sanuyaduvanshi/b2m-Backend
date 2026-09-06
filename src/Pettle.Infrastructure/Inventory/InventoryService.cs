@@ -153,6 +153,67 @@ public partial class InventoryService : IInventoryService
         return await GetSkuAsync(id, ct);
     }
 
+    private static ProductListItem MapProduct(Product x) => new(x.Id, x.Code, x.Name, x.Category, x.Brand,
+        x.MrpPrice, x.SellingPrice, x.HsnCode, x.Quantity, x.IsActive, x.ShowOnline);
+
+    public async Task<PagedResult<ProductListItem>> ListProductsAsync(string? search, int page, int pageSize, CancellationToken ct = default)
+    {
+        if (_user.TenantId is null) return Empty<ProductListItem>(page, pageSize);
+        var q = _db.Products.AsNoTracking().Where(x => x.TenantId == _user.TenantId);
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var s = search.Trim().ToLower();
+            q = q.Where(x => x.Name.ToLower().Contains(s) || x.Code.ToLower().Contains(s)
+                || (x.Category != null && x.Category.ToLower().Contains(s))
+                || (x.Brand != null && x.Brand.ToLower().Contains(s)));
+        }
+        var total = await q.CountAsync(ct);
+        var p = Math.Max(page, 1); var sz = Math.Clamp(pageSize, 1, 200);
+        var rows = await q.OrderBy(x => x.Name).ThenBy(x => x.Id).Skip((p - 1) * sz).Take(sz).ToListAsync(ct);
+        return new PagedResult<ProductListItem>(rows.Select(MapProduct).ToList(), total, p, sz);
+    }
+
+    public async Task<ProductListItem> CreateProductAsync(CreateOrUpdateProductRequest req, CancellationToken ct = default)
+    {
+        if (_user.TenantId is null) throw AppException.Forbidden();
+        var code = req.Code.Trim();
+        var existing = await _db.Products.IgnoreQueryFilters().FirstOrDefaultAsync(x => x.TenantId == _user.TenantId && x.Code == code, ct);
+        if (existing is not null && !existing.IsDeleted) throw AppException.Conflict($"Product code '{code}' is already in use.");
+        var product = existing ?? new Product();
+        product.Code = code; product.Name = req.Name.Trim(); product.Category = req.Category?.Trim(); product.Brand = req.Brand?.Trim();
+        product.MrpPrice = req.MrpPrice; product.SellingPrice = req.SellingPrice; product.HsnCode = req.HsnCode?.Trim();
+        product.Quantity = req.Quantity; product.IsActive = req.IsActive; product.ShowOnline = req.ShowOnline;
+        product.IsDeleted = false; product.DeletedAt = null; product.DeletedById = null;
+        if (existing is null) _db.Products.Add(product);
+        await _db.SaveChangesAsync(ct);
+        return MapProduct(product);
+    }
+
+    public async Task<ProductListItem?> UpdateProductAsync(Guid id, CreateOrUpdateProductRequest req, CancellationToken ct = default)
+    {
+        if (_user.TenantId is null) return null;
+        var product = await _db.Products.FirstOrDefaultAsync(x => x.Id == id && x.TenantId == _user.TenantId, ct);
+        if (product is null) return null;
+        var code = req.Code.Trim();
+        if (await _db.Products.IgnoreQueryFilters().AnyAsync(x => x.TenantId == _user.TenantId && x.Code == code && x.Id != id, ct))
+            throw AppException.Conflict($"Product code '{code}' is already in use.");
+        product.Code = code; product.Name = req.Name.Trim(); product.Category = req.Category?.Trim(); product.Brand = req.Brand?.Trim();
+        product.MrpPrice = req.MrpPrice; product.SellingPrice = req.SellingPrice; product.HsnCode = req.HsnCode?.Trim();
+        product.Quantity = req.Quantity; product.IsActive = req.IsActive; product.ShowOnline = req.ShowOnline;
+        await _db.SaveChangesAsync(ct);
+        return MapProduct(product);
+    }
+
+    public async Task<bool> DeleteProductAsync(Guid id, CancellationToken ct = default)
+    {
+        if (_user.TenantId is null) return false;
+        var product = await _db.Products.FirstOrDefaultAsync(x => x.Id == id && x.TenantId == _user.TenantId, ct);
+        if (product is null) return false;
+        _db.Products.Remove(product);
+        await _db.SaveChangesAsync(ct);
+        return true;
+    }
+
     public async Task<PagedResult<VendorListItem>> ListVendorsAsync(string? search, int page, int pageSize, CancellationToken ct = default)
     {
         if (_user.TenantId is null) return Empty<VendorListItem>(page, pageSize);
