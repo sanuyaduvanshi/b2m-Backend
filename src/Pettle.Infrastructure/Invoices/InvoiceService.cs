@@ -143,6 +143,15 @@ public class InvoiceService : IInvoiceService
             throw AppException.Validation("Empty sale",
                 new Dictionary<string, string[]> { ["lines"] = new[] { "Add at least one item to the sale." } });
 
+        if (req.PetParentId.HasValue)
+        {
+            var validCustomer = await _db.PetParents.AsNoTracking()
+                .AnyAsync(p => p.Id == req.PetParentId.Value && p.TenantId == _user.TenantId, ct);
+            if (!validCustomer)
+                throw AppException.Validation("Invalid customer",
+                    new Dictionary<string, string[]> { ["petParentId"] = new[] { "The selected customer no longer exists or is not available." } });
+        }
+
         // The money taken at the till belongs to the day the bill is dated. Stamping payments with
         // "now" instead meant a bill entered a day late put its sale on yesterday (Revenue reports
         // group by invoice date) but its cash on today (Dashboard and Overview group by payment

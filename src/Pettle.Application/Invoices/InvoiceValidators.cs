@@ -40,8 +40,10 @@ public class CreateSaleLineValidator : AbstractValidator<CreateSaleLine>
     public CreateSaleLineValidator()
     {
         RuleFor(x => x.ItemName).NotEmpty().WithMessage("Item name is required.").MaximumLength(200);
-        RuleFor(x => x.Quantity).PositiveAmount();
-        RuleFor(x => x.UnitAmount).NonNegativeAmount();
+        RuleFor(x => x.Quantity).GreaterThan(0).LessThanOrEqualTo(100_000)
+            .WithMessage("Quantity must be greater than zero and no more than 100,000.");
+        RuleFor(x => x.UnitAmount).InclusiveBetween(0, 10_000_000)
+            .WithMessage("Unit amount must be between ₹0 and ₹1,00,00,000.");
         RuleFor(x => x.DiscountPercent).ValidTaxPercent().WithMessage("Discount percent must be between 0 and 100.");
         RuleFor(x => x.AddDiscountPercent).ValidTaxPercent().WithMessage("Additional discount percent must be between 0 and 100.");
         RuleFor(x => x.TaxPercent).ValidTaxPercent();
@@ -52,7 +54,8 @@ public class CreateSalePaymentValidator : AbstractValidator<CreateSalePayment>
 {
     public CreateSalePaymentValidator()
     {
-        RuleFor(x => x.Amount).NonNegativeAmount();
+        RuleFor(x => x.Amount).InclusiveBetween(0, 100_000_000)
+            .WithMessage("Payment amount is outside the allowed range.");
         RuleFor(x => x.Mode).IsInEnum().WithMessage("Unknown payment mode.");
         RuleFor(x => x.TransactionId).MaximumLength(80);
     }
@@ -63,14 +66,18 @@ public class CreateSaleValidator : AbstractValidator<CreateSaleRequest>
     public CreateSaleValidator()
     {
         RuleFor(x => x.InvoiceDate).Must(InvoiceDateWindow.IsAllowed).WithMessage(InvoiceDateWindow.Message);
-        RuleFor(x => x.ParentName).MaximumLength(160);
+        RuleFor(x => x.ParentName).NotEmpty().WithMessage("Customer name is required.").MaximumLength(160);
         RuleFor(x => x.Phone).ValidPhoneFormat().When(x => !string.IsNullOrWhiteSpace(x.Phone));
         RuleFor(x => x.Notes).MaximumLength(2000);
         RuleFor(x => x.FlatDiscountPercent).ValidTaxPercent().WithMessage("Flat discount percent must be between 0 and 100.");
-        RuleFor(x => x.AdditionalCharges).NonNegativeAmount();
-        RuleFor(x => x.AdditionalChargesReason).MaximumLength(200);
+        RuleFor(x => x.AdditionalCharges).InclusiveBetween(0, 10_000_000)
+            .WithMessage("Additional charges are outside the allowed range.");
+        RuleFor(x => x.AdditionalChargesReason).NotEmpty().When(x => x.AdditionalCharges > 0)
+            .WithMessage("Enter a reason for additional charges.").MaximumLength(200);
         RuleFor(x => x.RedeemCreditNoteAmount).NonNegativeAmount();
-        RuleFor(x => x.Lines).NotEmpty().WithMessage("Add at least one item to the sale.");
+        RuleFor(x => x.Lines).NotEmpty().WithMessage("Add at least one item to the sale.")
+            .Must(x => x.Count <= 200).WithMessage("A sale can contain at most 200 line items.");
+        RuleFor(x => x.Payments).Must(x => x.Count <= 10).WithMessage("A sale can contain at most 10 payment entries.");
         RuleForEach(x => x.Lines).SetValidator(new CreateSaleLineValidator());
         RuleForEach(x => x.Payments).SetValidator(new CreateSalePaymentValidator());
     }
