@@ -47,11 +47,31 @@ public class Product : SoftDeletableTenantEntity
 {
     public string Code { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
+    public string? PrintName { get; set; }
+    public string? ProductType { get; set; }
     public string? Category { get; set; }
+    public string? SubCategory { get; set; }
     public string? Brand { get; set; }
+    public string? SubBrand { get; set; }
+    public string Unit { get; set; } = "PCS";
+    public decimal PurchasePrice { get; set; }
+    public decimal LandingCost { get; set; }
     public decimal MrpPrice { get; set; }
+    public decimal SellingDiscountPercent { get; set; }
     public decimal SellingPrice { get; set; }
     public string? HsnCode { get; set; }
+    public decimal PurchaseTaxPercent { get; set; }
+    public decimal SalesTaxPercent { get; set; }
+    public bool IsPurchaseTaxInclusive { get; set; }
+    public bool IsSalesTaxInclusive { get; set; } = true;
+    public decimal CessPercent { get; set; }
+    public bool ManageMultipleBatch { get; set; }
+    public string? ShortDescription { get; set; }
+    public string? Description { get; set; }
+    public string? Ingredients { get; set; }
+    public string? Nutrition { get; set; }
+    public string? NetWeightUnit { get; set; }
+    public string? AdditionalInfo { get; set; }
     public decimal Quantity { get; set; }
     public bool IsActive { get; set; } = true;
     public bool ShowOnline { get; set; }

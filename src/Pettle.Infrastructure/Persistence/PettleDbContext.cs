@@ -270,6 +270,12 @@ public class PettleDbContext : IdentityDbContext<ApplicationUser, ApplicationRol
             b.Property(x => x.MrpPrice).HasPrecision(12, 2);
             b.Property(x => x.SellingPrice).HasPrecision(12, 2);
             b.Property(x => x.Quantity).HasPrecision(12, 2);
+            b.Property(x => x.PurchasePrice).HasPrecision(12, 2);
+            b.Property(x => x.LandingCost).HasPrecision(12, 2);
+            b.Property(x => x.SellingDiscountPercent).HasPrecision(5, 2);
+            b.Property(x => x.PurchaseTaxPercent).HasPrecision(5, 2);
+            b.Property(x => x.SalesTaxPercent).HasPrecision(5, 2);
+            b.Property(x => x.CessPercent).HasPrecision(5, 2);
         });
 
         builder.Entity<SkuCategory>(b =>

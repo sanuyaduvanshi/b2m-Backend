@@ -29,12 +29,26 @@ public record UpdateSkuListingRequest(bool IsListedInApp, string? AppImageUrl);
 public record ProductListItem(
     Guid Id, string Code, string Name, string? Category, string? Brand,
     decimal MrpPrice, decimal SellingPrice, string? HsnCode, decimal Quantity,
-    bool IsActive, bool ShowOnline);
+    bool IsActive, bool ShowOnline, string? PrintName = null, string? ProductType = null,
+    string? SubCategory = null, string? SubBrand = null, string Unit = "PCS",
+    decimal PurchasePrice = 0, decimal LandingCost = 0, decimal SellingDiscountPercent = 0,
+    decimal PurchaseTaxPercent = 0, decimal SalesTaxPercent = 0,
+    bool IsPurchaseTaxInclusive = false, bool IsSalesTaxInclusive = true,
+    decimal CessPercent = 0, bool ManageMultipleBatch = false,
+    string? ShortDescription = null, string? Description = null, string? Ingredients = null,
+    string? Nutrition = null, string? NetWeightUnit = null, string? AdditionalInfo = null);
 
 public record CreateOrUpdateProductRequest(
     string Code, string Name, string? Category, string? Brand,
     decimal MrpPrice, decimal SellingPrice, string? HsnCode, decimal Quantity,
-    bool IsActive, bool ShowOnline);
+    bool IsActive, bool ShowOnline, string? PrintName = null, string? ProductType = null,
+    string? SubCategory = null, string? SubBrand = null, string Unit = "PCS",
+    decimal PurchasePrice = 0, decimal LandingCost = 0, decimal SellingDiscountPercent = 0,
+    decimal PurchaseTaxPercent = 0, decimal SalesTaxPercent = 0,
+    bool IsPurchaseTaxInclusive = false, bool IsSalesTaxInclusive = true,
+    decimal CessPercent = 0, bool ManageMultipleBatch = false,
+    string? ShortDescription = null, string? Description = null, string? Ingredients = null,
+    string? Nutrition = null, string? NetWeightUnit = null, string? AdditionalInfo = null);
 
 public record SkuCategoryDto(Guid Id, string Name, Guid? ParentId, string? ParentName, int SkuCount);
 public record CreateOrUpdateCategoryRequest(string Name, Guid? ParentId);

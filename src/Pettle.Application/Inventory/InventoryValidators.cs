@@ -32,13 +32,30 @@ public class CreateOrUpdateProductValidator : AbstractValidator<CreateOrUpdatePr
         RuleFor(x => x.Code).NotEmpty().WithMessage("Product code is required.").MaximumLength(60)
             .Matches(@"^[A-Za-z0-9_\-\.]+$").WithMessage("Product code may only contain letters, digits, '_', '-', '.'.");
         RuleFor(x => x.Name).NotEmpty().WithMessage("Product name is required.").MaximumLength(200);
+        RuleFor(x => x.PrintName).MaximumLength(200);
+        RuleFor(x => x.ProductType).MaximumLength(60);
         RuleFor(x => x.Category).MaximumLength(120);
+        RuleFor(x => x.SubCategory).MaximumLength(120);
         RuleFor(x => x.Brand).MaximumLength(120);
+        RuleFor(x => x.SubBrand).MaximumLength(120);
+        RuleFor(x => x.Unit).NotEmpty().MaximumLength(20);
         RuleFor(x => x.HsnCode).MaximumLength(30);
+        RuleFor(x => x.PurchasePrice).NonNegativeAmount();
+        RuleFor(x => x.LandingCost).NonNegativeAmount();
         RuleFor(x => x.MrpPrice).NonNegativeAmount();
         RuleFor(x => x.SellingPrice).NonNegativeAmount()
             .LessThanOrEqualTo(x => x.MrpPrice).When(x => x.MrpPrice > 0)
             .WithMessage("Selling price cannot exceed MRP.");
+        RuleFor(x => x.SellingDiscountPercent).ValidTaxPercent();
+        RuleFor(x => x.PurchaseTaxPercent).ValidTaxPercent();
+        RuleFor(x => x.SalesTaxPercent).ValidTaxPercent();
+        RuleFor(x => x.CessPercent).ValidTaxPercent();
+        RuleFor(x => x.ShortDescription).MaximumLength(500);
+        RuleFor(x => x.Description).MaximumLength(5000);
+        RuleFor(x => x.Ingredients).MaximumLength(2000);
+        RuleFor(x => x.Nutrition).MaximumLength(2000);
+        RuleFor(x => x.NetWeightUnit).MaximumLength(30);
+        RuleFor(x => x.AdditionalInfo).MaximumLength(500);
         RuleFor(x => x.Quantity).InclusiveBetween(0, 1_000_000)
             .WithMessage("Quantity must be between 0 and 1,000,000.");
     }

@@ -154,7 +154,27 @@ public partial class InventoryService : IInventoryService
     }
 
     private static ProductListItem MapProduct(Product x) => new(x.Id, x.Code, x.Name, x.Category, x.Brand,
-        x.MrpPrice, x.SellingPrice, x.HsnCode, x.Quantity, x.IsActive, x.ShowOnline);
+        x.MrpPrice, x.SellingPrice, x.HsnCode, x.Quantity, x.IsActive, x.ShowOnline,
+        x.PrintName, x.ProductType, x.SubCategory, x.SubBrand, x.Unit, x.PurchasePrice, x.LandingCost,
+        x.SellingDiscountPercent, x.PurchaseTaxPercent, x.SalesTaxPercent, x.IsPurchaseTaxInclusive,
+        x.IsSalesTaxInclusive, x.CessPercent, x.ManageMultipleBatch, x.ShortDescription, x.Description,
+        x.Ingredients, x.Nutrition, x.NetWeightUnit, x.AdditionalInfo);
+
+    private static void ApplyProduct(Product product, CreateOrUpdateProductRequest req, string code)
+    {
+        product.Code = code; product.Name = req.Name.Trim(); product.PrintName = req.PrintName?.Trim();
+        product.ProductType = req.ProductType?.Trim(); product.Category = req.Category?.Trim(); product.SubCategory = req.SubCategory?.Trim();
+        product.Brand = req.Brand?.Trim(); product.SubBrand = req.SubBrand?.Trim(); product.Unit = req.Unit.Trim();
+        product.PurchasePrice = req.PurchasePrice; product.LandingCost = req.LandingCost; product.MrpPrice = req.MrpPrice;
+        product.SellingDiscountPercent = req.SellingDiscountPercent; product.SellingPrice = req.SellingPrice; product.HsnCode = req.HsnCode?.Trim();
+        product.PurchaseTaxPercent = req.PurchaseTaxPercent; product.SalesTaxPercent = req.SalesTaxPercent;
+        product.IsPurchaseTaxInclusive = req.IsPurchaseTaxInclusive; product.IsSalesTaxInclusive = req.IsSalesTaxInclusive;
+        product.CessPercent = req.CessPercent; product.ManageMultipleBatch = req.ManageMultipleBatch;
+        product.ShortDescription = req.ShortDescription?.Trim(); product.Description = req.Description?.Trim();
+        product.Ingredients = req.Ingredients?.Trim(); product.Nutrition = req.Nutrition?.Trim();
+        product.NetWeightUnit = req.NetWeightUnit?.Trim(); product.AdditionalInfo = req.AdditionalInfo?.Trim();
+        product.Quantity = req.Quantity; product.IsActive = req.IsActive; product.ShowOnline = req.ShowOnline;
+    }
 
     public async Task<PagedResult<ProductListItem>> ListProductsAsync(string? search, int page, int pageSize, CancellationToken ct = default)
     {
@@ -180,9 +200,7 @@ public partial class InventoryService : IInventoryService
         var existing = await _db.Products.IgnoreQueryFilters().FirstOrDefaultAsync(x => x.TenantId == _user.TenantId && x.Code == code, ct);
         if (existing is not null && !existing.IsDeleted) throw AppException.Conflict($"Product code '{code}' is already in use.");
         var product = existing ?? new Product();
-        product.Code = code; product.Name = req.Name.Trim(); product.Category = req.Category?.Trim(); product.Brand = req.Brand?.Trim();
-        product.MrpPrice = req.MrpPrice; product.SellingPrice = req.SellingPrice; product.HsnCode = req.HsnCode?.Trim();
-        product.Quantity = req.Quantity; product.IsActive = req.IsActive; product.ShowOnline = req.ShowOnline;
+        ApplyProduct(product, req, code);
         product.IsDeleted = false; product.DeletedAt = null; product.DeletedById = null;
         if (existing is null) _db.Products.Add(product);
         try { await _db.SaveChangesAsync(ct); }
@@ -201,9 +219,7 @@ public partial class InventoryService : IInventoryService
         var code = req.Code.Trim();
         if (await _db.Products.IgnoreQueryFilters().AnyAsync(x => x.TenantId == _user.TenantId && x.Code == code && x.Id != id, ct))
             throw AppException.Conflict($"Product code '{code}' is already in use.");
-        product.Code = code; product.Name = req.Name.Trim(); product.Category = req.Category?.Trim(); product.Brand = req.Brand?.Trim();
-        product.MrpPrice = req.MrpPrice; product.SellingPrice = req.SellingPrice; product.HsnCode = req.HsnCode?.Trim();
-        product.Quantity = req.Quantity; product.IsActive = req.IsActive; product.ShowOnline = req.ShowOnline;
+        ApplyProduct(product, req, code);
         try { await _db.SaveChangesAsync(ct); }
         catch (DbUpdateException)
         {
