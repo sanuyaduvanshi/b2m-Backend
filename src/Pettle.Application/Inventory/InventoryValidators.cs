@@ -32,11 +32,11 @@ public class CreateOrUpdateProductValidator : AbstractValidator<CreateOrUpdatePr
         RuleFor(x => x.Code).NotEmpty().WithMessage("Product code is required.").MaximumLength(60)
             .Matches(@"^[A-Za-z0-9_\-\.]+$").WithMessage("Product code may only contain letters, digits, '_', '-', '.'.");
         RuleFor(x => x.Name).NotEmpty().WithMessage("Product name is required.").MaximumLength(200);
-        RuleFor(x => x.PrintName).MaximumLength(200);
-        RuleFor(x => x.ProductType).MaximumLength(60);
-        RuleFor(x => x.Category).MaximumLength(120);
+        RuleFor(x => x.PrintName).NotEmpty().WithMessage("Print name is required.").MaximumLength(200);
+        RuleFor(x => x.ProductType).NotEmpty().WithMessage("Product type is required.").MaximumLength(60);
+        RuleFor(x => x.Category).NotEmpty().WithMessage("Category is required.").MaximumLength(120);
         RuleFor(x => x.SubCategory).MaximumLength(120);
-        RuleFor(x => x.Brand).MaximumLength(120);
+        RuleFor(x => x.Brand).NotEmpty().WithMessage("Brand is required.").MaximumLength(120);
         RuleFor(x => x.SubBrand).MaximumLength(120);
         RuleFor(x => x.Unit).NotEmpty().MaximumLength(20);
         RuleFor(x => x.HsnCode).MaximumLength(30);
