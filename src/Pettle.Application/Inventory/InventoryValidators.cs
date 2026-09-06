@@ -29,14 +29,18 @@ public class CreateOrUpdateProductValidator : AbstractValidator<CreateOrUpdatePr
 {
     public CreateOrUpdateProductValidator()
     {
-        RuleFor(x => x.Code).NotEmpty().MaximumLength(60);
-        RuleFor(x => x.Name).NotEmpty().MaximumLength(200);
+        RuleFor(x => x.Code).NotEmpty().WithMessage("Product code is required.").MaximumLength(60)
+            .Matches(@"^[A-Za-z0-9_\-\.]+$").WithMessage("Product code may only contain letters, digits, '_', '-', '.'.");
+        RuleFor(x => x.Name).NotEmpty().WithMessage("Product name is required.").MaximumLength(200);
         RuleFor(x => x.Category).MaximumLength(120);
         RuleFor(x => x.Brand).MaximumLength(120);
         RuleFor(x => x.HsnCode).MaximumLength(30);
         RuleFor(x => x.MrpPrice).NonNegativeAmount();
-        RuleFor(x => x.SellingPrice).NonNegativeAmount();
-        RuleFor(x => x.Quantity).GreaterThanOrEqualTo(0);
+        RuleFor(x => x.SellingPrice).NonNegativeAmount()
+            .LessThanOrEqualTo(x => x.MrpPrice).When(x => x.MrpPrice > 0)
+            .WithMessage("Selling price cannot exceed MRP.");
+        RuleFor(x => x.Quantity).InclusiveBetween(0, 1_000_000)
+            .WithMessage("Quantity must be between 0 and 1,000,000.");
     }
 }
 

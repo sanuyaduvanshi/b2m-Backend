@@ -185,7 +185,11 @@ public partial class InventoryService : IInventoryService
         product.Quantity = req.Quantity; product.IsActive = req.IsActive; product.ShowOnline = req.ShowOnline;
         product.IsDeleted = false; product.DeletedAt = null; product.DeletedById = null;
         if (existing is null) _db.Products.Add(product);
-        await _db.SaveChangesAsync(ct);
+        try { await _db.SaveChangesAsync(ct); }
+        catch (DbUpdateException) when (existing is null)
+        {
+            throw AppException.Conflict($"Product code '{code}' is already in use.");
+        }
         return MapProduct(product);
     }
 
@@ -200,7 +204,11 @@ public partial class InventoryService : IInventoryService
         product.Code = code; product.Name = req.Name.Trim(); product.Category = req.Category?.Trim(); product.Brand = req.Brand?.Trim();
         product.MrpPrice = req.MrpPrice; product.SellingPrice = req.SellingPrice; product.HsnCode = req.HsnCode?.Trim();
         product.Quantity = req.Quantity; product.IsActive = req.IsActive; product.ShowOnline = req.ShowOnline;
-        await _db.SaveChangesAsync(ct);
+        try { await _db.SaveChangesAsync(ct); }
+        catch (DbUpdateException)
+        {
+            throw AppException.Conflict($"Product code '{code}' is already in use.");
+        }
         return MapProduct(product);
     }
 
