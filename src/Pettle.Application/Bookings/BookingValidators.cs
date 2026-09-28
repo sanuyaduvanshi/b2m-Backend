@@ -67,6 +67,13 @@ public class CreateBookingServiceLineValidator : AbstractValidator<CreateBooking
                 .Must(x => !x.CheckIn.HasValue || !x.CheckOut.HasValue || x.CheckOut.Value > x.CheckIn.Value)
                 .WithMessage("Check-out must be after check-in.")
                 .OverridePropertyName(nameof(CreateBookingServiceLine.CheckOut));
+            // Catches a mistyped/garbled check-out year (e.g. a date input segment fat-fingered)
+            // slipping past the "after check-in" check and inflating FinalAmount (nights x rate,
+            // computed client-side and trusted here) into an absurd number.
+            RuleFor(x => x)
+                .Must(x => !x.CheckIn.HasValue || !x.CheckOut.HasValue || x.CheckOut.Value.DayNumber - x.CheckIn.Value.DayNumber <= 180)
+                .WithMessage("Stay is longer than 180 nights — check the dates.")
+                .OverridePropertyName(nameof(CreateBookingServiceLine.CheckOut));
         });
 
         When(x => x.ServiceType == BookingServiceType.Grooming
