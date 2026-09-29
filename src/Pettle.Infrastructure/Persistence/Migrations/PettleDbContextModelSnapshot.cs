@@ -2220,9 +2220,6 @@ namespace Pettle.Infrastructure.Persistence.Migrations
                         .HasPrecision(12, 2)
                         .HasColumnType("numeric(12,2)");
 
-                    b.Property<Guid?>("SourceProductId")
-                        .HasColumnType("uuid");
-
                     b.Property<int>("StockOnHand")
                         .HasColumnType("integer");
 
