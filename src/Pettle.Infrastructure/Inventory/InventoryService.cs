@@ -208,6 +208,7 @@ public partial class InventoryService : IInventoryService
         {
             throw AppException.Conflict($"Product code '{code}' is already in use.");
         }
+        await SyncSkuFromProductAsync(product, ct);
         return MapProduct(product);
     }
 
@@ -225,7 +226,119 @@ public partial class InventoryService : IInventoryService
         {
             throw AppException.Conflict($"Product code '{code}' is already in use.");
         }
+        await SyncSkuFromProductAsync(product, ct);
         return MapProduct(product);
+    }
+
+    /// <summary>Keeps a Product's Sku (see <see cref="Sku.SourceProductId"/>) in step so the whole
+    /// Product catalogue stays sellable through the POS without a separate manual step — the gap
+    /// this closes is exactly what the one-time ProductsToSkusMigrator backfilled for the 2,027
+    /// Products that already existed. Creates the Sku on first save; on every later save it
+    /// re-syncs the descriptive/pricing fields but deliberately never touches StockOnHand once the
+    /// Sku exists — that number is then live-managed by real sales/adjustments/POs, and blindly
+    /// overwriting it from Product.Quantity on an unrelated edit (e.g. fixing a typo in the name)
+    /// would silently erase real stock movement history.</summary>
+    private async Task SyncSkuFromProductAsync(Product product, CancellationToken ct)
+    {
+        var tenantId = _user.TenantId!.Value;
+        var sku = await _db.Skus.IgnoreQueryFilters()
+            .FirstOrDefaultAsync(s => s.TenantId == tenantId && s.SourceProductId == product.Id, ct);
+
+        var categoryId = await ResolveSkuCategoryAsync(tenantId, product.Category, product.SubCategory, ct);
+        var brandId = await ResolveSkuBrandAsync(tenantId, product.Brand, ct);
+        var cost = product.LandingCost > 0 ? product.LandingCost : product.PurchasePrice;
+
+        if (sku is null)
+        {
+            // A different Sku already owns this code (created directly, not from a Product) — skip
+            // rather than crash the Product save on a unique-constraint violation; the two just
+            // stay unlinked, same as before this sync existed.
+            if (await _db.Skus.IgnoreQueryFilters().AnyAsync(s => s.TenantId == tenantId && s.Code == product.Code, ct))
+                return;
+
+            var stock = (int)Math.Round(product.Quantity);
+            _db.Skus.Add(new Sku
+            {
+                TenantId = tenantId,
+                SourceProductId = product.Id,
+                Code = product.Code,
+                Name = product.Name,
+                Description = product.Description ?? product.ShortDescription,
+                CategoryId = categoryId,
+                BrandId = brandId,
+                Unit = string.IsNullOrWhiteSpace(product.Unit) ? "PCS" : product.Unit,
+                MrpPrice = product.MrpPrice,
+                SellingPrice = product.SellingPrice,
+                CostPrice = cost,
+                TaxPercent = product.SalesTaxPercent,
+                HsnSacCode = product.HsnCode,
+                StockOnHand = stock < 0 ? 0 : stock,
+                IsActive = product.IsActive,
+            });
+        }
+        else
+        {
+            var codeTaken = sku.Code != product.Code
+                && await _db.Skus.IgnoreQueryFilters().AnyAsync(s => s.TenantId == tenantId && s.Code == product.Code && s.Id != sku.Id, ct);
+            if (!codeTaken) sku.Code = product.Code;
+
+            sku.IsDeleted = false; sku.DeletedAt = null; sku.DeletedById = null;
+            sku.Name = product.Name;
+            sku.Description = product.Description ?? product.ShortDescription;
+            sku.CategoryId = categoryId;
+            sku.BrandId = brandId;
+            sku.Unit = string.IsNullOrWhiteSpace(product.Unit) ? "PCS" : product.Unit;
+            sku.MrpPrice = product.MrpPrice;
+            sku.SellingPrice = product.SellingPrice;
+            sku.CostPrice = cost;
+            sku.TaxPercent = product.SalesTaxPercent;
+            sku.HsnSacCode = product.HsnCode;
+            sku.IsActive = product.IsActive;
+            // StockOnHand intentionally left untouched — see method doc comment.
+        }
+        await _db.SaveChangesAsync(ct);
+    }
+
+    private async Task<Guid?> ResolveSkuCategoryAsync(Guid tenantId, string? category, string? subCategory, CancellationToken ct)
+    {
+        category = category?.Trim(); subCategory = subCategory?.Trim();
+        if (string.IsNullOrEmpty(category) && string.IsNullOrEmpty(subCategory)) return null;
+
+        Guid? parentId = null;
+        if (!string.IsNullOrEmpty(category))
+        {
+            var parent = await _db.SkuCategories.FirstOrDefaultAsync(c => c.TenantId == tenantId && c.ParentId == null && c.Name.ToLower() == category.ToLower(), ct);
+            if (parent is null)
+            {
+                parent = new SkuCategory { TenantId = tenantId, Name = category };
+                _db.SkuCategories.Add(parent);
+            }
+            parentId = parent.Id;
+        }
+
+        if (string.IsNullOrEmpty(subCategory)) return parentId;
+
+        var child = await _db.SkuCategories.FirstOrDefaultAsync(c => c.TenantId == tenantId && c.ParentId == parentId && c.Name.ToLower() == subCategory.ToLower(), ct);
+        if (child is null)
+        {
+            child = new SkuCategory { TenantId = tenantId, Name = subCategory, ParentId = parentId };
+            _db.SkuCategories.Add(child);
+        }
+        return child.Id;
+    }
+
+    private async Task<Guid?> ResolveSkuBrandAsync(Guid tenantId, string? brand, CancellationToken ct)
+    {
+        brand = brand?.Trim();
+        if (string.IsNullOrEmpty(brand)) return null;
+
+        var b = await _db.SkuBrands.FirstOrDefaultAsync(x => x.TenantId == tenantId && x.Name.ToLower() == brand.ToLower(), ct);
+        if (b is null)
+        {
+            b = new SkuBrand { TenantId = tenantId, Name = brand };
+            _db.SkuBrands.Add(b);
+        }
+        return b.Id;
     }
 
     public async Task<bool> DeleteProductAsync(Guid id, CancellationToken ct = default)

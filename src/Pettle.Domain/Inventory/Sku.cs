@@ -39,6 +39,10 @@ public class Sku : SoftDeletableTenantEntity
     /// <summary>Whether this SKU is published to the parent-facing in-app store.</summary>
     public bool IsListedInApp { get; set; }
     public string? AppImageUrl { get; set; }
+    /// <summary>Set when this Sku was created from (and stays synced with) a <see cref="Product"/>
+    /// catalogue row — lets Product edits find their Sku by a stable link instead of matching on
+    /// Code, which either side can change. Null for a Sku created directly, the normal way.</summary>
+    public Guid? SourceProductId { get; set; }
 }
 
 /// <summary>Standalone product catalogue imported from the legacy product master.
