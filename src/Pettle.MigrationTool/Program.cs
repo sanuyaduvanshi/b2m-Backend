@@ -39,6 +39,7 @@ builder.Services.AddScoped<BookingsImporter>();
 builder.Services.AddScoped<InvoicesImporter>();
 builder.Services.AddScoped<PaymentsImporter>();
 builder.Services.AddScoped<SkusImporter>();
+builder.Services.AddScoped<ProductsToSkusMigrator>();
 
 using var host = builder.Build();
 using var scope = host.Services.CreateScope();
@@ -92,6 +93,7 @@ foreach (var (name, filePath) in jobs)
             "invoices"      => (await sp.GetRequiredService<InvoicesImporter>().ImportAsync(tenant.Id, filePath, cli.DryRun, CancellationToken.None)).ToString(),
             "payments"      => (await sp.GetRequiredService<PaymentsImporter>().ImportAsync(tenant.Id, filePath, cli.DryRun, CancellationToken.None)).ToString(),
             "skus"          => (await sp.GetRequiredService<SkusImporter>().ImportAsync(tenant.Id, filePath, cli.DryRun, CancellationToken.None)).ToString(),
+            "products-to-skus" => (await sp.GetRequiredService<ProductsToSkusMigrator>().MigrateAsync(tenant.Id, cli.DryRun, CancellationToken.None)).ToString(),
             _ => $"(unknown importer '{name}')",
         };
         sw.Stop();
@@ -122,7 +124,7 @@ static List<(string name, string file)> ResolveJobs(CliArgs cli)
     // Default sequence (FK order). 'tasks' skipped — source export is empty.
     // 'skus' lives in a standalone file (skus_<date>.xlsx), so it's resolvable by name but
     // excluded from 'all' (run it with: --import=skus --file=<path-to-skus.xlsx>).
-    var allInOrder = new[] { "clients", "skus", "catalogue", "pos", "expenses", "subscriptions", "bookings", "invoices", "payments" };
+    var allInOrder = new[] { "clients", "skus", "catalogue", "pos", "expenses", "subscriptions", "bookings", "invoices", "payments", "products-to-skus" };
 
     var jobs = new List<(string, string)>();
     var requested = (cli.Import ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
@@ -136,7 +138,7 @@ static List<(string name, string file)> ResolveJobs(CliArgs cli)
     }
 
     // 'all' covers the export-root folder; skus comes from a separate file so it's not bundled in.
-    if (requested.Contains("all")) requested = allInOrder.Where(n => n != "skus").ToList();
+    if (requested.Contains("all")) requested = allInOrder.Where(n => n != "skus" && n != "products-to-skus").ToList();
 
     // Sort requested in our defined sequence so FKs resolve.
     var ordered = allInOrder.Where(requested.Contains).ToList();
@@ -151,6 +153,10 @@ static List<(string name, string file)> ResolveJobs(CliArgs cli)
 
 static string ResolveDefaultPath(string name, string? root)
 {
+    // Reads straight from the DB (Products -> Skus), no source file — must not go looking for
+    // the bulk_export folder below, which won't exist on a server checkout.
+    if (name == "products-to-skus") return AppContext.BaseDirectory;
+
     root ??= LocateExportRoot();
     return name switch
     {
