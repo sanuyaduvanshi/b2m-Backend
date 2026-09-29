@@ -41,6 +41,10 @@ public class ReportsController : ControllerBase
     [HttpGet("inventory")] [HasPermission(Modules.Reports, Actions.View)]
     public async Task<IActionResult> Inventory(CancellationToken ct) => Ok(await _svc.InventoryAsync(ct));
 
+    [HttpGet("inventory/stock-register")] [HasPermission(Modules.Reports, Actions.View)]
+    public async Task<IActionResult> StockRegister([FromQuery] DateOnly? from, [FromQuery] DateOnly? to, CancellationToken ct)
+        => Ok(await _svc.StockRegisterAsync(ResolveRange(from, to), ct));
+
     [HttpGet("expenses")] [HasPermission(Modules.Reports, Actions.View)]
     public async Task<IActionResult> Expenses([FromQuery] DateOnly? from, [FromQuery] DateOnly? to, CancellationToken ct)
         => Ok(await _svc.ExpensesAsync(ResolveRange(from, to), ct));

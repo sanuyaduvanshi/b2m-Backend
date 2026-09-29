@@ -91,7 +91,12 @@ public static class InvoicePdfRenderer
 
                         foreach (var line in inv.Lines)
                         {
-                            table.Cell().Element(BodyCell).Text(line.BillItemName);
+                            table.Cell().Element(BodyCell).Column(c =>
+                            {
+                                c.Item().Text(line.BillItemName);
+                                if (!string.IsNullOrWhiteSpace(line.Note))
+                                    c.Item().Text(line.Note).FontSize(8).Italic().FontColor(Colors.Grey.Darken1);
+                            });
                             table.Cell().Element(BodyCell).AlignRight().Text(line.Quantity.ToString("0.##"));
                             table.Cell().Element(BodyCell).AlignRight().Text($"{Rupee}{line.UnitAmount:0.00}");
                             table.Cell().Element(BodyCell).AlignRight().Text(line.Discount > 0 ? $"{Rupee}{line.Discount:0.00}" : "-");

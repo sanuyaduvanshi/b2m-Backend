@@ -68,6 +68,9 @@ public class InvoiceLineItem : TenantEntity
     public string? SkuLegacyId { get; set; }
     public string? BatchNumber { get; set; }
     public string? Description { get; set; }
+    /// <summary>Free-text per-line remark entered at the POS (e.g. "gift wrap", "no ice") — distinct
+    /// from <see cref="Description"/>, which is a snapshot of the SKU's own catalogue description.</summary>
+    public string? Note { get; set; }
     public string? Category { get; set; }
     public string? SubCategory { get; set; }
     public string? HsnSacCode { get; set; }

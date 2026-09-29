@@ -437,4 +437,59 @@ public class ReportsService : IReportsService
 
         return new InventoryReport(total, low, expiring, value, byCategory, outOfStock, listedInApp);
     }
+
+    public async Task<IReadOnlyList<StockRegisterRow>> StockRegisterAsync(DateRange range, CancellationToken ct = default)
+    {
+        if (_user.TenantId is null) return Array.Empty<StockRegisterRow>();
+        var tid = _user.TenantId.Value;
+        var (from, to) = RangeAsUtc(range);
+
+        var skus = await _db.Skus.AsNoTracking()
+            .Where(s => s.TenantId == tid)
+            .Select(s => new
+            {
+                s.Id, s.Code, s.Name, s.TaxPercent, s.CostPrice,
+                CategoryName = s.Category != null ? s.Category.Name : null,
+                BrandName = s.Brand != null ? s.Brand.Name : null,
+            })
+            .ToListAsync(ct);
+
+        // Pulled once and grouped in-memory: computing an opening balance (last movement *before*
+        // the range) alongside an in-range in/out sum, per SKU, isn't one clean SQL aggregate — and
+        // a tenant's whole movement history is a modest table next to invoices/payments.
+        var movements = await _db.StockMovements.AsNoTracking()
+            .Where(m => m.TenantId == tid && m.CreatedAt <= to)
+            .OrderBy(m => m.CreatedAt)
+            .Select(m => new { m.SkuId, m.CreatedAt, m.QuantityChange, m.StockAfter })
+            .ToListAsync(ct);
+        var bySku = movements.GroupBy(m => m.SkuId).ToDictionary(g => g.Key, g => g.ToList());
+
+        var rows = new List<StockRegisterRow>(skus.Count);
+        foreach (var sku in skus)
+        {
+            var all = bySku.GetValueOrDefault(sku.Id);
+            decimal opening = 0, inQty = 0, outQty = 0, closing = 0;
+            if (all is not null)
+            {
+                var before = all.Where(m => m.CreatedAt < from).ToList();
+                opening = before.Count > 0 ? before[^1].StockAfter : 0;
+
+                var inRange = all.Where(m => m.CreatedAt >= from && m.CreatedAt <= to).ToList();
+                inQty = inRange.Where(m => m.QuantityChange > 0).Sum(m => m.QuantityChange);
+                outQty = inRange.Where(m => m.QuantityChange < 0).Sum(m => -m.QuantityChange);
+                closing = inRange.Count > 0 ? inRange[^1].StockAfter : opening;
+            }
+
+            // Nothing to report for a SKU with no opening balance and no movement in range at all —
+            // keeps the register to items with actual activity/stock, the same as the VasyERP export
+            // this report is modelled on.
+            if (opening == 0 && inQty == 0 && outQty == 0 && closing == 0) continue;
+
+            rows.Add(new StockRegisterRow(
+                sku.Code, sku.Name, sku.CategoryName, sku.BrandName,
+                inQty, sku.TaxPercent, opening, outQty, closing, closing * sku.CostPrice));
+        }
+
+        return rows.OrderBy(r => r.ProductName).ToList();
+    }
 }

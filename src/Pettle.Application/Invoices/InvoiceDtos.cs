@@ -34,7 +34,8 @@ public record InvoiceLineDto(
     decimal Discount,
     decimal Subtotal,
     decimal Total,
-    string? BatchNumber = null
+    string? BatchNumber = null,
+    string? Note = null
 );
 
 public record PaymentDto(
@@ -154,7 +155,8 @@ public record CreateSaleLine(
     decimal UnitAmount,           // per-unit MRP (GST-inclusive retail rate)
     decimal DiscountPercent,      // line discount %
     decimal AddDiscountPercent,   // additional line discount % (applied after the first)
-    decimal TaxPercent
+    decimal TaxPercent,
+    string? Note = null
 );
 
 public record CreateSalePayment(

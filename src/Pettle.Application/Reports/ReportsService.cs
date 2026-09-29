@@ -39,6 +39,15 @@ public record ClientsReport(int Active, int Archived, int NewInRange, IReadOnlyL
 public record TopClient(Guid Id, string Name, string Phone, int Bookings, decimal Spend);
 public record InventoryReport(int TotalSkus, int LowStock, int ExpiringSoon, decimal InventoryValue, IReadOnlyList<ExpenseSlice> ByCategory, int OutOfStock, int ListedInApp);
 
+/// <summary>One SKU's stock movement ledger for the range: what it opened with, what came in and
+/// went out, and what it closed at — the same shape as a supplier's "stock register" report.
+/// ClosingValue is ClosingQuantity priced at the SKU's current cost price (not a historical cost),
+/// matching how InventoryReport.InventoryValue is computed elsewhere in this file.</summary>
+public record StockRegisterRow(
+    string ItemCode, string ProductName, string? Category, string? Brand,
+    decimal InQuantity, decimal PurchaseTaxPercent, decimal OpeningQuantity,
+    decimal OutQuantity, decimal ClosingQuantity, decimal ClosingValue);
+
 public record ExpensesReport(decimal Total, int Count, IReadOnlyList<ExpenseSlice> ByCategory, IReadOnlyList<ExpenseSlice> ByMode);
 
 /// <summary>Money in (payments collected) vs money out (expenses) for the range.</summary>
@@ -92,6 +101,7 @@ public interface IReportsService
     Task<BookingsReport> BookingsAsync(DateRange range, CancellationToken ct = default);
     Task<ClientsReport> ClientsAsync(DateRange range, CancellationToken ct = default);
     Task<InventoryReport> InventoryAsync(CancellationToken ct = default);
+    Task<IReadOnlyList<StockRegisterRow>> StockRegisterAsync(DateRange range, CancellationToken ct = default);
     Task<ExpensesReport> ExpensesAsync(DateRange range, CancellationToken ct = default);
     Task<ProfitReport> ProfitAsync(DateRange range, CancellationToken ct = default);
     Task<IReadOnlyList<MonthlyPoint>> MonthlyAsync(DateRange range, CancellationToken ct = default);
