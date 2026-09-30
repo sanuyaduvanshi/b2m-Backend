@@ -176,6 +176,13 @@ public partial class InventoryService : IInventoryService
         product.Quantity = req.Quantity; product.IsActive = req.IsActive; product.ShowOnline = req.ShowOnline;
     }
 
+    public async Task<ProductListItem?> GetProductAsync(Guid id, CancellationToken ct = default)
+    {
+        if (_user.TenantId is null) return null;
+        var product = await _db.Products.AsNoTracking().FirstOrDefaultAsync(x => x.Id == id && x.TenantId == _user.TenantId, ct);
+        return product is null ? null : MapProduct(product);
+    }
+
     public async Task<PagedResult<ProductListItem>> ListProductsAsync(string? search, int page, int pageSize, CancellationToken ct = default)
     {
         if (_user.TenantId is null) return Empty<ProductListItem>(page, pageSize);

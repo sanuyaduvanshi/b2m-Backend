@@ -15,6 +15,7 @@ public interface IInventoryService
     Task<bool> DeleteSkuAsync(Guid id, CancellationToken ct = default);
 
     Task<PagedResult<ProductListItem>> ListProductsAsync(string? search, int page, int pageSize, CancellationToken ct = default);
+    Task<ProductListItem?> GetProductAsync(Guid id, CancellationToken ct = default);
     Task<ProductListItem> CreateProductAsync(CreateOrUpdateProductRequest req, CancellationToken ct = default);
     Task<ProductListItem?> UpdateProductAsync(Guid id, CreateOrUpdateProductRequest req, CancellationToken ct = default);
     Task<bool> DeleteProductAsync(Guid id, CancellationToken ct = default);
