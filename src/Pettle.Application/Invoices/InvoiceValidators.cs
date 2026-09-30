@@ -47,6 +47,9 @@ public class CreateSaleLineValidator : AbstractValidator<CreateSaleLine>
         RuleFor(x => x.DiscountPercent).ValidTaxPercent().WithMessage("Discount percent must be between 0 and 100.");
         RuleFor(x => x.AddDiscountPercent).ValidTaxPercent().WithMessage("Additional discount percent must be between 0 and 100.");
         RuleFor(x => x.TaxPercent).ValidTaxPercent();
+        // Matches the POS input's own maxLength — nothing enforced this server-side before, so a
+        // direct API call (not just the POS form) could push an unbounded string into a text column.
+        RuleFor(x => x.Note).MaximumLength(200);
         // SkuId and ProductId point at two different catalogues with two different stock-deduction
         // paths in CreateSaleAsync (Sku's FIFO/StockMovement ledger vs Product's plain Quantity
         // decrement) — both set on one line would run both, silently deducting stock twice for
