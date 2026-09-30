@@ -47,6 +47,13 @@ public class CreateSaleLineValidator : AbstractValidator<CreateSaleLine>
         RuleFor(x => x.DiscountPercent).ValidTaxPercent().WithMessage("Discount percent must be between 0 and 100.");
         RuleFor(x => x.AddDiscountPercent).ValidTaxPercent().WithMessage("Additional discount percent must be between 0 and 100.");
         RuleFor(x => x.TaxPercent).ValidTaxPercent();
+        // SkuId and ProductId point at two different catalogues with two different stock-deduction
+        // paths in CreateSaleAsync (Sku's FIFO/StockMovement ledger vs Product's plain Quantity
+        // decrement) — both set on one line would run both, silently deducting stock twice for
+        // what the customer only bought once.
+        RuleFor(x => x).Must(x => !(x.SkuId.HasValue && x.ProductId.HasValue))
+            .WithMessage("A line can reference a SKU or a Product, not both.")
+            .OverridePropertyName(nameof(CreateSaleLine.ProductId));
     }
 }
 
