@@ -156,7 +156,11 @@ public record CreateSaleLine(
     decimal DiscountPercent,      // line discount %
     decimal AddDiscountPercent,   // additional line discount % (applied after the first)
     decimal TaxPercent,
-    string? Note = null
+    string? Note = null,
+    /// <summary>Alternative to SkuId — a line sold straight from the standalone Product catalogue.
+    /// Stock is a plain Quantity decrement, no batches/FIFO/StockMovement ledger, matching how
+    /// Product intentionally stays simpler than Sku. At most one of SkuId/ProductId is set.</summary>
+    Guid? ProductId = null
 );
 
 public record CreateSalePayment(

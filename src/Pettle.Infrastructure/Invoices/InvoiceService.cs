@@ -186,6 +186,14 @@ public class InvoiceService : IInvoiceService
                             .ToDictionaryAsync(s => s.Id, s => s.Description, ct)
             : new Dictionary<Guid, string?>();
 
+        // Same, for lines sold straight from the Product catalogue.
+        var productIds = req.Lines.Where(l => l.ProductId.HasValue).Select(l => l.ProductId!.Value).Distinct().ToList();
+        var productDescriptions = productIds.Count > 0
+            ? await _db.Products.Where(p => productIds.Contains(p.Id) && p.TenantId == _user.TenantId)
+                                 .Select(p => new { p.Id, Description = p.Description ?? p.ShortDescription })
+                                 .ToDictionaryAsync(p => p.Id, p => p.Description, ct)
+            : new Dictionary<Guid, string?>();
+
         // Retail rates are GST-inclusive: extract tax out of the net (mirrors the on-screen totals).
         decimal sumGross = 0, sumLineDiscount = 0, sumTaxable = 0, sumTax = 0;
         var reqLineToInvoiceLine = new Dictionary<int, InvoiceLineItem>(); // index → line for FIFO batch link
@@ -206,8 +214,10 @@ public class InvoiceService : IInvoiceService
             var invoiceLine = new InvoiceLineItem
             {
                 BillItemName = line.ItemName,
-                SkuName = line.SkuId.HasValue ? line.ItemName : null,
-                Description = line.SkuId.HasValue && skuDescriptions.TryGetValue(line.SkuId.Value, out var desc) ? desc : null,
+                SkuName = line.SkuId.HasValue || line.ProductId.HasValue ? line.ItemName : null,
+                Description = line.SkuId.HasValue && skuDescriptions.TryGetValue(line.SkuId.Value, out var desc) ? desc
+                    : line.ProductId.HasValue && productDescriptions.TryGetValue(line.ProductId.Value, out var pdesc) ? pdesc
+                    : null,
                 Note = string.IsNullOrWhiteSpace(line.Note) ? null : line.Note.Trim(),
                 Quantity = line.Quantity,
                 UnitAmount = line.UnitAmount,
@@ -340,6 +350,25 @@ public class InvoiceService : IInvoiceService
                 RelatedInvoiceId = invoice.Id,
                 Note = $"Sale {invoice.InvoiceNumber} | Batch: {firstBatch ?? "N/A"}",
             });
+        }
+
+        // Deduct stock for Product-catalogue lines — a plain Quantity decrement, deliberately with
+        // no batch/FIFO/StockMovement ledger (Product stays simpler than Sku by design; see the
+        // entity's own doc comment).
+        foreach (var line in req.Lines)
+        {
+            if (!line.ProductId.HasValue) continue;
+
+            var product = await _db.Products.FirstOrDefaultAsync(p => p.Id == line.ProductId && p.TenantId == _user.TenantId, ct);
+            if (product is null)
+                throw AppException.Validation("Unknown product",
+                    new Dictionary<string, string[]> { ["lines"] = new[] { $"Product '{line.ItemName}' no longer exists." } });
+
+            var qty = line.Quantity;
+            if (product.Quantity < qty)
+                throw AppException.Conflict($"Not enough stock for '{product.Name}' — {product.Quantity} on hand, {qty} requested.");
+
+            product.Quantity -= qty;
         }
 
         if (redeemedCreditNote is not null)

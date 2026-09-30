@@ -41,8 +41,11 @@ public class Sku : SoftDeletableTenantEntity
     public string? AppImageUrl { get; set; }
 }
 
-/// <summary>Standalone product catalogue imported from the legacy product master.
-/// Products deliberately do not participate in SKU stock movements, batches, POs or sales.</summary>
+/// <summary>Standalone product catalogue, kept deliberately simpler than <see cref="Sku"/>:
+/// Products are sellable directly through the POS (a plain Quantity decrement on sale — see
+/// InvoiceService.CreateSaleAsync), but never participate in Sku's batch/FIFO/StockMovement
+/// ledger, its Purchase Orders, or its Category/Brand master tables. The two catalogues are
+/// intentionally kept separate and are not merged or auto-synced into one another.</summary>
 public class Product : SoftDeletableTenantEntity
 {
     public string Code { get; set; } = string.Empty;
