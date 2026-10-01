@@ -78,6 +78,13 @@ public class Product : SoftDeletableTenantEntity
     public decimal Quantity { get; set; }
     public bool IsActive { get; set; } = true;
     public bool ShowOnline { get; set; }
+
+    /// <summary>Product has no StockMovement-style ledger, so unlike Sku's per-adjustment Note,
+    /// there's nowhere else for a staff-entered adjustment reason to live. Kept as a single
+    /// overwritten field (not a history) to match AdjustProductStockAsync's "simple version" —
+    /// it still reaches the Activity Log because AuditCapture diffs every Product column.</summary>
+    public string? LastAdjustmentReason { get; set; }
+    public DateTimeOffset? LastAdjustedAt { get; set; }
 }
 
 public class Vendor : SoftDeletableTenantEntity

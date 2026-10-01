@@ -36,7 +36,8 @@ public record ProductListItem(
     bool IsPurchaseTaxInclusive = false, bool IsSalesTaxInclusive = true,
     decimal CessPercent = 0, bool ManageMultipleBatch = false,
     string? ShortDescription = null, string? Description = null, string? Ingredients = null,
-    string? Nutrition = null, string? NetWeightUnit = null, string? AdditionalInfo = null);
+    string? Nutrition = null, string? NetWeightUnit = null, string? AdditionalInfo = null,
+    string? LastAdjustmentReason = null, DateTimeOffset? LastAdjustedAt = null);
 
 /// <summary>Simple +/- correction to a Product's Quantity — deliberately not Sku's
 /// batch/FIFO/StockMovement ledger, matching how Product stays simpler by design.</summary>

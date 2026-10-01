@@ -158,7 +158,8 @@ public partial class InventoryService : IInventoryService
         x.PrintName, x.ProductType, x.SubCategory, x.SubBrand, x.Unit, x.PurchasePrice, x.LandingCost,
         x.SellingDiscountPercent, x.PurchaseTaxPercent, x.SalesTaxPercent, x.IsPurchaseTaxInclusive,
         x.IsSalesTaxInclusive, x.CessPercent, x.ManageMultipleBatch, x.ShortDescription, x.Description,
-        x.Ingredients, x.Nutrition, x.NetWeightUnit, x.AdditionalInfo);
+        x.Ingredients, x.Nutrition, x.NetWeightUnit, x.AdditionalInfo,
+        x.LastAdjustmentReason, x.LastAdjustedAt);
 
     private static void ApplyProduct(Product product, CreateOrUpdateProductRequest req, string code)
     {
@@ -194,6 +195,8 @@ public partial class InventoryService : IInventoryService
             throw AppException.Conflict($"Adjustment would take stock below zero — currently {product.Quantity}, change {req.QuantityChange}.");
 
         product.Quantity = next;
+        product.LastAdjustmentReason = string.IsNullOrWhiteSpace(req.Reason) ? null : req.Reason.Trim();
+        product.LastAdjustedAt = DateTimeOffset.UtcNow;
         await _db.SaveChangesAsync(ct);
         return MapProduct(product);
     }
