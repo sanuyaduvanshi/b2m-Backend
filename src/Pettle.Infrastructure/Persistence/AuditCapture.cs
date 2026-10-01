@@ -32,6 +32,10 @@ internal static class AuditCapture
         ["SubscriptionPackage"] = "Subscriptions",
         ["Sku"] = "Inventory",
         ["StockMovement"] = "Inventory",
+        // Product stayed out of this list while it was a read-only legacy catalogue; now it's
+        // directly sellable and stock-adjustable through the POS, the same "who changed this"
+        // question applies to it as to Sku.
+        ["Product"] = "Inventory",
         ["PurchaseOrder"] = "Inventory",
         ["Expense"] = "Expenses",
         ["Kennel"] = "Kennels",

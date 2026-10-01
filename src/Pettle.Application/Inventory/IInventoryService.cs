@@ -16,6 +16,8 @@ public interface IInventoryService
 
     Task<PagedResult<ProductListItem>> ListProductsAsync(string? search, int page, int pageSize, CancellationToken ct = default);
     Task<ProductListItem?> GetProductAsync(Guid id, CancellationToken ct = default);
+    Task<ProductListItem?> AdjustProductStockAsync(Guid id, AdjustProductStockRequest req, CancellationToken ct = default);
+    Task<decimal> GetProductsStockValueAsync(CancellationToken ct = default);
     Task<ProductListItem> CreateProductAsync(CreateOrUpdateProductRequest req, CancellationToken ct = default);
     Task<ProductListItem?> UpdateProductAsync(Guid id, CreateOrUpdateProductRequest req, CancellationToken ct = default);
     Task<bool> DeleteProductAsync(Guid id, CancellationToken ct = default);

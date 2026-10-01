@@ -77,11 +77,24 @@ public class InventoryController : ControllerBase
     public async Task<IActionResult> Products([FromQuery] string? search, [FromQuery] int page = 1, [FromQuery] int pageSize = 50, CancellationToken ct = default)
         => Ok(await _svc.ListProductsAsync(search, page, pageSize, ct));
 
+    [HttpGet("products/stock-value")]
+    [HasPermission(Modules.Inventory, Actions.View)]
+    public async Task<IActionResult> ProductsStockValue(CancellationToken ct)
+        => Ok(new { stockValue = await _svc.GetProductsStockValueAsync(ct) });
+
     [HttpGet("products/{id:guid}")]
     [HasPermission(Modules.Inventory, Actions.View)]
     public async Task<IActionResult> Product(Guid id, CancellationToken ct)
     {
         var product = await _svc.GetProductAsync(id, ct);
+        return product is null ? NotFound() : Ok(product);
+    }
+
+    [HttpPost("products/{id:guid}/adjust-stock")]
+    [HasPermission(Modules.Inventory, Actions.Edit)]
+    public async Task<IActionResult> AdjustProductStock(Guid id, [FromBody] AdjustProductStockRequest req, CancellationToken ct)
+    {
+        var product = await _svc.AdjustProductStockAsync(id, req, ct);
         return product is null ? NotFound() : Ok(product);
     }
 

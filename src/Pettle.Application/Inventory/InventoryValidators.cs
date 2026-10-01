@@ -61,6 +61,16 @@ public class CreateOrUpdateProductValidator : AbstractValidator<CreateOrUpdatePr
     }
 }
 
+public class AdjustProductStockValidator : AbstractValidator<AdjustProductStockRequest>
+{
+    public AdjustProductStockValidator()
+    {
+        RuleFor(x => x.QuantityChange).NotEqual(0).WithMessage("Enter a non-zero change (+N to add, -N to reduce).")
+            .InclusiveBetween(-1_000_000, 1_000_000);
+        RuleFor(x => x.Reason).MaximumLength(200);
+    }
+}
+
 public class CreateOrUpdateCategoryValidator : AbstractValidator<CreateOrUpdateCategoryRequest>
 {
     public CreateOrUpdateCategoryValidator()

@@ -38,6 +38,10 @@ public record ProductListItem(
     string? ShortDescription = null, string? Description = null, string? Ingredients = null,
     string? Nutrition = null, string? NetWeightUnit = null, string? AdditionalInfo = null);
 
+/// <summary>Simple +/- correction to a Product's Quantity — deliberately not Sku's
+/// batch/FIFO/StockMovement ledger, matching how Product stays simpler by design.</summary>
+public record AdjustProductStockRequest(decimal QuantityChange, string? Reason);
+
 public record CreateOrUpdateProductRequest(
     string Code, string Name, string? Category, string? Brand,
     decimal MrpPrice, decimal SellingPrice, string? HsnCode, decimal Quantity,

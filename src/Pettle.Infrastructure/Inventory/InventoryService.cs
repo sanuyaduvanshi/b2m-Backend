@@ -183,6 +183,30 @@ public partial class InventoryService : IInventoryService
         return product is null ? null : MapProduct(product);
     }
 
+    public async Task<ProductListItem?> AdjustProductStockAsync(Guid id, AdjustProductStockRequest req, CancellationToken ct = default)
+    {
+        if (_user.TenantId is null) return null;
+        var product = await _db.Products.FirstOrDefaultAsync(x => x.Id == id && x.TenantId == _user.TenantId, ct);
+        if (product is null) return null;
+
+        var next = product.Quantity + req.QuantityChange;
+        if (next < 0)
+            throw AppException.Conflict($"Adjustment would take stock below zero — currently {product.Quantity}, change {req.QuantityChange}.");
+
+        product.Quantity = next;
+        await _db.SaveChangesAsync(ct);
+        return MapProduct(product);
+    }
+
+    /// <summary>Same idea as InventoryReport.InventoryValue for Skus (Quantity × cost, summed
+    /// across the whole catalogue) — Product's analogue, shown at the top of the Products tab.</summary>
+    public async Task<decimal> GetProductsStockValueAsync(CancellationToken ct = default)
+    {
+        if (_user.TenantId is null) return 0;
+        return await _db.Products.Where(p => p.TenantId == _user.TenantId)
+            .SumAsync(p => (decimal?)(p.Quantity * p.PurchasePrice), ct) ?? 0m;
+    }
+
     public async Task<PagedResult<ProductListItem>> ListProductsAsync(string? search, int page, int pageSize, CancellationToken ct = default)
     {
         if (_user.TenantId is null) return Empty<ProductListItem>(page, pageSize);
