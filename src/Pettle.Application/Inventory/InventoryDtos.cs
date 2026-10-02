@@ -68,7 +68,10 @@ public record SkuBrandDto(Guid Id, string Name);
 public record CreateOrUpdateBrandRequest(string Name);
 
 public record VendorListItem(Guid Id, string Name, string? Phone, string? Email, string? Gstin, int CreditDays, decimal CreditLimit, bool IsActive, string? Address = null, string? ContactPerson = null);
-public record CreateOrUpdateVendorRequest(string Name, string? ContactPerson, string? Phone, string? Email, string? Address, string? Gstin, int CreditDays, decimal CreditLimit, bool IsActive);
+// IsActive defaults true — a caller that omits it (VendorForm always sends it explicitly, but a
+// future API consumer might not) would otherwise silently create a vendor the Supplier dropdown
+// filters out (vendors?.items.filter(v => v.isActive)), invisible with no error anywhere.
+public record CreateOrUpdateVendorRequest(string Name, string? ContactPerson, string? Phone, string? Email, string? Address, string? Gstin, int CreditDays, decimal CreditLimit, bool IsActive = true);
 
 public record PoListItem(
     Guid Id, string? LegacyPoNumber, string PoNumber, string VendorName,
