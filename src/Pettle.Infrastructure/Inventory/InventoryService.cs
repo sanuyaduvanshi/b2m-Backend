@@ -822,7 +822,11 @@ public partial class InventoryService : IInventoryService
             // Product has no batch ledger, so this can only best-effort reverse by the line's
             // ReceivedQuantity — unlike the Sku reversal above, there's no way to tell how much of
             // that specific receipt has since sold (same simplification as Product's Adjust Stock).
-            var productLines = await _db.PurchaseOrderLines
+            // AsNoTracking: these lines get hard-deleted by ExecuteDeleteAsync below, which bypasses
+            // the change tracker — a tracked copy here would go stale and EF would then try to
+            // cascade-delete an already-gone row when `po` is removed, throwing a concurrency
+            // exception ("expected to affect 1 row(s), but actually affected 0").
+            var productLines = await _db.PurchaseOrderLines.AsNoTracking()
                 .Where(l => l.PurchaseOrderId == po.Id && l.ProductId != null && l.ReceivedQuantity > 0)
                 .ToListAsync(ct);
             if (productLines.Count > 0)
