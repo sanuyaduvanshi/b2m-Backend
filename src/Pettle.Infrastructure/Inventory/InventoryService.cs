@@ -167,7 +167,16 @@ public partial class InventoryService : IInventoryService
         product.ProductType = req.ProductType?.Trim(); product.Category = req.Category?.Trim(); product.SubCategory = req.SubCategory?.Trim();
         product.Brand = req.Brand?.Trim(); product.SubBrand = req.SubBrand?.Trim(); product.Unit = req.Unit.Trim();
         product.PurchasePrice = req.PurchasePrice; product.LandingCost = req.LandingCost; product.MrpPrice = req.MrpPrice;
-        product.SellingDiscountPercent = req.SellingDiscountPercent; product.SellingPrice = req.SellingPrice; product.HsnCode = req.HsnCode?.Trim();
+        product.SellingDiscountPercent = req.SellingDiscountPercent;
+        // The UI keeps these in sync live, but nothing stopped a direct API call (or a future
+        // bulk import, like the one that originally created this exact drift on 3 live products)
+        // from sending a non-zero discount with SellingPrice still equal to MrpPrice — a
+        // contradiction that silently did nothing, since POS sells at SellingPrice, not at
+        // MrpPrice-minus-discount. Server-side authoritative recompute whenever a discount is set.
+        product.SellingPrice = req.SellingDiscountPercent > 0 && req.MrpPrice > 0
+            ? Math.Round(req.MrpPrice * (1 - req.SellingDiscountPercent / 100m), 2)
+            : req.SellingPrice;
+        product.HsnCode = req.HsnCode?.Trim();
         product.PurchaseTaxPercent = req.PurchaseTaxPercent; product.SalesTaxPercent = req.SalesTaxPercent;
         product.IsPurchaseTaxInclusive = req.IsPurchaseTaxInclusive; product.IsSalesTaxInclusive = req.IsSalesTaxInclusive;
         product.CessPercent = req.CessPercent; product.ManageMultipleBatch = req.ManageMultipleBatch;
