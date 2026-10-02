@@ -74,8 +74,18 @@ public class InventoryController : ControllerBase
 
     [HttpGet("products")]
     [HasPermission(Modules.Inventory, Actions.View)]
-    public async Task<IActionResult> Products([FromQuery] string? search, [FromQuery] int page = 1, [FromQuery] int pageSize = 50, CancellationToken ct = default)
-        => Ok(await _svc.ListProductsAsync(search, page, pageSize, ct));
+    public async Task<IActionResult> Products([FromQuery] string? search, [FromQuery] string? category, [FromQuery] string? brand, [FromQuery] int page = 1, [FromQuery] int pageSize = 50, CancellationToken ct = default)
+        => Ok(await _svc.ListProductsAsync(search, category, brand, page, pageSize, ct));
+
+    [HttpGet("products/categories")]
+    [HasPermission(Modules.Inventory, Actions.View)]
+    public async Task<IActionResult> ProductCategories(CancellationToken ct)
+        => Ok(await _svc.ListProductCategoriesAsync(ct));
+
+    [HttpGet("products/brands")]
+    [HasPermission(Modules.Inventory, Actions.View)]
+    public async Task<IActionResult> ProductBrands(CancellationToken ct)
+        => Ok(await _svc.ListProductBrandsAsync(ct));
 
     [HttpGet("products/stock-value")]
     [HasPermission(Modules.Inventory, Actions.View)]

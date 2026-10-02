@@ -219,7 +219,7 @@ public partial class InventoryService : IInventoryService
             .SumAsync(p => (decimal?)(p.Quantity * p.PurchasePrice), ct) ?? 0m;
     }
 
-    public async Task<PagedResult<ProductListItem>> ListProductsAsync(string? search, int page, int pageSize, CancellationToken ct = default)
+    public async Task<PagedResult<ProductListItem>> ListProductsAsync(string? search, string? category, string? brand, int page, int pageSize, CancellationToken ct = default)
     {
         if (_user.TenantId is null) return Empty<ProductListItem>(page, pageSize);
         var q = _db.Products.AsNoTracking().Where(x => x.TenantId == _user.TenantId);
@@ -230,10 +230,28 @@ public partial class InventoryService : IInventoryService
                 || (x.Category != null && x.Category.ToLower().Contains(s))
                 || (x.Brand != null && x.Brand.ToLower().Contains(s)));
         }
+        if (!string.IsNullOrWhiteSpace(category)) q = q.Where(x => x.Category == category);
+        if (!string.IsNullOrWhiteSpace(brand)) q = q.Where(x => x.Brand == brand);
         var total = await q.CountAsync(ct);
         var p = Math.Max(page, 1); var sz = Math.Clamp(pageSize, 1, 200);
         var rows = await q.OrderBy(x => x.Name).ThenBy(x => x.Id).Skip((p - 1) * sz).Take(sz).ToListAsync(ct);
         return new PagedResult<ProductListItem>(rows.Select(MapProduct).ToList(), total, p, sz);
+    }
+
+    public async Task<IReadOnlyList<string>> ListProductCategoriesAsync(CancellationToken ct = default)
+    {
+        if (_user.TenantId is null) return Array.Empty<string>();
+        return await _db.Products.AsNoTracking()
+            .Where(x => x.TenantId == _user.TenantId && x.Category != null && x.Category != "")
+            .Select(x => x.Category!).Distinct().OrderBy(x => x).ToListAsync(ct);
+    }
+
+    public async Task<IReadOnlyList<string>> ListProductBrandsAsync(CancellationToken ct = default)
+    {
+        if (_user.TenantId is null) return Array.Empty<string>();
+        return await _db.Products.AsNoTracking()
+            .Where(x => x.TenantId == _user.TenantId && x.Brand != null && x.Brand != "")
+            .Select(x => x.Brand!).Distinct().OrderBy(x => x).ToListAsync(ct);
     }
 
     public async Task<ProductListItem> CreateProductAsync(CreateOrUpdateProductRequest req, CancellationToken ct = default)

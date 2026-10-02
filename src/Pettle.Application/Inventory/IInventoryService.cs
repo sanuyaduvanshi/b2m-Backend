@@ -14,7 +14,12 @@ public interface IInventoryService
     Task<SkuListItem?> UpdateSkuListingAsync(Guid id, UpdateSkuListingRequest req, CancellationToken ct = default);
     Task<bool> DeleteSkuAsync(Guid id, CancellationToken ct = default);
 
-    Task<PagedResult<ProductListItem>> ListProductsAsync(string? search, int page, int pageSize, CancellationToken ct = default);
+    Task<PagedResult<ProductListItem>> ListProductsAsync(string? search, string? category, string? brand, int page, int pageSize, CancellationToken ct = default);
+    /// <summary>Distinct, non-blank Category/Brand values actually in use on Products — these are
+    /// free-text columns (unlike Sku's normalized SkuCategory/SkuBrand tables), so the filter
+    /// dropdown's options come straight from what's really on the rows, not a master list.</summary>
+    Task<IReadOnlyList<string>> ListProductCategoriesAsync(CancellationToken ct = default);
+    Task<IReadOnlyList<string>> ListProductBrandsAsync(CancellationToken ct = default);
     Task<ProductListItem?> GetProductAsync(Guid id, CancellationToken ct = default);
     Task<ProductListItem?> AdjustProductStockAsync(Guid id, AdjustProductStockRequest req, CancellationToken ct = default);
     Task<decimal> GetProductsStockValueAsync(CancellationToken ct = default);
