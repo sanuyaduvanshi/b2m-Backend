@@ -164,6 +164,9 @@ public class PurchaseOrderLine : TenantEntity
     public PurchaseOrder? PurchaseOrder { get; set; }
     public Guid? SkuId { get; set; }
     public Sku? Sku { get; set; }
+    /// <summary>Scalar-only, no nav property / FK constraint — same loose-coupling the rest of
+    /// Product's integrations use, so deleting a Product never cascades into historical PO lines.</summary>
+    public Guid? ProductId { get; set; }
     public string? ItemCode { get; set; }
     public string ItemName { get; set; } = string.Empty;
     public string? Unit { get; set; }

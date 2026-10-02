@@ -139,6 +139,8 @@ public class CreatePoLineValidator : AbstractValidator<CreatePoLine>
         RuleFor(x => x.ExpiryDate)
             .Must(d => !d.HasValue || d.Value >= DateOnly.FromDateTime(DateTime.UtcNow))
             .WithMessage("Expiry date is in the past — double-check before saving.");
+        RuleFor(x => x).Must(x => !(x.SkuId.HasValue && x.ProductId.HasValue))
+            .WithMessage("A line can be linked to a SKU or a Product, not both.");
     }
 }
 

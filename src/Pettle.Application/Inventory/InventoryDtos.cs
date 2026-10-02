@@ -78,7 +78,7 @@ public record PoLineDto(
     decimal Quantity, decimal FreeQuantity, decimal ReceivedQuantity, decimal UnitCost,
     decimal Mrp, decimal SellingPrice, decimal PurDisc1Percent, decimal PurDisc2Percent,
     decimal TaxPercent, decimal TaxableAmount, decimal TaxAmount, decimal LandingCost, decimal LineTotal,
-    DateOnly? ExpiryDate, string? BatchNumber
+    DateOnly? ExpiryDate, string? BatchNumber, Guid? ProductId = null
 );
 
 public record PoDetail(
@@ -104,7 +104,7 @@ public record CreatePoLine(
     Guid? SkuId, string? ItemCode, string ItemName, string? Unit,
     decimal Quantity, decimal FreeQuantity, decimal UnitCost, decimal Mrp, decimal SellingPrice,
     decimal PurDisc1Percent, decimal PurDisc2Percent, decimal TaxPercent,
-    DateOnly? ExpiryDate, string? BatchNumber
+    DateOnly? ExpiryDate, string? BatchNumber, Guid? ProductId = null
 );
 
 /// <summary>PaidOn is when the money actually left, which is often not when someone got round to

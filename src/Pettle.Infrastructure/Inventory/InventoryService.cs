@@ -372,7 +372,7 @@ public partial class InventoryService : IInventoryService
                 l.Quantity, l.FreeQuantity, l.ReceivedQuantity, l.UnitCost,
                 l.Mrp, l.SellingPrice, l.PurDisc1Percent, l.PurDisc2Percent,
                 l.TaxPercent, l.TaxableAmount, l.TaxAmount, l.LandingCost, l.LineTotal,
-                l.ExpiryDate, l.BatchNumber)).ToList());
+                l.ExpiryDate, l.BatchNumber, l.ProductId)).ToList());
     }
 
     public async Task<PoDetail> CreatePoAsync(CreatePoRequest req, CancellationToken ct = default)
@@ -482,7 +482,7 @@ public partial class InventoryService : IInventoryService
             {
                 PurchaseOrderId = id,
                 TenantId = _user.TenantId.Value,
-                SkuId = line.SkuId, ItemCode = line.ItemCode, ItemName = line.ItemName, Unit = line.Unit,
+                SkuId = line.SkuId, ProductId = line.ProductId, ItemCode = line.ItemCode, ItemName = line.ItemName, Unit = line.Unit,
                 Quantity = line.Quantity, FreeQuantity = line.FreeQuantity, UnitCost = line.UnitCost,
                 Mrp = line.Mrp, SellingPrice = line.SellingPrice,
                 PurDisc1Percent = line.PurDisc1Percent, PurDisc2Percent = line.PurDisc2Percent,
@@ -552,7 +552,7 @@ public partial class InventoryService : IInventoryService
 
             po.Lines.Add(new PurchaseOrderLine
             {
-                SkuId = line.SkuId, ItemCode = line.ItemCode, ItemName = line.ItemName, Unit = line.Unit,
+                SkuId = line.SkuId, ProductId = line.ProductId, ItemCode = line.ItemCode, ItemName = line.ItemName, Unit = line.Unit,
                 Quantity = line.Quantity, FreeQuantity = line.FreeQuantity, UnitCost = line.UnitCost,
                 Mrp = line.Mrp, SellingPrice = line.SellingPrice,
                 PurDisc1Percent = line.PurDisc1Percent, PurDisc2Percent = line.PurDisc2Percent,
@@ -652,6 +652,18 @@ public partial class InventoryService : IInventoryService
                         });
                         sku.NearestExpiry = await GetNearestExpiryAsync(sku.Id, _user.TenantId.Value, ct);
                     }
+                }
+            }
+            // Product's own analogue — plain Quantity bump, no batches/StockMovement ledger,
+            // matching the simpler design already used by its Adjust Stock feature.
+            if (line.ProductId.HasValue && delta != 0)
+            {
+                var product = await _db.Products.FirstOrDefaultAsync(p => p.Id == line.ProductId && p.TenantId == _user.TenantId, ct);
+                if (product is not null)
+                {
+                    product.Quantity = Math.Max(0, product.Quantity + delta);
+                    if (delta > 0 && line.LandingCost > 0)
+                        product.PurchasePrice = line.LandingCost;
                 }
             }
         }
@@ -805,6 +817,25 @@ public partial class InventoryService : IInventoryService
                     batch.QtyRemaining = 0;
                 }
                 await _db.SaveChangesAsync(ct); // persist stock reversal before deleting lines
+            }
+
+            // Product has no batch ledger, so this can only best-effort reverse by the line's
+            // ReceivedQuantity — unlike the Sku reversal above, there's no way to tell how much of
+            // that specific receipt has since sold (same simplification as Product's Adjust Stock).
+            var productLines = await _db.PurchaseOrderLines
+                .Where(l => l.PurchaseOrderId == po.Id && l.ProductId != null && l.ReceivedQuantity > 0)
+                .ToListAsync(ct);
+            if (productLines.Count > 0)
+            {
+                var productIds = productLines.Select(l => l.ProductId!.Value).Distinct().ToList();
+                var products = await _db.Products.Where(p => productIds.Contains(p.Id)).ToListAsync(ct);
+                var productMap = products.ToDictionary(p => p.Id);
+                foreach (var pl in productLines)
+                {
+                    if (!productMap.TryGetValue(pl.ProductId!.Value, out var product)) continue;
+                    product.Quantity = Math.Max(0, product.Quantity - pl.ReceivedQuantity);
+                }
+                await _db.SaveChangesAsync(ct);
             }
         }
 
