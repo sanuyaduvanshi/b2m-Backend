@@ -298,6 +298,28 @@ public partial class InventoryService : IInventoryService
         return $"{prefix}{min - 1}";
     }
 
+    public async Task<IReadOnlyList<SalesHistoryEntry>> GetSkuSalesHistoryAsync(Guid skuId, CancellationToken ct = default)
+    {
+        if (_user.TenantId is null) return Array.Empty<SalesHistoryEntry>();
+        return await _db.InvoiceLineItems.AsNoTracking()
+            .Where(l => l.SkuId == skuId && l.TenantId == _user.TenantId && l.Invoice != null)
+            .OrderByDescending(l => l.Invoice!.InvoiceDate).ThenByDescending(l => l.CreatedAt)
+            .Take(100)
+            .Select(l => new SalesHistoryEntry(l.Invoice!.InvoiceDate, l.Invoice.ParentNameSnapshot, l.Invoice.PhoneSnapshot, l.Invoice.InvoiceNumber, l.Quantity, l.Total))
+            .ToListAsync(ct);
+    }
+
+    public async Task<IReadOnlyList<SalesHistoryEntry>> GetProductSalesHistoryAsync(Guid productId, CancellationToken ct = default)
+    {
+        if (_user.TenantId is null) return Array.Empty<SalesHistoryEntry>();
+        return await _db.InvoiceLineItems.AsNoTracking()
+            .Where(l => l.ProductId == productId && l.TenantId == _user.TenantId && l.Invoice != null)
+            .OrderByDescending(l => l.Invoice!.InvoiceDate).ThenByDescending(l => l.CreatedAt)
+            .Take(100)
+            .Select(l => new SalesHistoryEntry(l.Invoice!.InvoiceDate, l.Invoice.ParentNameSnapshot, l.Invoice.PhoneSnapshot, l.Invoice.InvoiceNumber, l.Quantity, l.Total))
+            .ToListAsync(ct);
+    }
+
     public async Task<ProductListItem> CreateProductAsync(CreateOrUpdateProductRequest req, CancellationToken ct = default)
     {
         if (_user.TenantId is null) throw AppException.Forbidden();

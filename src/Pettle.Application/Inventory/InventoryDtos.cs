@@ -45,6 +45,11 @@ public record ProductListItem(
 /// show up on the Products screen" first impression.</summary>
 public record ProductsSummaryDto(int ActiveCount, int OutOfStockCount, decimal StockValue, int ListedOnlineCount);
 
+/// <summary>One past sale of a specific Sku/Product — who bought it, when, on which invoice.
+/// Only sales made through the POS (CreateSaleAsync) carry the Sku/ProductId link this reads;
+/// older invoice-edit paths don't set it, so a line created there won't show up here.</summary>
+public record SalesHistoryEntry(DateOnly Date, string CustomerName, string? Phone, string InvoiceNumber, decimal Quantity, decimal Amount);
+
 /// <summary>Simple +/- correction to a Product's Quantity — deliberately not Sku's
 /// batch/FIFO/StockMovement ledger, matching how Product stays simpler by design.</summary>
 public record AdjustProductStockRequest(decimal QuantityChange, string? Reason);

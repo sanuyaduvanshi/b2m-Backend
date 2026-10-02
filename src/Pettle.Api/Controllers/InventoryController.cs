@@ -120,6 +120,11 @@ public class InventoryController : ControllerBase
         return product is null ? NotFound() : Ok(product);
     }
 
+    [HttpGet("products/{id:guid}/sales-history")]
+    [HasPermission(Modules.Inventory, Actions.View)]
+    public async Task<IActionResult> ProductSalesHistory(Guid id, CancellationToken ct)
+        => Ok(await _svc.GetProductSalesHistoryAsync(id, ct));
+
     [HttpPost("products/{id:guid}/adjust-stock")]
     [HasPermission(Modules.Inventory, Actions.Edit)]
     public async Task<IActionResult> AdjustProductStock(Guid id, [FromBody] AdjustProductStockRequest req, CancellationToken ct)
@@ -275,6 +280,11 @@ public class InventoryController : ControllerBase
     [HasPermission(Modules.Inventory, Actions.View)]
     public async Task<IActionResult> SkuBatches(Guid id, CancellationToken ct)
         => Ok(await _svc.ListBatchesAsync(id, ct));
+
+    [HttpGet("skus/{id:guid}/sales-history")]
+    [HasPermission(Modules.Inventory, Actions.View)]
+    public async Task<IActionResult> SkuSalesHistory(Guid id, CancellationToken ct)
+        => Ok(await _svc.GetSkuSalesHistoryAsync(id, ct));
 
     [HttpGet("brands")]
     [HasPermission(Modules.Inventory, Actions.View)]

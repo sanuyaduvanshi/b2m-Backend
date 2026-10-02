@@ -214,6 +214,8 @@ public class InvoiceService : IInvoiceService
             var invoiceLine = new InvoiceLineItem
             {
                 BillItemName = line.ItemName,
+                SkuId = line.SkuId,
+                ProductId = line.ProductId,
                 SkuName = line.SkuId.HasValue || line.ProductId.HasValue ? line.ItemName : null,
                 Description = line.SkuId.HasValue && skuDescriptions.TryGetValue(line.SkuId.Value, out var desc) ? desc
                     : line.ProductId.HasValue && productDescriptions.TryGetValue(line.ProductId.Value, out var pdesc) ? pdesc

@@ -66,6 +66,12 @@ public class InvoiceLineItem : TenantEntity
     public string? ServiceName { get; set; }
     public string? SkuName { get; set; }
     public string? SkuLegacyId { get; set; }
+    /// <summary>Scalar-only, no nav property / FK constraint (same loose coupling as
+    /// PurchaseOrderLine.ProductId) — lets a Sku/Product's own "who bought this, when" sales
+    /// history query without fuzzy-matching on SkuName text. Only CreateSaleAsync (the POS sale
+    /// path) sets these; lines from the older line-replace-on-edit path don't carry a link.</summary>
+    public Guid? SkuId { get; set; }
+    public Guid? ProductId { get; set; }
     public string? BatchNumber { get; set; }
     public string? Description { get; set; }
     /// <summary>Free-text per-line remark entered at the POS (e.g. "gift wrap", "no ice") — distinct
