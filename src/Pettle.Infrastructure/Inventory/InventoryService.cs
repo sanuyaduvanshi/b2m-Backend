@@ -219,6 +219,17 @@ public partial class InventoryService : IInventoryService
             .SumAsync(p => (decimal?)(p.Quantity * p.PurchasePrice), ct) ?? 0m;
     }
 
+    public async Task<ProductsSummaryDto> GetProductsSummaryAsync(CancellationToken ct = default)
+    {
+        if (_user.TenantId is null) return new ProductsSummaryDto(0, 0, 0, 0);
+        var q = _db.Products.AsNoTracking().Where(p => p.TenantId == _user.TenantId);
+        var active = await q.CountAsync(p => p.IsActive, ct);
+        var outOfStock = await q.CountAsync(p => p.Quantity <= 0, ct);
+        var stockValue = await q.SumAsync(p => (decimal?)(p.Quantity * p.PurchasePrice), ct) ?? 0m;
+        var listedOnline = await q.CountAsync(p => p.ShowOnline, ct);
+        return new ProductsSummaryDto(active, outOfStock, stockValue, listedOnline);
+    }
+
     public async Task<PagedResult<ProductListItem>> ListProductsAsync(string? search, string? category, string? brand, int page, int pageSize, CancellationToken ct = default)
     {
         if (_user.TenantId is null) return Empty<ProductListItem>(page, pageSize);

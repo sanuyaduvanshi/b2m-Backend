@@ -92,6 +92,11 @@ public class InventoryController : ControllerBase
     public async Task<IActionResult> ProductsStockValue(CancellationToken ct)
         => Ok(new { stockValue = await _svc.GetProductsStockValueAsync(ct) });
 
+    [HttpGet("products/summary")]
+    [HasPermission(Modules.Inventory, Actions.View)]
+    public async Task<IActionResult> ProductsSummary(CancellationToken ct)
+        => Ok(await _svc.GetProductsSummaryAsync(ct));
+
     [HttpGet("products/{id:guid}")]
     [HasPermission(Modules.Inventory, Actions.View)]
     public async Task<IActionResult> Product(Guid id, CancellationToken ct)

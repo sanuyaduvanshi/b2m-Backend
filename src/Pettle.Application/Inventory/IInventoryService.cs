@@ -23,6 +23,7 @@ public interface IInventoryService
     Task<ProductListItem?> GetProductAsync(Guid id, CancellationToken ct = default);
     Task<ProductListItem?> AdjustProductStockAsync(Guid id, AdjustProductStockRequest req, CancellationToken ct = default);
     Task<decimal> GetProductsStockValueAsync(CancellationToken ct = default);
+    Task<ProductsSummaryDto> GetProductsSummaryAsync(CancellationToken ct = default);
     Task<ProductListItem> CreateProductAsync(CreateOrUpdateProductRequest req, CancellationToken ct = default);
     Task<ProductListItem?> UpdateProductAsync(Guid id, CreateOrUpdateProductRequest req, CancellationToken ct = default);
     Task<bool> DeleteProductAsync(Guid id, CancellationToken ct = default);

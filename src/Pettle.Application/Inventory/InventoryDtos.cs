@@ -39,6 +39,12 @@ public record ProductListItem(
     string? Nutrition = null, string? NetWeightUnit = null, string? AdditionalInfo = null,
     string? LastAdjustmentReason = null, DateTimeOffset? LastAdjustedAt = null);
 
+/// <summary>Products' own analogue of the SKU-tab summary cards (Active SKUs/Out of
+/// stock/Stock value/Listed in app) — those are SKU-only data and were showing, unchanged, on
+/// every Inventory tab including Products, which made for a confusing "why does Medicine's count
+/// show up on the Products screen" first impression.</summary>
+public record ProductsSummaryDto(int ActiveCount, int OutOfStockCount, decimal StockValue, int ListedOnlineCount);
+
 /// <summary>Simple +/- correction to a Product's Quantity — deliberately not Sku's
 /// batch/FIFO/StockMovement ledger, matching how Product stays simpler by design.</summary>
 public record AdjustProductStockRequest(decimal QuantityChange, string? Reason);
