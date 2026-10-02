@@ -20,6 +20,13 @@ public interface IInventoryService
     /// dropdown's options come straight from what's really on the rows, not a master list.</summary>
     Task<IReadOnlyList<string>> ListProductCategoriesAsync(CancellationToken ct = default);
     Task<IReadOnlyList<string>> ListProductBrandsAsync(CancellationToken ct = default);
+    Task<IReadOnlyList<string>> ListProductSubCategoriesAsync(CancellationToken ct = default);
+    Task<IReadOnlyList<string>> ListProductSubBrandsAsync(CancellationToken ct = default);
+    /// <summary>Suggests the next Item Code for a brand-new Product — "B2MVC-10000" the first
+    /// time, then counting down (B2MVC-9999, B2MVC-9998, …) as a fallback internal code for items
+    /// with no real manufacturer barcode to scan. Still a plain editable text field — this only
+    /// pre-fills it.</summary>
+    Task<string> GetNextProductCodeAsync(CancellationToken ct = default);
     Task<ProductListItem?> GetProductAsync(Guid id, CancellationToken ct = default);
     Task<ProductListItem?> AdjustProductStockAsync(Guid id, AdjustProductStockRequest req, CancellationToken ct = default);
     Task<decimal> GetProductsStockValueAsync(CancellationToken ct = default);

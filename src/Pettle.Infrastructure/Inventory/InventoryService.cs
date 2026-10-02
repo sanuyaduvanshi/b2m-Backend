@@ -265,6 +265,39 @@ public partial class InventoryService : IInventoryService
             .Select(x => x.Brand!).Distinct().OrderBy(x => x).ToListAsync(ct);
     }
 
+    public async Task<IReadOnlyList<string>> ListProductSubCategoriesAsync(CancellationToken ct = default)
+    {
+        if (_user.TenantId is null) return Array.Empty<string>();
+        return await _db.Products.AsNoTracking()
+            .Where(x => x.TenantId == _user.TenantId && x.SubCategory != null && x.SubCategory != "")
+            .Select(x => x.SubCategory!).Distinct().OrderBy(x => x).ToListAsync(ct);
+    }
+
+    public async Task<IReadOnlyList<string>> ListProductSubBrandsAsync(CancellationToken ct = default)
+    {
+        if (_user.TenantId is null) return Array.Empty<string>();
+        return await _db.Products.AsNoTracking()
+            .Where(x => x.TenantId == _user.TenantId && x.SubBrand != null && x.SubBrand != "")
+            .Select(x => x.SubBrand!).Distinct().OrderBy(x => x).ToListAsync(ct);
+    }
+
+    public async Task<string> GetNextProductCodeAsync(CancellationToken ct = default)
+    {
+        const string prefix = "B2MVC-";
+        if (_user.TenantId is null) return $"{prefix}10000";
+        // IgnoreQueryFilters: a soft-deleted product's code could otherwise be handed out again,
+        // tripping the unique-code conflict check on save.
+        var numbers = await _db.Products.IgnoreQueryFilters()
+            .Where(x => x.TenantId == _user.TenantId && x.Code.StartsWith(prefix))
+            .Select(x => x.Code).ToListAsync(ct);
+        var min = numbers
+            .Select(c => int.TryParse(c.AsSpan(prefix.Length), out var v) ? v : (int?)null)
+            .Where(v => v.HasValue).Select(v => v!.Value)
+            .DefaultIfEmpty(10001)
+            .Min();
+        return $"{prefix}{min - 1}";
+    }
+
     public async Task<ProductListItem> CreateProductAsync(CreateOrUpdateProductRequest req, CancellationToken ct = default)
     {
         if (_user.TenantId is null) throw AppException.Forbidden();

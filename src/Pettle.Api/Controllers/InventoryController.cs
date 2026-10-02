@@ -87,6 +87,21 @@ public class InventoryController : ControllerBase
     public async Task<IActionResult> ProductBrands(CancellationToken ct)
         => Ok(await _svc.ListProductBrandsAsync(ct));
 
+    [HttpGet("products/subcategories")]
+    [HasPermission(Modules.Inventory, Actions.View)]
+    public async Task<IActionResult> ProductSubCategories(CancellationToken ct)
+        => Ok(await _svc.ListProductSubCategoriesAsync(ct));
+
+    [HttpGet("products/subbrands")]
+    [HasPermission(Modules.Inventory, Actions.View)]
+    public async Task<IActionResult> ProductSubBrands(CancellationToken ct)
+        => Ok(await _svc.ListProductSubBrandsAsync(ct));
+
+    [HttpGet("products/next-code")]
+    [HasPermission(Modules.Inventory, Actions.View)]
+    public async Task<IActionResult> NextProductCode(CancellationToken ct)
+        => Ok(new { code = await _svc.GetNextProductCodeAsync(ct) });
+
     [HttpGet("products/stock-value")]
     [HasPermission(Modules.Inventory, Actions.View)]
     public async Task<IActionResult> ProductsStockValue(CancellationToken ct)
