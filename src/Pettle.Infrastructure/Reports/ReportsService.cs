@@ -464,13 +464,18 @@ public class ReportsService : IReportsService
             .ToListAsync(ct);
         var bySku = movements.GroupBy(m => m.SkuId).ToDictionary(g => g.Key, g => g.ToList());
 
-        // Batch-wise purchase cost: a PO receipt's LandingCost includes the line's GST, so strip it
-        // back out (the register is GST-exclusive); other batch sources already store a plain cost.
-        var batches = await _db.SkuBatches.AsNoTracking()
-            .Where(b => b.TenantId == tid && b.QtyRemaining > 0)
-            .Select(b => new { b.SkuId, b.QtyRemaining, b.LandingCost, b.Source })
-            .ToListAsync(ct);
-        var batchesBySku = batches.GroupBy(b => b.SkuId).ToDictionary(g => g.Key, g => g.ToList());
+        // Batch-wise purchase cost, GST-exclusive. A PO receipt's batch LandingCost includes the
+        // line's GST, so use the PO line's own taxable amount per received unit instead (the line's
+        // tax % can differ from the SKU's current one). Batches with no PO line (Opening/Return)
+        // keep their stored cost; a zero cost falls back to the SKU's master cost.
+        var batches = await (
+            from b in _db.SkuBatches.AsNoTracking()
+            where b.TenantId == tid && b.QtyRemaining > 0
+            join l in _db.PurchaseOrderLines.AsNoTracking() on new { Po = b.PurchaseOrderId, Sku = (Guid?)b.SkuId } equals new { Po = (Guid?)l.PurchaseOrderId, Sku = l.SkuId } into pl
+            from l in pl.DefaultIfEmpty()
+            select new { b.Id, b.SkuId, b.QtyRemaining, b.LandingCost, b.Source, Taxable = l == null ? (decimal?)null : l.TaxableAmount, Units = l == null ? 0m : l.Quantity + l.FreeQuantity }
+        ).ToListAsync(ct);
+        var batchesBySku = batches.GroupBy(b => b.Id).Select(g => g.First()).GroupBy(b => b.SkuId).ToDictionary(g => g.Key, g => g.ToList());
 
         var rows = new List<StockRegisterRow>(skus.Count);
         foreach (var sku in skus)
@@ -478,9 +483,12 @@ public class ReportsService : IReportsService
             decimal unitCost = sku.CostPrice;
             if (batchesBySku.TryGetValue(sku.Id, out var bl))
             {
-                var qty = bl.Sum(b => b.QtyRemaining);
-                var divisor = 1 + sku.TaxPercent / 100m;
-                var value = bl.Sum(b => b.QtyRemaining * (b.Source == "PoReceipt" && divisor > 0 ? b.LandingCost / divisor : b.LandingCost));
+                var qty = bl.Sum(x => x.QtyRemaining);
+                var value = bl.Sum(x =>
+                {
+                    var cost = x.Source == "PoReceipt" && x.Taxable.HasValue && x.Units > 0 ? x.Taxable.Value / x.Units : x.LandingCost;
+                    return x.QtyRemaining * (cost > 0 ? cost : sku.CostPrice);
+                });
                 if (qty > 0) unitCost = Math.Round(value / qty, 2, MidpointRounding.AwayFromZero);
             }
             var all = bySku.GetValueOrDefault(sku.Id);
