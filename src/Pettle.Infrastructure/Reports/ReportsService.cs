@@ -464,9 +464,25 @@ public class ReportsService : IReportsService
             .ToListAsync(ct);
         var bySku = movements.GroupBy(m => m.SkuId).ToDictionary(g => g.Key, g => g.ToList());
 
+        // Batch-wise purchase cost: a PO receipt's LandingCost includes the line's GST, so strip it
+        // back out (the register is GST-exclusive); other batch sources already store a plain cost.
+        var batches = await _db.SkuBatches.AsNoTracking()
+            .Where(b => b.TenantId == tid && b.QtyRemaining > 0)
+            .Select(b => new { b.SkuId, b.QtyRemaining, b.LandingCost, b.Source })
+            .ToListAsync(ct);
+        var batchesBySku = batches.GroupBy(b => b.SkuId).ToDictionary(g => g.Key, g => g.ToList());
+
         var rows = new List<StockRegisterRow>(skus.Count);
         foreach (var sku in skus)
         {
+            decimal unitCost = sku.CostPrice;
+            if (batchesBySku.TryGetValue(sku.Id, out var bl))
+            {
+                var qty = bl.Sum(b => b.QtyRemaining);
+                var divisor = 1 + sku.TaxPercent / 100m;
+                var value = bl.Sum(b => b.QtyRemaining * (b.Source == "PoReceipt" && divisor > 0 ? b.LandingCost / divisor : b.LandingCost));
+                if (qty > 0) unitCost = Math.Round(value / qty, 2, MidpointRounding.AwayFromZero);
+            }
             var all = bySku.GetValueOrDefault(sku.Id);
             decimal opening = 0, inQty = 0, outQty = 0, closing = 0;
             if (all is not null)
@@ -487,7 +503,7 @@ public class ReportsService : IReportsService
 
             rows.Add(new StockRegisterRow(
                 sku.Code, sku.Name, sku.CategoryName, sku.BrandName,
-                inQty, sku.TaxPercent, opening, outQty, closing, closing * sku.CostPrice));
+                inQty, sku.TaxPercent, opening, outQty, closing, Math.Round(closing * unitCost, 2, MidpointRounding.AwayFromZero), unitCost));
         }
 
         return rows.OrderBy(r => r.ProductName).ToList();

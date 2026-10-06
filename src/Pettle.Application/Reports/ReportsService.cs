@@ -41,12 +41,13 @@ public record InventoryReport(int TotalSkus, int LowStock, int ExpiringSoon, dec
 
 /// <summary>One SKU's stock movement ledger for the range: what it opened with, what came in and
 /// went out, and what it closed at — the same shape as a supplier's "stock register" report.
-/// ClosingValue is ClosingQuantity priced at the SKU's current cost price (not a historical cost),
-/// matching how InventoryReport.InventoryValue is computed elsewhere in this file.</summary>
+/// PurchasePrice is the quantity-weighted average of the SKU's live batches' purchase cost, GST
+/// exclusive (falls back to the master cost price when there are no batches); ClosingValue is
+/// ClosingQuantity x PurchasePrice, so batches bought at different prices are valued at what each cost.</summary>
 public record StockRegisterRow(
     string ItemCode, string ProductName, string? Category, string? Brand,
     decimal InQuantity, decimal PurchaseTaxPercent, decimal OpeningQuantity,
-    decimal OutQuantity, decimal ClosingQuantity, decimal ClosingValue);
+    decimal OutQuantity, decimal ClosingQuantity, decimal ClosingValue, decimal PurchasePrice = 0);
 
 public record ExpensesReport(decimal Total, int Count, IReadOnlyList<ExpenseSlice> ByCategory, IReadOnlyList<ExpenseSlice> ByMode);
 
