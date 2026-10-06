@@ -606,7 +606,13 @@ public class InvoiceService : IInvoiceService
         invoice.PetNameSnapshot = string.IsNullOrWhiteSpace(req.PetName) ? null : req.PetName.Trim();
         invoice.Notes = string.IsNullOrWhiteSpace(req.Notes) ? null : req.Notes.Trim();
 
-        // Replace lines
+        // Replace lines - remember each old line's Sku/Product link so the edit doesn't orphan it
+        // from the item's Sales History.
+        var oldLinks = (await _db.InvoiceLineItems.AsNoTracking()
+                .Where(l => l.InvoiceId == id && l.TenantId == _user.TenantId.Value && (l.SkuId != null || l.ProductId != null || l.SkuLegacyId != null))
+                .Select(l => new { l.BillItemName, l.SkuId, l.ProductId, l.SkuLegacyId, l.SkuName })
+                .ToListAsync(ct))
+            .GroupBy(l => l.BillItemName.Trim()).ToDictionary(g => g.Key, g => g.First());
         await _db.InvoiceLineItems
             .Where(l => l.InvoiceId == id && l.TenantId == _user.TenantId.Value)
             .ExecuteDeleteAsync(ct);
@@ -623,6 +629,10 @@ public class InvoiceService : IInvoiceService
                 InvoiceId = id,
                 TenantId = _user.TenantId.Value,
                 BillItemName = line.ItemName.Trim(),
+                SkuId = oldLinks.GetValueOrDefault(line.ItemName.Trim())?.SkuId,
+                ProductId = oldLinks.GetValueOrDefault(line.ItemName.Trim())?.ProductId,
+                SkuLegacyId = oldLinks.GetValueOrDefault(line.ItemName.Trim())?.SkuLegacyId,
+                SkuName = oldLinks.GetValueOrDefault(line.ItemName.Trim())?.SkuName,
                 Quantity = line.Quantity,
                 UnitAmount = line.UnitAmount,
                 Discount = R(disc),

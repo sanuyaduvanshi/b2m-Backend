@@ -462,6 +462,7 @@ public class BookingServiceImpl : IBookingService
             invoice.Lines.Add(new InvoiceLineItem
             {
                 BillItemName = inv.SkuName,
+                SkuId = inv.SkuId,
                 BillSection = "Inventory",
                 Quantity = qty,
                 UnitAmount = Math.Round(inv.FinalAmount / qty, 2, MidpointRounding.AwayFromZero),

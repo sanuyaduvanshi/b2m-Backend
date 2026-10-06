@@ -301,8 +301,10 @@ public partial class InventoryService : IInventoryService
     public async Task<IReadOnlyList<SalesHistoryEntry>> GetSkuSalesHistoryAsync(Guid skuId, CancellationToken ct = default)
     {
         if (_user.TenantId is null) return Array.Empty<SalesHistoryEntry>();
+        // Invoices imported from the old system carry only the legacy SKU id, not SkuId.
+        var legacyId = await _db.Skus.AsNoTracking().Where(s => s.Id == skuId).Select(s => s.LegacySkuId).FirstOrDefaultAsync(ct);
         return await _db.InvoiceLineItems.AsNoTracking()
-            .Where(l => l.SkuId == skuId && l.TenantId == _user.TenantId && l.Invoice != null)
+            .Where(l => (l.SkuId == skuId || (legacyId != null && l.SkuLegacyId == legacyId)) && l.TenantId == _user.TenantId && l.Invoice != null)
             .OrderByDescending(l => l.Invoice!.InvoiceDate).ThenByDescending(l => l.CreatedAt)
             .Take(100)
             .Select(l => new SalesHistoryEntry(l.Invoice!.InvoiceDate, l.Invoice.ParentNameSnapshot, l.Invoice.PhoneSnapshot, l.Invoice.InvoiceNumber, l.Quantity, l.Total))
