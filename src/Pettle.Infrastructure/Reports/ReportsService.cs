@@ -473,24 +473,13 @@ public class ReportsService : IReportsService
             where b.TenantId == tid && b.QtyRemaining > 0
             join l in _db.PurchaseOrderLines.AsNoTracking() on new { Po = b.PurchaseOrderId, Sku = (Guid?)b.SkuId } equals new { Po = (Guid?)l.PurchaseOrderId, Sku = l.SkuId } into pl
             from l in pl.DefaultIfEmpty()
-            select new { b.Id, b.SkuId, b.QtyRemaining, b.LandingCost, b.Source, Taxable = l == null ? (decimal?)null : l.TaxableAmount, Units = l == null ? 0m : l.Quantity + l.FreeQuantity }
+            select new { b.Id, b.SkuId, b.ReceivedAt, b.QtyRemaining, b.LandingCost, b.Source, Taxable = l == null ? (decimal?)null : l.TaxableAmount, Units = l == null ? 0m : l.Quantity + l.FreeQuantity }
         ).ToListAsync(ct);
         var batchesBySku = batches.GroupBy(b => b.Id).Select(g => g.First()).GroupBy(b => b.SkuId).ToDictionary(g => g.Key, g => g.ToList());
 
         var rows = new List<StockRegisterRow>(skus.Count);
         foreach (var sku in skus)
         {
-            decimal unitCost = sku.CostPrice;
-            if (batchesBySku.TryGetValue(sku.Id, out var bl))
-            {
-                var qty = bl.Sum(x => x.QtyRemaining);
-                var value = bl.Sum(x =>
-                {
-                    var cost = x.Source == "PoReceipt" && x.Taxable.HasValue && x.Units > 0 ? x.Taxable.Value / x.Units : x.LandingCost;
-                    return x.QtyRemaining * (cost > 0 ? cost : sku.CostPrice);
-                });
-                if (qty > 0) unitCost = Math.Round(value / qty, 2, MidpointRounding.AwayFromZero);
-            }
             var all = bySku.GetValueOrDefault(sku.Id);
             decimal opening = 0, inQty = 0, outQty = 0, closing = 0;
             if (all is not null)
@@ -509,9 +498,26 @@ public class ReportsService : IReportsService
             // this report is modelled on.
             if (opening == 0 && inQty == 0 && outQty == 0 && closing == 0) continue;
 
+            // Value the closing stock from the newest batches backwards (FIFO has already used up the
+            // oldest), so a batch total that has drifted above the real stock can't inflate the value.
+            // Any units not covered by a batch fall back to the SKU's master cost.
+            decimal closingValue = 0, left = closing;
+            if (left > 0 && batchesBySku.TryGetValue(sku.Id, out var bl))
+                foreach (var x in bl.OrderByDescending(x => x.ReceivedAt))
+                {
+                    if (left <= 0) break;
+                    var cost = x.Source == "PoReceipt" && x.Taxable.HasValue && x.Units > 0 ? x.Taxable.Value / x.Units : x.LandingCost;
+                    var take = Math.Min(left, x.QtyRemaining);
+                    closingValue += take * (cost > 0 ? cost : sku.CostPrice);
+                    left -= take;
+                }
+            closingValue += Math.Max(left, 0) * sku.CostPrice;
+            closingValue = Math.Round(closingValue, 2, MidpointRounding.AwayFromZero);
+            var unitCost = closing > 0 ? Math.Round(closingValue / closing, 2, MidpointRounding.AwayFromZero) : sku.CostPrice;
+
             rows.Add(new StockRegisterRow(
                 sku.Code, sku.Name, sku.CategoryName, sku.BrandName,
-                inQty, sku.TaxPercent, opening, outQty, closing, Math.Round(closing * unitCost, 2, MidpointRounding.AwayFromZero), unitCost));
+                inQty, sku.TaxPercent, opening, outQty, closing, closingValue, unitCost));
         }
 
         return rows.OrderBy(r => r.ProductName).ToList();
