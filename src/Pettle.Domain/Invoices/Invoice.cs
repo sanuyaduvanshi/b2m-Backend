@@ -17,6 +17,8 @@ public class Invoice : SoftDeletableTenantEntity
     public string ParentNameSnapshot { get; set; } = string.Empty;
     public string PhoneSnapshot { get; set; } = string.Empty;
     public string? PetNameSnapshot { get; set; }
+    /// <summary>The pet's weight (kg) when this bill was raised — a snapshot, since the pet's own record changes over time.</summary>
+    public decimal? PetWeightKgSnapshot { get; set; }
 
     public decimal BaseAmount { get; set; }
     public decimal AddOnAmount { get; set; }
@@ -60,6 +62,9 @@ public class InvoiceLineItem : TenantEntity
 {
     public Guid InvoiceId { get; set; }
     public Invoice? Invoice { get; set; }
+
+    /// <summary>Units of this line already returned to stock through a Return/Refund, so the same item can't be returned twice.</summary>
+    public decimal ReturnedQuantity { get; set; }
 
     public string BillItemName { get; set; } = string.Empty;
     public string? BillSection { get; set; }

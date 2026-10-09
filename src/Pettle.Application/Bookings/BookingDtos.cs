@@ -134,7 +134,9 @@ public record CreateBookingRequest(
     string? GuestPhone = null,
     Guid? UseSubscriptionId = null,
     List<CreateBookingAddOnLine>? AddOns = null,
-    List<CreateBookingInventoryItemLine>? InventoryItems = null
+    List<CreateBookingInventoryItemLine>? InventoryItems = null,
+    // The pet's weight in kg at booking time — mandatory when a pet is picked; printed on the bill.
+    decimal? PetWeightKg = null
 );
 
 public record CreateServiceAddOn(string Name, decimal Price, Guid? CatalogueItemId = null);

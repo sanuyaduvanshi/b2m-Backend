@@ -66,6 +66,7 @@ public static class InvoicePdfRenderer
                             c.Item().Text(inv.ParentName).Bold();
                             if (!string.IsNullOrWhiteSpace(inv.Phone)) c.Item().Text(inv.Phone);
                             if (!string.IsNullOrWhiteSpace(inv.PetNameSnapshot)) c.Item().Text($"Pet: {inv.PetNameSnapshot}");
+                            if (inv.PetWeightKg is > 0) c.Item().Text($"Pet weight: {inv.PetWeightKg:0.##} kg");
                         });
                     });
 

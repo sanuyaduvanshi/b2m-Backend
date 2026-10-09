@@ -102,7 +102,7 @@ public class InvoiceService : IInvoiceService
             i.BaseAmount, i.AddOnAmount, i.AdditionalAmount, i.DiscountAmount,
             i.IgstAmount, i.CgstAmount, i.SgstAmount, i.RoundOff,
             i.Revenue, i.Paid, i.Due, i.PaymentStatus,
-            i.Lines.Select(l => new InvoiceLineDto(l.Id, l.BillItemName, l.Category, l.Description, l.Quantity, l.UnitAmount, l.Discount, l.Subtotal, l.Total, l.BatchNumber, l.Note)).ToList(),
+            i.Lines.Select(l => new InvoiceLineDto(l.Id, l.BillItemName, l.Category, l.Description, l.Quantity, l.UnitAmount, l.Discount, l.Subtotal, l.Total, l.BatchNumber, l.Note, l.ReturnedQuantity)).ToList(),
             i.Payments.OrderByDescending(p => p.PaymentTime).Select(p => new PaymentDto(p.Id, p.PaymentTime, p.Amount, p.Mode, p.Source, p.TransactionId, p.Type, p.Status, p.Notes,
                 p.IssuedSubscriptionId.HasValue && subNames.TryGetValue(p.IssuedSubscriptionId.Value, out var pn) ? pn : null)).ToList(),
             i.Notes,
@@ -112,7 +112,8 @@ public class InvoiceService : IInvoiceService
             subscriptionInfo,
             i.RefundedAmount,
             i.RefundedAt,
-            i.RefundReason
+            i.RefundReason,
+            i.PetWeightKgSnapshot
         );
     }
 
@@ -879,14 +880,21 @@ public class InvoiceService : IInvoiceService
                     var line = invoice.Lines.FirstOrDefault(l => l.Id == rl.LineId)
                         ?? throw AppException.Validation("Invalid return line",
                             new Dictionary<string, string[]> { ["returnLines"] = new[] { "A selected item is not on this invoice." } });
-                    if (rl.Quantity <= 0 || rl.Quantity > line.Quantity)
+                    var returnable = line.Quantity - line.ReturnedQuantity;
+                    if (rl.Quantity <= 0 || rl.Quantity > returnable)
                         throw AppException.Validation("Invalid return quantity",
-                            new Dictionary<string, string[]> { ["returnLines"] = new[] { $"Return quantity for '{line.BillItemName}' must be between 0 and {line.Quantity}." } });
+                            new Dictionary<string, string[]> { ["returnLines"] = new[] {
+                                returnable <= 0
+                                    ? $"'{line.BillItemName}' has already been fully returned."
+                                    : $"Return quantity for '{line.BillItemName}' must be between 0 and {returnable} (the rest was already returned)." } });
                     returnQty[line.Id] = rl.Quantity;
                 }
             }
             else
-                foreach (var l in invoice.Lines) returnQty[l.Id] = l.Quantity;
+                // No explicit list: everything not yet returned comes back.
+                foreach (var l in invoice.Lines.Where(l => l.Quantity - l.ReturnedQuantity > 0)) returnQty[l.Id] = l.Quantity - l.ReturnedQuantity;
+
+            foreach (var l in invoice.Lines.Where(l => returnQty.ContainsKey(l.Id))) l.ReturnedQuantity += returnQty[l.Id];
 
             await RestoreProductStockAsync(invoice, returnQty, ct);
             var skuNames = invoice.Lines

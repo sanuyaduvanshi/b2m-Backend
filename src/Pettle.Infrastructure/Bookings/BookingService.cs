@@ -324,6 +324,21 @@ public class BookingServiceImpl : IBookingService
             .Select(p => new { p.Name, p.Phone })
             .FirstOrDefaultAsync(ct);
 
+        // The pet this bill is for, and its weight today: kept on the invoice as a snapshot and written
+        // back to the pet's own record so the next booking starts from the latest figure.
+        string? billPetName = null; decimal? billPetWeight = null;
+        var billPetId = req.Services.Where(s => s.PetId.HasValue).Select(s => s.PetId!.Value).FirstOrDefault();
+        if (billPetId != Guid.Empty)
+        {
+            var billPet = await _db.Pets.FirstOrDefaultAsync(p => p.Id == billPetId && p.TenantId == _user.TenantId, ct);
+            if (billPet is not null)
+            {
+                billPetName = billPet.Name;
+                if (req.PetWeightKg is > 0) billPet.WeightKg = req.PetWeightKg;
+                billPetWeight = req.PetWeightKg ?? billPet.WeightKg;
+            }
+        }
+
         var invNum = await NextBookingInvoiceNumberAsync(ct);
 
         // Booking-level add-ons/inventory items aren't tied to any one service line, so their
@@ -411,6 +426,8 @@ public class BookingServiceImpl : IBookingService
             PetParentId = b.PetParentId,
             ParentNameSnapshot = parent?.Name ?? b.GuestName ?? "",
             PhoneSnapshot = parent?.Phone ?? b.GuestPhone ?? "",
+            PetNameSnapshot = billPetName,
+            PetWeightKgSnapshot = billPetWeight,
             Revenue = b.TotalBillingAmount,
             // Base is what the lines actually add up to; RoundOff carries the difference, so the
             // printed bill reconciles instead of showing lines that don't sum to the total.

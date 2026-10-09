@@ -35,7 +35,8 @@ public record InvoiceLineDto(
     decimal Subtotal,
     decimal Total,
     string? BatchNumber = null,
-    string? Note = null
+    string? Note = null,
+    decimal ReturnedQuantity = 0
 );
 
 public record PaymentDto(
@@ -90,7 +91,8 @@ public record InvoiceDetail(
     // "Refunded" status badge alone.
     decimal? RefundedAmount = null,
     DateTimeOffset? RefundedAt = null,
-    string? RefundReason = null
+    string? RefundReason = null,
+    decimal? PetWeightKg = null
 );
 
 public record InvoiceSubscriptionInfo(
