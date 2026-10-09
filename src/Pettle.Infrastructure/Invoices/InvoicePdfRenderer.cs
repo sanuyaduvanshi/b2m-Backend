@@ -62,11 +62,15 @@ public static class InvoicePdfRenderer
                     {
                         row.RelativeItem().Column(c =>
                         {
-                            c.Item().Text("Billed to").FontSize(9).FontColor(Colors.Grey.Darken1);
+                            c.Item().Text("Bill to").FontSize(9).FontColor(Colors.Grey.Darken1);
                             c.Item().Text(inv.ParentName).Bold();
                             if (!string.IsNullOrWhiteSpace(inv.Phone)) c.Item().Text(inv.Phone);
-                            if (!string.IsNullOrWhiteSpace(inv.PetNameSnapshot)) c.Item().Text($"Pet: {inv.PetNameSnapshot}");
-                            if (inv.PetWeightKg is > 0) c.Item().Text($"Pet weight: {inv.PetWeightKg:0.##} kg");
+                        });
+                        // Always printed — a dash when the pet or its weight wasn't recorded.
+                        row.RelativeItem().Column(c =>
+                        {
+                            c.Item().AlignRight().Text($"Pet name: {(string.IsNullOrWhiteSpace(inv.PetNameSnapshot) ? "-" : inv.PetNameSnapshot)}");
+                            c.Item().AlignRight().Text($"Pet weight: {(inv.PetWeightKg is > 0 ? $"{inv.PetWeightKg:0.##} kg" : "-")}");
                         });
                     });
 

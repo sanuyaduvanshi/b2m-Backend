@@ -74,6 +74,25 @@ public class InvoiceService : IInvoiceService
             .FirstOrDefaultAsync(x => x.Id == id && x.TenantId == _user.TenantId, ct);
         if (i is null) return null;
 
+        // Pet name/weight shown on the bill. Snapshots first; for a booking invoice raised before those
+        // were captured, fall back to the booked pet (and its recorded weight) so old bills fill in too.
+        var billPetName = i.PetNameSnapshot;
+        var billPetWeight = i.PetWeightKgSnapshot;
+        if ((string.IsNullOrWhiteSpace(billPetName) || billPetWeight is null) && i.BookingId.HasValue)
+        {
+            var bookedPet = await _db.Bookings.AsNoTracking()
+                .Where(b => b.Id == i.BookingId)
+                .SelectMany(b => b.Services)
+                .Where(s => s.PetId != null)
+                .Select(s => new { Name = s.Pet != null ? s.Pet.Name : s.PetNameSnapshot, Weight = s.Pet != null ? s.Pet.WeightKg : null })
+                .FirstOrDefaultAsync(ct);
+            if (bookedPet is not null)
+            {
+                if (string.IsNullOrWhiteSpace(billPetName)) billPetName = bookedPet.Name;
+                billPetWeight ??= bookedPet.Weight;
+            }
+        }
+
         // Which subscription (if any) paid for which payment row — resolved as one small
         // follow-up query rather than per-row, since a payment only carries the subscription's id.
         var subIds = i.Payments.Where(p => p.IssuedSubscriptionId.HasValue).Select(p => p.IssuedSubscriptionId!.Value).Distinct().ToList();
@@ -98,7 +117,7 @@ public class InvoiceService : IInvoiceService
 
         return new InvoiceDetail(
             i.Id, i.InvoiceNumber, i.InvoiceType, i.InvoiceDate, i.PetParentId,
-            i.ParentNameSnapshot, i.PhoneSnapshot, i.PetNameSnapshot,
+            i.ParentNameSnapshot, i.PhoneSnapshot, billPetName,
             i.BaseAmount, i.AddOnAmount, i.AdditionalAmount, i.DiscountAmount,
             i.IgstAmount, i.CgstAmount, i.SgstAmount, i.RoundOff,
             i.Revenue, i.Paid, i.Due, i.PaymentStatus,
@@ -113,7 +132,7 @@ public class InvoiceService : IInvoiceService
             i.RefundedAmount,
             i.RefundedAt,
             i.RefundReason,
-            i.PetWeightKgSnapshot
+            billPetWeight
         );
     }
 
