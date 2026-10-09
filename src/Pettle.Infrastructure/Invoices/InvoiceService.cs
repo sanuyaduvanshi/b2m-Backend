@@ -380,14 +380,14 @@ public class InvoiceService : IInvoiceService
         return (await GetAsync(invoice.Id, ct))!;
     }
 
-    /// <summary>Adds the quantity of every Product-catalogue line back onto the Product. Product stock is a plain
-    /// Quantity (no batches/ledger), mirroring how a sale takes it off. Returns true if anything was restored.</summary>
-    private async Task RestoreProductStockAsync(Invoice invoice, CancellationToken ct)
+    /// <summary>Adds the returned quantity of every Product-catalogue line back onto the Product. Product stock is a
+    /// plain Quantity (no batches/ledger), mirroring how a sale takes it off.</summary>
+    private async Task RestoreProductStockAsync(Invoice invoice, IReadOnlyDictionary<Guid, decimal> qtyByLine, CancellationToken ct)
     {
-        foreach (var line in invoice.Lines.Where(l => l.ProductId.HasValue))
+        foreach (var line in invoice.Lines.Where(l => l.ProductId.HasValue && qtyByLine.ContainsKey(l.Id)))
         {
             var product = await _db.Products.FirstOrDefaultAsync(p => p.Id == line.ProductId && p.TenantId == _user.TenantId, ct);
-            if (product is not null) product.Quantity += line.Quantity;
+            if (product is not null) product.Quantity += qtyByLine[line.Id];
         }
     }
 
@@ -690,7 +690,7 @@ public class InvoiceService : IInvoiceService
         // Restore stock for Sale invoices with SKU-linked lines
         if (invoice.InvoiceType == InvoiceType.Sale && invoice.Lines.Count > 0)
         {
-            await RestoreProductStockAsync(invoice, ct);
+            await RestoreProductStockAsync(invoice, invoice.Lines.ToDictionary(l => l.Id, l => l.Quantity), ct);
             var skuNames = invoice.Lines.Where(l => !string.IsNullOrEmpty(l.SkuName) && !l.ProductId.HasValue).Select(l => l.SkuName!).Distinct().ToList();
             if (skuNames.Count > 0)
             {
@@ -870,9 +870,27 @@ public class InvoiceService : IInvoiceService
         // 2. Return stock to inventory for Sale invoices (INV-5)
         if (req.ReturnToStock && invoice.InvoiceType == InvoiceType.Sale && invoice.Lines.Count > 0)
         {
-            await RestoreProductStockAsync(invoice, ct);
+            // Which lines (and how many units) are coming back. Without an explicit list, every line returns in full.
+            var returnQty = new Dictionary<Guid, decimal>();
+            if (req.ReturnLines is { Count: > 0 })
+            {
+                foreach (var rl in req.ReturnLines)
+                {
+                    var line = invoice.Lines.FirstOrDefault(l => l.Id == rl.LineId)
+                        ?? throw AppException.Validation("Invalid return line",
+                            new Dictionary<string, string[]> { ["returnLines"] = new[] { "A selected item is not on this invoice." } });
+                    if (rl.Quantity <= 0 || rl.Quantity > line.Quantity)
+                        throw AppException.Validation("Invalid return quantity",
+                            new Dictionary<string, string[]> { ["returnLines"] = new[] { $"Return quantity for '{line.BillItemName}' must be between 0 and {line.Quantity}." } });
+                    returnQty[line.Id] = rl.Quantity;
+                }
+            }
+            else
+                foreach (var l in invoice.Lines) returnQty[l.Id] = l.Quantity;
+
+            await RestoreProductStockAsync(invoice, returnQty, ct);
             var skuNames = invoice.Lines
-                .Where(l => !string.IsNullOrEmpty(l.SkuName) && !l.ProductId.HasValue)
+                .Where(l => !string.IsNullOrEmpty(l.SkuName) && !l.ProductId.HasValue && returnQty.ContainsKey(l.Id))
                 .Select(l => l.SkuName!)
                 .Distinct()
                 .ToList();
@@ -881,12 +899,12 @@ public class InvoiceService : IInvoiceService
                 var skus = await _db.Skus
                     .Where(s => s.TenantId == _user.TenantId && skuNames.Contains(s.Name))
                     .ToListAsync(ct);
-                foreach (var line in invoice.Lines.Where(l => !string.IsNullOrEmpty(l.SkuName) && !l.ProductId.HasValue))
+                foreach (var line in invoice.Lines.Where(l => !string.IsNullOrEmpty(l.SkuName) && !l.ProductId.HasValue && returnQty.ContainsKey(l.Id)))
                 {
                     var sku = skus.FirstOrDefault(s => s.Name == line.SkuName);
                     if (sku != null)
                     {
-                        var qty = (int)Math.Round(line.Quantity);
+                        var qty = (int)Math.Round(returnQty[line.Id]);
                         sku.StockOnHand += qty;
                         _db.SkuBatches.Add(new SkuBatch
                         {

@@ -142,7 +142,12 @@ public record RecordPaymentRequest(
 /// a Credit Note is issued for Amount and the original invoice's Paid/Due are untouched (it stays
 /// settled; the credit note is the new liability). ReturnToStock is independent of either — it's
 /// about whether the physical goods come back to inventory.</summary>
-public record RefundRequest(decimal Amount, string Reason, bool ReturnToStock = false, bool AsCreditNote = false);
+public record RefundRequest(decimal Amount, string Reason, bool ReturnToStock = false, bool AsCreditNote = false,
+    IReadOnlyList<ReturnLine>? ReturnLines = null);
+
+/// <summary>One invoice line coming back, and how many units of it. When a ReturnToStock refund carries
+/// ReturnLines only those units go back to stock; without them every line returns in full (legacy).</summary>
+public record ReturnLine(Guid LineId, decimal Quantity);
 
 public record CreditNoteLookup(Guid Id, string InvoiceNumber, decimal RemainingCreditAmount, Guid? PetParentId, string ParentName);
 
