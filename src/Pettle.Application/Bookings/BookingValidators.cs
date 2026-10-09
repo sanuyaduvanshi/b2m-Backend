@@ -21,9 +21,6 @@ public class CreateBookingValidator : AbstractValidator<CreateBookingRequest>
         RuleFor(x => x.Services).NotEmpty().WithMessage("At least one service is required.")
             .Must(s => s.Count <= 20).WithMessage("Maximum 20 services per booking.");
         RuleForEach(x => x.Services).SetValidator(new CreateBookingServiceLineValidator());
-        RuleFor(x => x.PetWeightKg)
-            .NotNull().WithMessage("Pet weight (kg) is required.")
-            .When(x => x.Services.Any(s => s.PetId.HasValue));
         RuleFor(x => x.PetWeightKg).Must(w => w is >= 0.1m and <= 200m).WithMessage("Pet weight must be between 0.1 and 200 kg.")
             .When(x => x.PetWeightKg.HasValue);
         RuleForEach(x => x.AddOns).SetValidator(new CreateBookingAddOnLineValidator()).When(x => x.AddOns is not null);
