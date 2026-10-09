@@ -621,8 +621,8 @@ public class InvoiceService : IInvoiceService
         // Replace lines - remember each old line's Sku/Product link so the edit doesn't orphan it
         // from the item's Sales History.
         var oldLinks = (await _db.InvoiceLineItems.AsNoTracking()
-                .Where(l => l.InvoiceId == id && l.TenantId == _user.TenantId.Value && (l.SkuId != null || l.ProductId != null || l.SkuLegacyId != null))
-                .Select(l => new { l.BillItemName, l.SkuId, l.ProductId, l.SkuLegacyId, l.SkuName })
+                .Where(l => l.InvoiceId == id && l.TenantId == _user.TenantId.Value && (l.SkuId != null || l.ProductId != null || l.SkuLegacyId != null || l.ReturnedQuantity > 0))
+                .Select(l => new { l.BillItemName, l.SkuId, l.ProductId, l.SkuLegacyId, l.SkuName, l.ReturnedQuantity })
                 .ToListAsync(ct))
             .GroupBy(l => l.BillItemName.Trim()).ToDictionary(g => g.Key, g => g.First());
         await _db.InvoiceLineItems
@@ -645,6 +645,8 @@ public class InvoiceService : IInvoiceService
                 ProductId = oldLinks.GetValueOrDefault(line.ItemName.Trim())?.ProductId,
                 SkuLegacyId = oldLinks.GetValueOrDefault(line.ItemName.Trim())?.SkuLegacyId,
                 SkuName = oldLinks.GetValueOrDefault(line.ItemName.Trim())?.SkuName,
+                // Already-returned units stay recorded (capped to the edited quantity) so an edit can't reopen a returned item.
+                ReturnedQuantity = Math.Min(line.Quantity, oldLinks.GetValueOrDefault(line.ItemName.Trim())?.ReturnedQuantity ?? 0),
                 Quantity = line.Quantity,
                 UnitAmount = line.UnitAmount,
                 Discount = R(disc),
@@ -691,7 +693,7 @@ public class InvoiceService : IInvoiceService
         // Restore stock for Sale invoices with SKU-linked lines
         if (invoice.InvoiceType == InvoiceType.Sale && invoice.Lines.Count > 0)
         {
-            await RestoreProductStockAsync(invoice, invoice.Lines.ToDictionary(l => l.Id, l => l.Quantity), ct);
+            await RestoreProductStockAsync(invoice, invoice.Lines.ToDictionary(l => l.Id, l => Math.Max(0, l.Quantity - l.ReturnedQuantity)), ct);
             var skuNames = invoice.Lines.Where(l => !string.IsNullOrEmpty(l.SkuName) && !l.ProductId.HasValue).Select(l => l.SkuName!).Distinct().ToList();
             if (skuNames.Count > 0)
             {
@@ -701,7 +703,7 @@ public class InvoiceService : IInvoiceService
                     var sku = skus.FirstOrDefault(s => s.Name == line.SkuName);
                     if (sku is not null)
                     {
-                        var qty = (int)Math.Round(line.Quantity);
+                        var qty = (int)Math.Round(Math.Max(0, line.Quantity - line.ReturnedQuantity));
                         sku.StockOnHand += qty;
                         _db.SkuBatches.Add(new SkuBatch
                         {
