@@ -81,9 +81,9 @@ public static class EmrPdfRenderer
                         {
                             cd.ConstantColumn(24);
                             cd.RelativeColumn(4);
-                            cd.ConstantColumn(44);
-                            cd.ConstantColumn(44);
-                            cd.ConstantColumn(44);
+                            cd.ConstantColumn(72);
+                            cd.ConstantColumn(72);
+                            cd.ConstantColumn(72);
                             cd.RelativeColumn(3);
                         });
                         static IContainer Head(IContainer c) => c.Background(Colors.Grey.Lighten3).Border(0.5f).BorderColor(Colors.Grey.Medium).Padding(4);
@@ -94,7 +94,7 @@ public static class EmrPdfRenderer
                             h.Cell().Element(Head).Text("MEDICINES").Bold();
                             h.Cell().Element(Head).AlignCenter().Text("MOR").Bold();
                             h.Cell().Element(Head).AlignCenter().Text("AFT").Bold();
-                            h.Cell().Element(Head).AlignCenter().Text("NGT").Bold();
+                            h.Cell().Element(Head).AlignCenter().Text("EVNG").Bold();
                             h.Cell().Element(Head).Text("COMMENTS").Bold();
                         });
                         var n = 1;
@@ -102,9 +102,9 @@ public static class EmrPdfRenderer
                         {
                             table.Cell().Element(Cell).Text((n++).ToString());
                             table.Cell().Element(Cell).Text(m.MedicineName);
-                            table.Cell().Element(Cell).AlignCenter().Text(Dash(m.Morning));
-                            table.Cell().Element(Cell).AlignCenter().Text(Dash(m.Afternoon));
-                            table.Cell().Element(Cell).AlignCenter().Text(Dash(m.Night));
+                            DoseCell(table.Cell().Element(Cell), m.Morning);
+                            DoseCell(table.Cell().Element(Cell), m.Afternoon);
+                            DoseCell(table.Cell().Element(Cell), m.Night);
                             table.Cell().Element(Cell).Text(m.Comments ?? "");
                         }
                     });
@@ -117,5 +117,25 @@ public static class EmrPdfRenderer
             });
         });
         return doc.GeneratePdf();
+    }
+
+    /// <summary>A dose saved as "1 1/2 (With/After Food)" prints the dose, then the food note in brackets on its own line.</summary>
+    private static void DoseCell(IContainer c, string? v)
+    {
+        var (dose, note) = SplitDose(v);
+        c.Column(col =>
+        {
+            col.Item().AlignCenter().Text(Dash(dose));
+            if (note != null) col.Item().AlignCenter().Text($"({note})").FontSize(7.5f);
+        });
+    }
+
+    private static (string? Dose, string? Note) SplitDose(string? v)
+    {
+        if (string.IsNullOrWhiteSpace(v)) return (null, null);
+        var t = v.Trim();
+        var open = t.IndexOf('(');
+        if (open < 0 || !t.EndsWith(')')) return (t, null);
+        return (t[..open].Trim(), t[(open + 1)..^1].Trim());
     }
 }
