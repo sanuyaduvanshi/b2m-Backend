@@ -7,6 +7,7 @@ public interface IInventoryService
     Task<PagedResult<SkuListItem>> ListSkusAsync(string? search, bool? lowStock, bool? inAppStore, Guid? categoryId, int page, int pageSize, bool withVariants = false, CancellationToken ct = default);
     /// <summary>Same filters as ListSkusAsync but every match, unpaginated — backs the SKU table's
     /// "Download Report" so the export matches exactly what's on screen, not a separate dataset.</summary>
+    Task<IReadOnlyList<SkuBatchReportRow>> BatchReportSkusAsync(string? search, bool? lowStock, Guid? categoryId, CancellationToken ct = default);
     Task<IReadOnlyList<SkuListItem>> ExportSkusAsync(string? search, bool? lowStock, Guid? categoryId, CancellationToken ct = default);
     Task<SkuListItem?> GetSkuAsync(Guid id, CancellationToken ct = default);
     Task<SkuListItem> CreateSkuAsync(CreateOrUpdateSkuRequest req, CancellationToken ct = default);

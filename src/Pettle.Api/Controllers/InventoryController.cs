@@ -41,6 +41,11 @@ public class InventoryController : ControllerBase
     public async Task<IActionResult> Skus([FromQuery] string? search, [FromQuery] bool? lowStock, [FromQuery] bool? inAppStore, [FromQuery] Guid? categoryId, [FromQuery] int page = 1, [FromQuery] int pageSize = 50, [FromQuery] bool withVariants = false, CancellationToken ct = default)
         => Ok(await _svc.ListSkusAsync(search, lowStock, inAppStore, categoryId, page, pageSize, withVariants, ct));
 
+    [HttpGet("skus/batch-export")]
+    [HasPermission(Modules.Inventory, Actions.Export)]
+    public async Task<IActionResult> BatchReportSkus([FromQuery] string? search, [FromQuery] bool? lowStock, [FromQuery] Guid? categoryId, CancellationToken ct)
+        => Ok(await _svc.BatchReportSkusAsync(search, lowStock, categoryId, ct));
+
     [HttpGet("skus/export")]
     [HasPermission(Modules.Inventory, Actions.Export)]
     public async Task<IActionResult> ExportSkus([FromQuery] string? search, [FromQuery] bool? lowStock, [FromQuery] Guid? categoryId, CancellationToken ct)

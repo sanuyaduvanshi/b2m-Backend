@@ -56,6 +56,50 @@ public partial class InventoryService : IInventoryService
         return new PagedResult<SkuListItem>(items, total, p, sz);
     }
 
+    /// <summary>
+    /// Stock report by batch: every SKU with its live batches (qty left &gt; 0), each at the purchase price it was
+    /// bought at, excluding GST — not the master cost, which only holds one number however many batches exist.
+    /// </summary>
+    public async Task<IReadOnlyList<SkuBatchReportRow>> BatchReportSkusAsync(string? search, bool? lowStock, Guid? categoryId, CancellationToken ct = default)
+    {
+        if (_user.TenantId is null) return Array.Empty<SkuBatchReportRow>();
+        var tid = _user.TenantId;
+        var q = _db.Skus.AsNoTracking().Where(s => s.TenantId == tid);
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var s = search.Trim().ToLower();
+            q = q.Where(x => x.Name.ToLower().Contains(s) || x.Code.ToLower().Contains(s));
+        }
+        if (lowStock == true) q = q.Where(x => x.ReorderLevel > 0 && x.StockOnHand <= x.ReorderLevel);
+        if (categoryId.HasValue) q = q.Where(x => x.CategoryId == categoryId.Value);
+        var skus = await q.OrderBy(x => x.Name).Select(x => new { x.Id, x.Code, x.Name, x.Unit, x.StockOnHand, x.CostPrice, x.TaxPercent }).ToListAsync(ct);
+        var ids = skus.Select(x => x.Id).ToList();
+
+        var batches = await _db.SkuBatches.AsNoTracking()
+            .Where(b => b.TenantId == tid && ids.Contains(b.SkuId) && b.QtyRemaining > 0)
+            .OrderBy(b => b.ReceivedAt)
+            .Select(b => new { b.SkuId, b.BatchNumber, b.QtyRemaining, b.LandingCost, b.Source, b.PurchaseOrderId }).ToListAsync(ct);
+        // GST % the batch was bought at, from its PO line (the batch stores only the GST-inclusive landing cost).
+        var poIds = batches.Where(b => b.PurchaseOrderId != null).Select(b => b.PurchaseOrderId!.Value).Distinct().ToList();
+        var lineTax = (await _db.PurchaseOrderLines.AsNoTracking().Where(l => poIds.Contains(l.PurchaseOrderId) && l.SkuId != null)
+            .Select(l => new { l.PurchaseOrderId, SkuId = l.SkuId!.Value, l.TaxPercent }).ToListAsync(ct))
+            .GroupBy(l => (l.PurchaseOrderId, l.SkuId)).ToDictionary(g => g.Key, g => g.First().TaxPercent);
+
+        var bySku = batches.GroupBy(b => b.SkuId).ToDictionary(g => g.Key, g => g.ToList());
+        return skus.Select(s =>
+        {
+            var list = (bySku.TryGetValue(s.Id, out var bs) ? bs : new()).Select(b =>
+            {
+                var fromPo = b.Source == "PoReceipt" && b.PurchaseOrderId != null && lineTax.TryGetValue((b.PurchaseOrderId.Value, b.SkuId), out _);
+                var tax = fromPo ? lineTax[(b.PurchaseOrderId!.Value, b.SkuId)] : s.TaxPercent;
+                // PO batches hold the GST-inclusive landing cost; opening/adjustment batches already hold the pre-GST master cost.
+                var price = fromPo ? R(b.LandingCost / (1 + tax / 100m)) : b.LandingCost;
+                return new SkuBatchReportBatch(b.BatchNumber, b.QtyRemaining, price, tax);
+            }).ToList();
+            return new SkuBatchReportRow(s.Id, s.Code, s.Name, s.Unit, s.StockOnHand, s.CostPrice, s.TaxPercent, list);
+        }).ToList();
+    }
+
     public async Task<IReadOnlyList<SkuListItem>> ExportSkusAsync(string? search, bool? lowStock, Guid? categoryId, CancellationToken ct = default)
     {
         if (_user.TenantId is null) return Array.Empty<SkuListItem>();

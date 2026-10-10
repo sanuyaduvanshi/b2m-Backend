@@ -3,6 +3,11 @@ using Pettle.Domain.Inventory;
 
 namespace Pettle.Application.Inventory;
 
+/// <summary>One live batch of a SKU for the batch-wise stock report: qty left and its own purchase price, excluding GST.</summary>
+public record SkuBatchReportBatch(string? BatchNumber, decimal Qty, decimal PurchasePrice, decimal TaxPercent);
+public record SkuBatchReportRow(Guid SkuId, string Code, string Name, string Unit, int StockOnHand, decimal MasterCost, decimal TaxPercent,
+    IReadOnlyList<SkuBatchReportBatch> Batches);
+
 public record SkuListItem(
     Guid Id, string Code, string Name, string? CategoryName,
     string Unit, decimal SellingPrice, decimal CostPrice, decimal TaxPercent,
