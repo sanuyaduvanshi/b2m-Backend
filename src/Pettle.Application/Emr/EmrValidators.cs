@@ -7,9 +7,9 @@ public class EmrMedicineValidator : AbstractValidator<EmrMedicineDto>
     public EmrMedicineValidator()
     {
         RuleFor(x => x.MedicineName).NotEmpty().WithMessage("Medicine name is required.").MaximumLength(200);
-        RuleFor(x => x.Morning).MaximumLength(30);
-        RuleFor(x => x.Afternoon).MaximumLength(30);
-        RuleFor(x => x.Night).MaximumLength(30);
+        RuleFor(x => x.Morning).MaximumLength(60);
+        RuleFor(x => x.Afternoon).MaximumLength(60);
+        RuleFor(x => x.Night).MaximumLength(60);
         RuleFor(x => x.Comments).MaximumLength(500);
     }
 }
