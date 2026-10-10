@@ -19,6 +19,7 @@ public static class Modules
     public const string Messages = "Messages";
     public const string Calendar = "Calendar";
     public const string Reports = "Reports";
+    public const string Emr = "Emr";
     public const string AccessManagement = "AccessManagement";
 
     public static readonly IReadOnlyList<string> All = new[]
@@ -26,7 +27,7 @@ public static class Modules
         Dashboard, MyBusiness, Reminders, DailyTasks,
         BookingRequests, BookingRecords, ClientEnquiries, ClientDatabase,
         Marketplace, Kennels, Invoices, Inventory,
-        Subscriptions, Expenses, Messages, Calendar, Reports, AccessManagement
+        Subscriptions, Expenses, Messages, Calendar, Reports, AccessManagement, Emr
     };
 }
 

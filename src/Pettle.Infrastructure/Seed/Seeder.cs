@@ -114,7 +114,8 @@ public static class Seeder
 
     private static Dictionary<string, HashSet<string>> BuildMatrix(HashSet<string> all)
     {
-        var view = all.Where(p => p.EndsWith($".{Actions.View}")).ToHashSet();
+        // Medical records are clinical: the generic read-only role does not get them by default.
+        var view = all.Where(p => p.EndsWith($".{Actions.View}") && !p.StartsWith($"{Modules.Emr}.")).ToHashSet();
         var frontDesk = AllowFor(all, new[]
         {
             (Modules.Dashboard, new[] { Actions.View }),
@@ -158,6 +159,7 @@ public static class Seeder
             (Modules.ClientDatabase, new[] { Actions.View, Actions.Create, Actions.Edit }),
             (Modules.Kennels, new[] { Actions.View }),
             (Modules.Invoices, new[] { Actions.View, Actions.Create, Actions.Edit }),
+            (Modules.Emr, new[] { Actions.View, Actions.Create, Actions.Edit }),
             // The KPI cards on Dashboard/Bookings/Clients/Invoices are all backed by /api/reports/*
             // — without this the receptionist saw every card as ₹0 or "—", which reads as "no
             // business today" rather than "no access". ReportsService scopes its figures to the

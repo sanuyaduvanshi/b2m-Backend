@@ -7,6 +7,7 @@ using Pettle.Domain.ClientEnquiries;
 using Pettle.Domain.Clients;
 using Pettle.Domain.Common;
 using Pettle.Domain.DailyTasks;
+using Pettle.Domain.Emr;
 using Pettle.Domain.Expenses;
 using Pettle.Domain.Identity;
 using Pettle.Domain.Inventory;
@@ -90,6 +91,10 @@ public class PettleDbContext : IdentityDbContext<ApplicationUser, ApplicationRol
     // Expenses
     public DbSet<ExpenseCategory> ExpenseCategories => Set<ExpenseCategory>();
     public DbSet<Expense> Expenses => Set<Expense>();
+
+    // EMR
+    public DbSet<EmrRecord> EmrRecords => Set<EmrRecord>();
+    public DbSet<EmrMedicine> EmrMedicines => Set<EmrMedicine>();
 
     // Subscriptions
     public DbSet<SubscriptionPackage> SubscriptionPackages => Set<SubscriptionPackage>();
@@ -354,6 +359,18 @@ public class PettleDbContext : IdentityDbContext<ApplicationUser, ApplicationRol
             b.Property(x => x.Amount).HasPrecision(12, 2);
             b.Property(x => x.AmountIncTax).HasPrecision(12, 2);
         });
+
+        builder.Entity<EmrRecord>(b =>
+        {
+            b.HasIndex(x => new { x.TenantId, x.PetId, x.VisitDate });
+            b.HasIndex(x => new { x.TenantId, x.VisitDate });
+            b.HasOne(x => x.PetParent).WithMany().HasForeignKey(x => x.PetParentId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne(x => x.Pet).WithMany().HasForeignKey(x => x.PetId).OnDelete(DeleteBehavior.Restrict);
+            b.HasMany(x => x.Medicines).WithOne(x => x.EmrRecord!).HasForeignKey(x => x.EmrRecordId).OnDelete(DeleteBehavior.Cascade);
+            b.HasQueryFilter(x => !x.IsDeleted);
+            b.Property(x => x.PetWeightKg).HasPrecision(6, 2);
+        });
+        builder.Entity<EmrMedicine>(b => b.HasIndex(x => new { x.TenantId, x.EmrRecordId }));
 
         builder.Entity<SubscriptionPackage>(b =>
         {

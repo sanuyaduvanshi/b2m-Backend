@@ -21,6 +21,8 @@ internal static class AuditCapture
     /// this map is what makes an entity auditable at all.</summary>
     private static readonly Dictionary<string, string> Auditable = new(StringComparer.Ordinal)
     {
+        ["EmrRecord"] = "EMR",
+        ["EmrMedicine"] = "EMR",
         ["Booking"] = "Bookings",
         ["BookingService"] = "Bookings",
         ["BookingRequest"] = "Booking Requests",

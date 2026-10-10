@@ -85,6 +85,7 @@ public static class DependencyInjection
         services.AddScoped<IInvoiceService, InvoiceService>();
         services.AddScoped<IInventoryService, InventoryService>();
         services.AddScoped<IExpenseService, ExpenseService>();
+        services.AddScoped<Pettle.Application.Emr.IEmrService, Pettle.Infrastructure.Emr.EmrService>();
         services.AddScoped<ISubscriptionService, Pettle.Infrastructure.Subscriptions.SubscriptionService>();
         services.AddScoped<IKennelService, KennelService>();
         services.AddScoped<IReminderService, ReminderService>();
