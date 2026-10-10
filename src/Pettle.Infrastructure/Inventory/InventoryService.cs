@@ -727,13 +727,6 @@ public partial class InventoryService : IInventoryService
 
     private static decimal R(decimal value) => Math.Round(value, 2, MidpointRounding.AwayFromZero);
 
-    /// <summary>Net (after purchase discounts) cost per received unit, excluding GST.</summary>
-    private static decimal? ExGstUnitCost(PurchaseOrderLine line)
-    {
-        var units = line.Quantity + line.FreeQuantity;
-        return units > 0 ? R(line.TaxableAmount / units) : null;
-    }
-
     public async Task<bool> ReceivePoAsync(Guid id, ReceivePoRequest req, CancellationToken ct = default)
     {
         if (_user.TenantId is null) return false;
@@ -763,11 +756,9 @@ public partial class InventoryService : IInventoryService
                     // already sold) could otherwise drive this negative with no floor, unlike
                     // CreateStockAdjustmentAsync which already clamps at 0.
                     sku.StockOnHand = Math.Max(0, sku.StockOnHand + (int)delta);
-                    // Master cost stays the pre-GST unit cost (e.g. 111.64). LandingCost on the line is the
-                    // GST-inclusive figure (111.64 + 18% = 131.74) and lives on the batch for costing, so it
-                    // must not be copied into the SKU's cost.
-                    if (delta > 0 && ExGstUnitCost(line) is { } exGst && exGst > 0)
-                        sku.CostPrice = exGst;
+                    // The SKU's master cost is left as the user set it. What this receipt actually cost lives on the
+                    // batch below (LandingCost) and in the batch-wise stock report; copying it here made every new PO
+                    // silently overwrite the master cost, with or without GST.
 
                     _db.StockMovements.Add(new StockMovement
                     {
@@ -811,12 +802,6 @@ public partial class InventoryService : IInventoryService
                 if (product is not null)
                 {
                     product.Quantity = Math.Max(0, product.Quantity + delta);
-                    // Purchase Price is pre-GST; the GST-inclusive figure belongs in Landing Cost.
-                    if (delta > 0 && ExGstUnitCost(line) is { } exGst && exGst > 0)
-                    {
-                        product.PurchasePrice = exGst;
-                        if (line.LandingCost > 0) product.LandingCost = line.LandingCost;
-                    }
                 }
             }
         }
