@@ -296,33 +296,57 @@ public partial class InventoryService : IInventoryService
     public async Task<IReadOnlyList<string>> ListProductCategoriesAsync(CancellationToken ct = default)
     {
         if (_user.TenantId is null) return Array.Empty<string>();
-        return await _db.Products.AsNoTracking()
+        var used = await _db.Products.AsNoTracking()
             .Where(x => x.TenantId == _user.TenantId && x.Category != null && x.Category != "")
             .Select(x => x.Category!).Distinct().OrderBy(x => x).ToListAsync(ct);
+        return await MergeProductOptionsAsync("category", used, ct);
     }
 
     public async Task<IReadOnlyList<string>> ListProductBrandsAsync(CancellationToken ct = default)
     {
         if (_user.TenantId is null) return Array.Empty<string>();
-        return await _db.Products.AsNoTracking()
+        var used = await _db.Products.AsNoTracking()
             .Where(x => x.TenantId == _user.TenantId && x.Brand != null && x.Brand != "")
             .Select(x => x.Brand!).Distinct().OrderBy(x => x).ToListAsync(ct);
+        return await MergeProductOptionsAsync("brand", used, ct);
     }
 
     public async Task<IReadOnlyList<string>> ListProductSubCategoriesAsync(CancellationToken ct = default)
     {
         if (_user.TenantId is null) return Array.Empty<string>();
-        return await _db.Products.AsNoTracking()
+        var used = await _db.Products.AsNoTracking()
             .Where(x => x.TenantId == _user.TenantId && x.SubCategory != null && x.SubCategory != "")
             .Select(x => x.SubCategory!).Distinct().OrderBy(x => x).ToListAsync(ct);
+        return await MergeProductOptionsAsync("subCategory", used, ct);
     }
 
     public async Task<IReadOnlyList<string>> ListProductSubBrandsAsync(CancellationToken ct = default)
     {
         if (_user.TenantId is null) return Array.Empty<string>();
-        return await _db.Products.AsNoTracking()
+        var used = await _db.Products.AsNoTracking()
             .Where(x => x.TenantId == _user.TenantId && x.SubBrand != null && x.SubBrand != "")
             .Select(x => x.SubBrand!).Distinct().OrderBy(x => x).ToListAsync(ct);
+        return await MergeProductOptionsAsync("subBrand", used, ct);
+    }
+
+    private async Task<IReadOnlyList<string>> MergeProductOptionsAsync(string kind, List<string> used, CancellationToken ct)
+    {
+        var saved = await _db.ProductOptions.AsNoTracking()
+            .Where(x => x.TenantId == _user.TenantId && x.Kind == kind).Select(x => x.Value).ToListAsync(ct);
+        return used.Concat(saved).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ToList();
+    }
+
+    public async Task AddProductOptionAsync(string kind, string value, CancellationToken ct = default)
+    {
+        if (_user.TenantId is null) throw AppException.Forbidden();
+        var valid = new[] { "category", "subCategory", "brand", "subBrand" };
+        value = (value ?? "").Trim();
+        if (!valid.Contains(kind) || value.Length == 0 || value.Length > 120)
+            throw AppException.Validation("Invalid option", new Dictionary<string, string[]> { ["value"] = new[] { "Enter a value up to 120 characters." } });
+        var exists = await _db.ProductOptions.AnyAsync(x => x.TenantId == _user.TenantId && x.Kind == kind && x.Value.ToLower() == value.ToLower(), ct);
+        if (exists) return;
+        _db.ProductOptions.Add(new ProductOption { Kind = kind, Value = value });
+        await _db.SaveChangesAsync(ct);
     }
 
     public async Task<string> GetNextProductCodeAsync(CancellationToken ct = default)

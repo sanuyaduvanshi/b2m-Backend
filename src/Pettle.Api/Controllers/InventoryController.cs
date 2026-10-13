@@ -111,6 +111,16 @@ public class InventoryController : ControllerBase
     public async Task<IActionResult> ProductSubBrands(CancellationToken ct)
         => Ok(await _svc.ListProductSubBrandsAsync(ct));
 
+    public record AddProductOptionRequest(string Kind, string Value);
+
+    [HttpPost("products/options")]
+    [HasPermission(Modules.Inventory, Actions.Create)]
+    public async Task<IActionResult> AddProductOption([FromBody] AddProductOptionRequest req, CancellationToken ct)
+    {
+        await _svc.AddProductOptionAsync(req.Kind, req.Value, ct);
+        return NoContent();
+    }
+
     [HttpGet("products/next-code")]
     [HasPermission(Modules.Inventory, Actions.View)]
     public async Task<IActionResult> NextProductCode(CancellationToken ct)

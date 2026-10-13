@@ -72,6 +72,7 @@ public class PettleDbContext : IdentityDbContext<ApplicationUser, ApplicationRol
     // Inventory
     public DbSet<SkuCategory> SkuCategories => Set<SkuCategory>();
     public DbSet<SkuBrand> SkuBrands => Set<SkuBrand>();
+    public DbSet<ProductOption> ProductOptions => Set<ProductOption>();
     public DbSet<Sku> Skus => Set<Sku>();
     public DbSet<Product> Products => Set<Product>();
     public DbSet<Vendor> Vendors => Set<Vendor>();
@@ -286,6 +287,13 @@ public class PettleDbContext : IdentityDbContext<ApplicationUser, ApplicationRol
         builder.Entity<SkuCategory>(b =>
         {
             b.HasOne(x => x.Parent).WithMany(x => x.Children).HasForeignKey(x => x.ParentId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<ProductOption>(b =>
+        {
+            b.Property(x => x.Kind).HasMaxLength(20);
+            b.Property(x => x.Value).HasMaxLength(120);
+            b.HasIndex(x => new { x.TenantId, x.Kind, x.Value }).IsUnique();
         });
 
         builder.Entity<SkuBrand>(b =>

@@ -10,6 +10,15 @@ public class SkuCategory : TenantEntity
     public ICollection<SkuCategory> Children { get; set; } = new List<SkuCategory>();
 }
 
+/// <summary>A Category/Sub-category/Brand/Sub-brand value created via "Add new" on the Product form. Products store these
+/// as free text, so without this row a value vanished until some product happened to be saved with it.</summary>
+public class ProductOption : TenantEntity
+{
+    /// <summary>"category" | "subCategory" | "brand" | "subBrand".</summary>
+    public string Kind { get; set; } = string.Empty;
+    public string Value { get; set; } = string.Empty;
+}
+
 public class SkuBrand : TenantEntity
 {
     public string Name { get; set; } = string.Empty;

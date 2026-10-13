@@ -2007,6 +2007,48 @@ namespace Pettle.Infrastructure.Persistence.Migrations
                     b.ToTable("Products", "pettle");
                 });
 
+            modelBuilder.Entity("Pettle.Domain.Inventory.ProductOption", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("BranchId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedById")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UpdatedById")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Value")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "Kind", "Value")
+                        .IsUnique();
+
+                    b.ToTable("ProductOptions", "pettle");
+                });
+
             modelBuilder.Entity("Pettle.Domain.Inventory.PurchaseOrder", b =>
                 {
                     b.Property<Guid>("Id")
