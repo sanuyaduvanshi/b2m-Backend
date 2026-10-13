@@ -46,6 +46,15 @@ public class InventoryController : ControllerBase
     public async Task<IActionResult> BatchReportSkus([FromQuery] string? search, [FromQuery] bool? lowStock, [FromQuery] Guid? categoryId, CancellationToken ct)
         => Ok(await _svc.BatchReportSkusAsync(search, lowStock, categoryId, ct));
 
+    [HttpGet("skus/batch-export.xlsx")]
+    [HasPermission(Modules.Inventory, Actions.Export)]
+    public async Task<IActionResult> BatchReportSkusWorkbook([FromQuery] string? search, [FromQuery] bool? lowStock, [FromQuery] Guid? categoryId, [FromQuery] string? tenantName, CancellationToken ct)
+    {
+        var rows = await _svc.BatchReportSkusAsync(search, lowStock, categoryId, ct);
+        return File(Pettle.Infrastructure.Inventory.SkuBatchReportWorkbook.Build(rows, string.IsNullOrWhiteSpace(tenantName) ? "Business" : tenantName),
+            Pettle.Infrastructure.Inventory.SkuBatchReportWorkbook.ContentType, Pettle.Infrastructure.Inventory.SkuBatchReportWorkbook.FileName());
+    }
+
     [HttpGet("skus/export")]
     [HasPermission(Modules.Inventory, Actions.Export)]
     public async Task<IActionResult> ExportSkus([FromQuery] string? search, [FromQuery] bool? lowStock, [FromQuery] Guid? categoryId, CancellationToken ct)
