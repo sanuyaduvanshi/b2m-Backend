@@ -522,9 +522,9 @@ public partial class InventoryService : IInventoryService
                 new Dictionary<string, string[]> { ["lines"] = new[] { "Add at least one line item." } });
         foreach (var l in req.Lines)
         {
-            if (l.Quantity <= 0)
+            if (l.Quantity < 0 || l.Quantity + l.FreeQuantity <= 0)
                 throw AppException.Validation("Invalid quantity",
-                    new Dictionary<string, string[]> { ["lines"] = new[] { $"Quantity must be greater than zero for '{l.ItemName}'." } });
+                    new Dictionary<string, string[]> { ["lines"] = new[] { $"Enter a quantity or a free quantity for '{l.ItemName}'." } });
         }
         var vendorExists = await _db.Vendors.AnyAsync(v => v.Id == req.VendorId && v.TenantId == _user.TenantId, ct);
         if (!vendorExists)
@@ -573,9 +573,9 @@ public partial class InventoryService : IInventoryService
                 new Dictionary<string, string[]> { ["lines"] = new[] { "Add at least one line item." } });
         foreach (var l in req.Lines)
         {
-            if (l.Quantity <= 0)
+            if (l.Quantity < 0 || l.Quantity + l.FreeQuantity <= 0)
                 throw AppException.Validation("Invalid quantity",
-                    new Dictionary<string, string[]> { ["lines"] = new[] { $"Quantity must be greater than zero for '{l.ItemName}'." } });
+                    new Dictionary<string, string[]> { ["lines"] = new[] { $"Enter a quantity or a free quantity for '{l.ItemName}'." } });
         }
         var vendorExists = await _db.Vendors.AnyAsync(v => v.Id == req.VendorId && v.TenantId == _user.TenantId, ct);
         if (!vendorExists)

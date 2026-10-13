@@ -127,8 +127,10 @@ public class CreatePoLineValidator : AbstractValidator<CreatePoLine>
         RuleFor(x => x.ItemName).NotEmpty().WithMessage("Item name is required.").MaximumLength(160);
         RuleFor(x => x.ItemCode).MaximumLength(60);
         RuleFor(x => x.Unit).MaximumLength(16);
-        RuleFor(x => x.Quantity).PositiveAmount();
+        RuleFor(x => x.Quantity).NonNegativeAmount();
         RuleFor(x => x.FreeQuantity).NonNegativeAmount();
+        RuleFor(x => x).Must(x => x.Quantity + x.FreeQuantity > 0)
+            .WithMessage("Enter a quantity or a free quantity.");
         RuleFor(x => x.UnitCost).NonNegativeAmount();
         RuleFor(x => x.Mrp).NonNegativeAmount();
         RuleFor(x => x.SellingPrice).NonNegativeAmount();
