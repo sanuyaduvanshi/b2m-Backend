@@ -8,6 +8,9 @@ public interface IInventoryService
     /// <summary>Same filters as ListSkusAsync but every match, unpaginated — backs the SKU table's
     /// "Download Report" so the export matches exactly what's on screen, not a separate dataset.</summary>
     Task<IReadOnlyList<SkuBatchReportRow>> BatchReportSkusAsync(string? search, bool? lowStock, Guid? categoryId, CancellationToken ct = default);
+    /// <summary>Products report: stock on hand is priced from the purchase orders it was received on (newest first,
+    /// each line at its own ex-GST unit cost) — not the product's master purchase price.</summary>
+    Task<IReadOnlyList<SkuBatchReportRow>> BatchReportProductsAsync(string? search, string? category, string? brand, CancellationToken ct = default);
     Task<IReadOnlyList<SkuListItem>> ExportSkusAsync(string? search, bool? lowStock, Guid? categoryId, CancellationToken ct = default);
     Task<SkuListItem?> GetSkuAsync(Guid id, CancellationToken ct = default);
     Task<SkuListItem> CreateSkuAsync(CreateOrUpdateSkuRequest req, CancellationToken ct = default);

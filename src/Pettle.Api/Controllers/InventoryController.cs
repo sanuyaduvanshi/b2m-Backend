@@ -55,6 +55,20 @@ public class InventoryController : ControllerBase
             Pettle.Infrastructure.Inventory.SkuBatchReportWorkbook.ContentType, Pettle.Infrastructure.Inventory.SkuBatchReportWorkbook.FileName());
     }
 
+    [HttpGet("products/batch-export")]
+    [HasPermission(Modules.Inventory, Actions.Export)]
+    public async Task<IActionResult> BatchReportProducts([FromQuery] string? search, [FromQuery] string? category, [FromQuery] string? brand, CancellationToken ct)
+        => Ok(await _svc.BatchReportProductsAsync(search, category, brand, ct));
+
+    [HttpGet("products/batch-export.xlsx")]
+    [HasPermission(Modules.Inventory, Actions.Export)]
+    public async Task<IActionResult> BatchReportProductsWorkbook([FromQuery] string? search, [FromQuery] string? category, [FromQuery] string? brand, [FromQuery] string? tenantName, CancellationToken ct)
+    {
+        var rows = await _svc.BatchReportProductsAsync(search, category, brand, ct);
+        return File(Pettle.Infrastructure.Inventory.SkuBatchReportWorkbook.Build(rows, string.IsNullOrWhiteSpace(tenantName) ? "Business" : tenantName, "Products"),
+            Pettle.Infrastructure.Inventory.SkuBatchReportWorkbook.ContentType, Pettle.Infrastructure.Inventory.SkuBatchReportWorkbook.FileName("products"));
+    }
+
     [HttpGet("skus/export")]
     [HasPermission(Modules.Inventory, Actions.Export)]
     public async Task<IActionResult> ExportSkus([FromQuery] string? search, [FromQuery] bool? lowStock, [FromQuery] Guid? categoryId, CancellationToken ct)

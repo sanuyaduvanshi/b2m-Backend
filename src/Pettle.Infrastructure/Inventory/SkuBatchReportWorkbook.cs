@@ -8,13 +8,13 @@ namespace Pettle.Infrastructure.Inventory;
 public static class SkuBatchReportWorkbook
 {
     public const string ContentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
-    public static string FileName() => $"b2m-sku-report-{DateTime.Now:yyyy-MM-dd}.xlsx";
+    public static string FileName(string kind = "sku") => $"b2m-{kind}-report-{DateTime.Now:yyyy-MM-dd}.xlsx";
 
-    public static byte[] Build(IReadOnlyList<SkuBatchReportRow> rows, string tenantName)
+    public static byte[] Build(IReadOnlyList<SkuBatchReportRow> rows, string tenantName, string title = "SKU / Medicine")
     {
         using var wb = new XLWorkbook();
-        var ws = wb.AddWorksheet("SKU Report");
-        ws.Cell(1, 1).Value = $"{tenantName} — SKU / Medicine report (batch-wise, ex-GST)";
+        var ws = wb.AddWorksheet(title.Split(' ')[0] + " Report");
+        ws.Cell(1, 1).Value = $"{tenantName} — {title} report (batch-wise, ex-GST)";
         ws.Cell(1, 1).Style.Font.Bold = true; ws.Cell(1, 1).Style.Font.FontSize = 13;
         ws.Cell(2, 1).Value = $"Generated {DateTime.Now:dd-MM-yyyy HH:mm}";
         ws.Cell(2, 1).Style.Font.FontColor = XLColor.FromHtml("#8A7F78");
@@ -39,7 +39,7 @@ public static class SkuBatchReportWorkbook
             row++;
             ws.Cell(row, 1).Value = i + 1;
             ws.Cell(row, 2).Value = r.Name;
-            ws.Cell(row, 3).Value = r.Code;
+            ws.Cell(row, 3).SetValue(r.Code);
             ws.Cell(row, 4).Value = string.Join(" + ", prices.Select(p => p.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)));
             ws.Cell(row, 5).Value = parts.Sum(p => p.Qty);
             ws.Cell(row, 6).Value = string.Join(" / ", taxes.Select(t => $"{t:0.##}%"));
