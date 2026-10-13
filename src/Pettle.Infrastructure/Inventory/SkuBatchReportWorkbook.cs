@@ -34,13 +34,13 @@ public static class SkuBatchReportWorkbook
             if (r.StockOnHand > inBatches) parts.Add((r.StockOnHand - inBatches, r.MasterCost, r.TaxPercent));
             if (parts.Count == 0) parts.Add((0, r.MasterCost, r.TaxPercent));
 
-            var prices = parts.GroupBy(p => Math.Round(p.Price, 2)).Select(g => g.Key).ToList();
+            var prices = parts.GroupBy(p => Math.Round(p.Price, 2)).Select(g => (Price: g.Key, Qty: g.Sum(x => x.Qty))).ToList();
             var taxes = parts.Select(p => p.Tax).Distinct().ToList();
             row++;
             ws.Cell(row, 1).Value = i + 1;
             ws.Cell(row, 2).Value = r.Name;
             ws.Cell(row, 3).SetValue(r.Code);
-            ws.Cell(row, 4).Value = string.Join(" + ", prices.Select(p => p.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)));
+            ws.Cell(row, 4).Value = string.Join(" + ", prices.Select(p => prices.Count == 1 ? p.Price.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture) : $"{p.Price.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)} × {p.Qty:0.##}"));
             ws.Cell(row, 5).Value = parts.Sum(p => p.Qty);
             ws.Cell(row, 6).Value = string.Join(" / ", taxes.Select(t => $"{t:0.##}%"));
             ws.Cell(row, 7).Value = Math.Round(parts.Sum(p => p.Qty * p.Price), 2);
