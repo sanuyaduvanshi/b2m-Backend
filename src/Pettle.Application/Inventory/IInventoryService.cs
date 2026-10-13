@@ -32,6 +32,8 @@ public interface IInventoryService
     Task<string> GetNextProductCodeAsync(CancellationToken ct = default);
     Task<IReadOnlyList<SalesHistoryEntry>> GetSkuSalesHistoryAsync(Guid skuId, CancellationToken ct = default);
     Task<IReadOnlyList<SalesHistoryEntry>> GetProductSalesHistoryAsync(Guid productId, CancellationToken ct = default);
+    /// <summary>Supplier bills / debit notes that include this Product, newest first.</summary>
+    Task<IReadOnlyList<PurchaseHistoryEntry>> GetProductPurchaseHistoryAsync(Guid productId, CancellationToken ct = default);
     Task<ProductListItem?> GetProductAsync(Guid id, CancellationToken ct = default);
     Task<ProductListItem?> AdjustProductStockAsync(Guid id, AdjustProductStockRequest req, CancellationToken ct = default);
     Task<decimal> GetProductsStockValueAsync(CancellationToken ct = default);

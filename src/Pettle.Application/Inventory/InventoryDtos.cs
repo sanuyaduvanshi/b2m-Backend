@@ -53,6 +53,9 @@ public record ProductsSummaryDto(int ActiveCount, int OutOfStockCount, decimal S
 /// <summary>One past sale of a specific Sku/Product — who bought it, when, on which invoice.
 /// Only sales made through the POS (CreateSaleAsync) carry the Sku/ProductId link this reads;
 /// older invoice-edit paths don't set it, so a line created there won't show up here.</summary>
+public record PurchaseHistoryEntry(DateOnly Date, string BillNumber, string VendorName, string Kind, string Status,
+    decimal Quantity, decimal FreeQuantity, decimal ReceivedQuantity, decimal UnitCost, decimal TaxPercent, decimal Total);
+
 public record SalesHistoryEntry(DateOnly Date, string CustomerName, string? Phone, string InvoiceNumber, decimal Quantity, decimal Amount);
 
 /// <summary>Simple +/- correction to a Product's Quantity — deliberately not Sku's

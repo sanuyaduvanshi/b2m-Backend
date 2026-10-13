@@ -149,6 +149,11 @@ public class InventoryController : ControllerBase
     public async Task<IActionResult> ProductSalesHistory(Guid id, CancellationToken ct)
         => Ok(await _svc.GetProductSalesHistoryAsync(id, ct));
 
+    [HttpGet("products/{id:guid}/purchase-history")]
+    [HasPermission(Modules.Inventory, Actions.View)]
+    public async Task<IActionResult> ProductPurchaseHistory(Guid id, CancellationToken ct)
+        => Ok(await _svc.GetProductPurchaseHistoryAsync(id, ct));
+
     [HttpPost("products/{id:guid}/adjust-stock")]
     [HasPermission(Modules.Inventory, Actions.Edit)]
     public async Task<IActionResult> AdjustProductStock(Guid id, [FromBody] AdjustProductStockRequest req, CancellationToken ct)

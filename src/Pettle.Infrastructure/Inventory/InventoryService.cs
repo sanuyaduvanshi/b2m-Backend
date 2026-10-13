@@ -390,6 +390,27 @@ public partial class InventoryService : IInventoryService
             .ToListAsync(ct);
     }
 
+    public async Task<IReadOnlyList<PurchaseHistoryEntry>> GetProductPurchaseHistoryAsync(Guid productId, CancellationToken ct = default)
+    {
+        if (_user.TenantId is null) return Array.Empty<PurchaseHistoryEntry>();
+        var rows = await _db.PurchaseOrderLines.AsNoTracking()
+            .Where(l => l.ProductId == productId && l.TenantId == _user.TenantId && l.PurchaseOrder != null)
+            .OrderByDescending(l => l.PurchaseOrder!.PurchaseDate).ThenByDescending(l => l.CreatedAt)
+            .Take(100)
+            .Select(l => new
+            {
+                l.PurchaseOrder!.PurchaseDate, l.PurchaseOrder.PoNumber, l.PurchaseOrder.VendorInvoiceNumber,
+                Vendor = l.PurchaseOrder.Vendor != null ? l.PurchaseOrder.Vendor.Name : "",
+                l.PurchaseOrder.DocType, l.PurchaseOrder.Status,
+                l.Quantity, l.FreeQuantity, l.ReceivedQuantity, l.UnitCost, l.TaxPercent, l.LineTotal
+            })
+            .ToListAsync(ct);
+        return rows.Select(x => new PurchaseHistoryEntry(x.PurchaseDate,
+            string.IsNullOrWhiteSpace(x.VendorInvoiceNumber) ? x.PoNumber : x.VendorInvoiceNumber!,
+            x.Vendor, x.DocType == PurchaseDocType.DebitNote ? "Debit note" : "Purchase", x.Status.ToString(),
+            x.Quantity, x.FreeQuantity, x.ReceivedQuantity, x.UnitCost, x.TaxPercent, x.LineTotal)).ToList();
+    }
+
     public async Task<ProductListItem> CreateProductAsync(CreateOrUpdateProductRequest req, CancellationToken ct = default)
     {
         if (_user.TenantId is null) throw AppException.Forbidden();
