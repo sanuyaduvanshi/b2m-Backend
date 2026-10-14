@@ -13,7 +13,8 @@ public class ReportsService : IReportsService
 {
     private readonly PettleDbContext _db;
     private readonly ICurrentUser _user;
-    public ReportsService(PettleDbContext db, ICurrentUser user) { _db = db; _user = user; }
+    private readonly Pettle.Application.Inventory.IInventoryService _inventory;
+    public ReportsService(PettleDbContext db, ICurrentUser user, Pettle.Application.Inventory.IInventoryService inventory) { _db = db; _user = user; _inventory = inventory; }
 
     private (DateTimeOffset from, DateTimeOffset to) RangeAsUtc(DateRange r)
         => (BusinessClock.StartOfDayUtc(r.From), BusinessClock.EndOfDayUtc(r.To));
@@ -424,15 +425,17 @@ public class ReportsService : IReportsService
         var outOfStock = await _db.Skus.CountAsync(s => s.TenantId == tid && s.IsActive && s.StockOnHand <= 0, ct);
         var listedInApp = await _db.Skus.CountAsync(s => s.TenantId == tid && s.IsActive && s.IsListedInApp, ct);
         var expiring = await _db.Skus.CountAsync(s => s.TenantId == tid && s.TrackExpiry && s.NearestExpiry != null && s.NearestExpiry <= soon, ct);
-        var value = await _db.Skus.Where(s => s.TenantId == tid).SumAsync(s => (decimal?)(s.StockOnHand * s.CostPrice), ct) ?? 0m;
+        // Cost value ex-GST, batch by batch at each PO's unit cost (not stock x the single master cost).
+        var values = await _inventory.GetSkuStockValuesAsync(ct);
+        var value = values.Values.Sum();
 
         var rawSkus = await _db.Skus.AsNoTracking()
             .Where(s => s.TenantId == tid)
-            .Select(s => new { CategoryName = s.Category != null ? s.Category.Name : null, s.StockOnHand, s.CostPrice })
+            .Select(s => new { s.Id, CategoryName = s.Category != null ? s.Category.Name : null })
             .ToListAsync(ct);
         var byCategory = rawSkus
             .GroupBy(s => string.IsNullOrWhiteSpace(s.CategoryName) ? "Uncategorised" : s.CategoryName!)
-            .Select(g => new ExpenseSlice(g.Key, g.Sum(x => x.StockOnHand * x.CostPrice)))
+            .Select(g => new ExpenseSlice(g.Key, g.Sum(x => values.GetValueOrDefault(x.Id))))
             .OrderByDescending(s => s.Amount).ToList();
 
         return new InventoryReport(total, low, expiring, value, byCategory, outOfStock, listedInApp);

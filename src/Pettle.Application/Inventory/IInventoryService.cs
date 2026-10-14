@@ -11,6 +11,9 @@ public interface IInventoryService
     /// <summary>Products report: stock on hand is priced from the purchase orders it was received on (newest first,
     /// each line at its own ex-GST unit cost) — not the product's master purchase price.</summary>
     Task<IReadOnlyList<SkuBatchReportRow>> BatchReportProductsAsync(string? search, string? category, string? brand, CancellationToken ct = default);
+    /// <summary>Closing value (ex-GST) per SKU: each batch at its own PO unit cost, plus any stock outside batches at the master cost.
+    /// Same figure the batch-wise SKU report shows, so the dashboard card and the report agree.</summary>
+    Task<IReadOnlyDictionary<Guid, decimal>> GetSkuStockValuesAsync(CancellationToken ct = default);
     Task<IReadOnlyList<SkuListItem>> ExportSkusAsync(string? search, bool? lowStock, Guid? categoryId, CancellationToken ct = default);
     Task<SkuListItem?> GetSkuAsync(Guid id, CancellationToken ct = default);
     Task<SkuListItem> CreateSkuAsync(CreateOrUpdateSkuRequest req, CancellationToken ct = default);

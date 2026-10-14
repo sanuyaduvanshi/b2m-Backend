@@ -261,8 +261,7 @@ public partial class InventoryService : IInventoryService
     public async Task<decimal> GetProductsStockValueAsync(CancellationToken ct = default)
     {
         if (_user.TenantId is null) return 0;
-        return await _db.Products.Where(p => p.TenantId == _user.TenantId)
-            .SumAsync(p => (decimal?)(p.Quantity * p.PurchasePrice), ct) ?? 0m;
+        return (await BatchReportProductsAsync(null, null, null, ct)).Sum(ClosingValue);
     }
 
     public async Task<ProductsSummaryDto> GetProductsSummaryAsync(CancellationToken ct = default)
@@ -271,7 +270,7 @@ public partial class InventoryService : IInventoryService
         var q = _db.Products.AsNoTracking().Where(p => p.TenantId == _user.TenantId);
         var active = await q.CountAsync(p => p.IsActive, ct);
         var outOfStock = await q.CountAsync(p => p.Quantity <= 0, ct);
-        var stockValue = await q.SumAsync(p => (decimal?)(p.Quantity * p.PurchasePrice), ct) ?? 0m;
+        var stockValue = (await BatchReportProductsAsync(null, null, null, ct)).Sum(ClosingValue);
         var listedOnline = await q.CountAsync(p => p.ShowOnline, ct);
         return new ProductsSummaryDto(active, outOfStock, stockValue, listedOnline);
     }
@@ -391,6 +390,16 @@ public partial class InventoryService : IInventoryService
             .Select(l => new SalesHistoryEntry(l.Invoice!.InvoiceDate, l.Invoice.ParentNameSnapshot, l.Invoice.PhoneSnapshot, l.Invoice.InvoiceNumber, l.Quantity, l.Total))
             .ToListAsync(ct);
     }
+
+    private static decimal ClosingValue(SkuBatchReportRow r)
+    {
+        var inBatches = r.Batches.Sum(b => b.Qty);
+        var loose = Math.Max(0, r.StockOnHand - inBatches);
+        return R(r.Batches.Sum(b => b.Qty * b.PurchasePrice) + loose * r.MasterCost);
+    }
+
+    public async Task<IReadOnlyDictionary<Guid, decimal>> GetSkuStockValuesAsync(CancellationToken ct = default)
+        => (await BatchReportSkusAsync(null, null, null, ct)).ToDictionary(r => r.SkuId, ClosingValue);
 
     public async Task<IReadOnlyList<SkuBatchReportRow>> BatchReportProductsAsync(string? search, string? category, string? brand, CancellationToken ct = default)
     {
