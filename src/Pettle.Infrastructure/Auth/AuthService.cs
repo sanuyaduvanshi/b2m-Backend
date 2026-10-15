@@ -58,14 +58,19 @@ public class AuthService : IAuthService
     public async Task<AuthResult> RefreshAsync(string refreshToken, CancellationToken ct = default)
     {
         var entry = await _db.RefreshTokens.FirstOrDefaultAsync(t => t.Token == refreshToken, ct);
-        if (entry is null || entry.RevokedAt is not null || entry.ExpiresAt < DateTimeOffset.UtcNow)
+        // A token that was rotated a moment ago is still honoured: two tabs refreshing together, or a reply lost on a
+        // flaky connection, would otherwise leave the browser holding a dead token and sign the user out mid-work.
+        // A real logout also sets RevokedAt, so the grace is kept short.
+        var grace = TimeSpan.FromMinutes(2);
+        var revokedTooLongAgo = entry?.RevokedAt is not null && DateTimeOffset.UtcNow - entry.RevokedAt.Value > grace;
+        if (entry is null || revokedTooLongAgo || entry.ExpiresAt < DateTimeOffset.UtcNow)
             return new AuthResult(false, null, null, null, null, "Invalid refresh token");
 
         var user = await _db.Users.FindAsync(new object?[] { entry.UserId }, ct);
         if (user is null) return new AuthResult(false, null, null, null, null, "Invalid refresh token");
 
         // Rotate: revoke this one row only — sibling sessions on other devices/tabs keep theirs.
-        entry.RevokedAt = DateTimeOffset.UtcNow;
+        entry.RevokedAt ??= DateTimeOffset.UtcNow;
 
         var contexts = await GetContextsAsync(user.Id, ct);
         var current = PickDefault(contexts, user.DefaultTenantId, user.DefaultBranchId);
