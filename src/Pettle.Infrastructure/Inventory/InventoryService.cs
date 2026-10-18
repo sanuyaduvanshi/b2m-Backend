@@ -41,16 +41,28 @@ public partial class InventoryService : IInventoryService
         if (withVariants && items.Count > 0)
         {
             var ids = items.Select(i => i.Id).ToList();
-            var variantsBySku = await _db.SkuBatches.AsNoTracking()
-                .Where(b => ids.Contains(b.SkuId) && b.TenantId == _user.TenantId && b.QtyRemaining > 0 && b.Mrp != null && b.Mrp > 0)
-                .GroupBy(b => new { b.SkuId, b.Mrp })
-                .Select(g => new { g.Key.SkuId, Mrp = g.Key.Mrp!.Value, Qty = g.Sum(b => b.QtyRemaining) })
-                .ToListAsync(ct);
-            var bySku = variantsBySku.GroupBy(v => v.SkuId)
-                .ToDictionary(g => g.Key, g => g.Select(v => new SkuPriceVariantDto(v.Mrp, v.Qty)).ToList());
-            items = items.Select(i => bySku.TryGetValue(i.Id, out var variants) && variants.Count > 1
-                ? i with { PriceVariants = variants }
-                : i).ToList();
+            var batchRows = await _db.SkuBatches.AsNoTracking()
+                .Where(b => ids.Contains(b.SkuId) && b.TenantId == _user.TenantId && b.QtyRemaining > 0)
+                .OrderBy(b => b.ReceivedAt)
+                .Select(b => new { b.SkuId, b.Mrp, b.QtyRemaining, b.PurchaseOrderId, b.BatchNumber }).ToListAsync(ct);
+            var poIds = batchRows.Where(b => b.PurchaseOrderId != null).Select(b => b.PurchaseOrderId!.Value).Distinct().ToList();
+            // GST of a batch = the tax on the PO line it was received on (the batch itself stores no tax).
+            var taxRows = poIds.Count == 0 ? new() : await _db.PurchaseOrderLines.AsNoTracking()
+                .Where(l => l.SkuId != null && ids.Contains(l.SkuId.Value) && poIds.Contains(l.PurchaseOrderId))
+                .Select(l => new { SkuId = l.SkuId!.Value, l.PurchaseOrderId, l.TaxPercent }).ToListAsync(ct);
+            var taxOf = taxRows.GroupBy(t => (t.SkuId, t.PurchaseOrderId)).ToDictionary(g => g.Key, g => g.First().TaxPercent);
+            var master = items.ToDictionary(i => i.Id);
+            var bySku = batchRows.GroupBy(b => b.SkuId).ToDictionary(g => g.Key, g => g
+                .Select(b =>
+                {
+                    var m = master[b.SkuId];
+                    decimal? tax = b.PurchaseOrderId != null && taxOf.TryGetValue((b.SkuId, b.PurchaseOrderId.Value), out var t) ? t : null;
+                    return new { Mrp = b.Mrp is > 0 ? b.Mrp.Value : m.SellingPrice, b.QtyRemaining, Tax = tax, b.BatchNumber };
+                })
+                .GroupBy(x => (x.Mrp, x.Tax))
+                .Select(g => new SkuPriceVariantDto(g.Key.Mrp, g.Sum(x => x.QtyRemaining), g.Key.Tax, g.Count() == 1 ? g.First().BatchNumber : null))
+                .ToList());
+            items = items.Select(i => bySku.TryGetValue(i.Id, out var variants) ? i with { PriceVariants = variants } : i).ToList();
         }
 
         return new PagedResult<SkuListItem>(items, total, p, sz);

@@ -20,7 +20,7 @@ public record SkuListItem(
 );
 
 /// <summary>One distinct MRP a SKU currently has stock at (aggregated across its batches), with how much is available at that price.</summary>
-public record SkuPriceVariantDto(decimal Mrp, decimal QtyAvailable);
+public record SkuPriceVariantDto(decimal Mrp, decimal QtyAvailable, decimal? TaxPercent = null, string? BatchNumber = null);
 
 public record CreateOrUpdateSkuRequest(
     string Code, string Name, string? Description, Guid? CategoryId, string Unit,
