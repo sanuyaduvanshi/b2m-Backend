@@ -124,7 +124,9 @@ public record ClientListQuery(
     bool Desc = false,
     /// <summary>Only clients who still owe money — server-side so it holds across pages, unlike
     /// filtering the current page's rows in the UI.</summary>
-    bool? HasDues = null
+    bool? HasDues = null,
+    /// <summary>Pickers for billing/booking: hides Archived and Blacklisted clients.</summary>
+    bool? SelectableOnly = null
 );
 
 public record PagedResult<T>(IReadOnlyList<T> Items, int Total, int Page, int PageSize);

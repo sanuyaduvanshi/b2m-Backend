@@ -52,6 +52,8 @@ public class ClientService : IClientService
         if (query.Status.HasValue)
             q = q.Where(p => p.Status == query.Status.Value);
 
+        if (query.SelectableOnly == true)
+            q = q.Where(p => p.Status != ClientStatus.Archived && p.Status != ClientStatus.Blacklisted);
         if (query.HasDues == true)
             q = q.Where(p => p.OutstandingBalance > 0);
 
