@@ -549,8 +549,14 @@ public class BookingServiceImpl : IBookingService
                 {
                     var match = serviceItems
                         .FirstOrDefault(s => string.Equals(s.ServiceName, line.ServiceName, StringComparison.OrdinalIgnoreCase));
-                    if (match is null && string.Equals(sub.Package.Type.ToString(), line.ServiceType.ToString(), StringComparison.OrdinalIgnoreCase))
-                        match = serviceItems.FirstOrDefault();
+                    // Only a package row that is itself a generic type-wide entry (named just
+                    // "Boarding"/"Vet"/...) may cover other services of that type. Previously ANY
+                    // same-type line fell back to the package's first service, so a package that
+                    // included only "Doctor Consultation" paid for every other Vet service too.
+                    if (match is null)
+                        match = serviceItems.FirstOrDefault(s =>
+                            string.Equals(s.ServiceName?.Trim(), line.ServiceType.ToString(), StringComparison.OrdinalIgnoreCase)
+                            && string.Equals(sub.Package.Type.ToString(), line.ServiceType.ToString(), StringComparison.OrdinalIgnoreCase));
                     if (match is null) continue;
                     var portion = match.DiscountType == DiscountType.Percentage
                         ? line.FinalAmount * (match.Discount / 100m)
@@ -583,6 +589,15 @@ public class BookingServiceImpl : IBookingService
                     coveredAmount += Math.Clamp(portion, 0, lineTotal);
                 }
                 coveredAmount = Math.Round(Math.Min(coveredAmount, invoice.Revenue), 2, MidpointRounding.AwayFromZero);
+
+                // Staff explicitly picked this plan, so silently ignoring it (and burning nothing)
+                // would leave them thinking the booking was subscription-paid. Refuse instead.
+                if (coveredAmount <= 0)
+                    throw AppException.Validation("Subscription doesn't cover this booking",
+                        new Dictionary<string, string[]>
+                        {
+                            ["useSubscriptionId"] = new[] { $"None of the booked services, items or add-ons are included in \"{sub.Package.Name}\". Remove the subscription or add a covered item." },
+                        });
 
                 if (coveredAmount > 0)
                 {
