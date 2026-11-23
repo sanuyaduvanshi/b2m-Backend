@@ -62,10 +62,28 @@ public partial class InventoryService : IInventoryService
                 .GroupBy(x => (x.Mrp, x.Tax))
                 .Select(g => new SkuPriceVariantDto(g.Key.Mrp, g.Sum(x => x.QtyRemaining), g.Key.Tax, g.Count() == 1 ? g.First().BatchNumber : null))
                 .ToList());
-            items = items.Select(i => bySku.TryGetValue(i.Id, out var variants) ? i with { PriceVariants = variants } : i).ToList();
+            // The batch ledger can drift above the SKU's real stock (e.g. after a stock adjustment),
+            // which made POS offer more pieces than the SKU page shows. Stock on hand is the truth:
+            // trim the surplus from the newest batches, since FIFO sells the oldest first.
+            items = items.Select(i => bySku.TryGetValue(i.Id, out var variants)
+                ? i with { PriceVariants = CapVariantsToStock(variants, i.StockOnHand) } : i).ToList();
         }
 
         return new PagedResult<SkuListItem>(items, total, p, sz);
+    }
+
+    private static List<SkuPriceVariantDto> CapVariantsToStock(List<SkuPriceVariantDto> variants, decimal stockOnHand)
+    {
+        var left = Math.Max(0, stockOnHand);
+        var capped = new List<SkuPriceVariantDto>();
+        foreach (var v in variants) // oldest batch first
+        {
+            if (left <= 0) break;
+            var take = Math.Min(v.QtyAvailable, left);
+            capped.Add(v with { QtyAvailable = take });
+            left -= take;
+        }
+        return capped;
     }
 
     /// <summary>
